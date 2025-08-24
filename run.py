@@ -1,0 +1,587 @@
+from logs_postprocessing import parse_log_file, get_spcoord_runtime
+from run_centralized_model import load_configuration
+from run_centralized_model import run as run_centralized
+from l_run_iterations import run as run_iterations
+from postprocessing import load_models_results
+
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+from copy import deepcopy
+from parse import parse
+from tqdm import tqdm
+import pandas as pd
+import numpy as np
+import argparse
+import json
+import os
+
+
+def parse_arguments() -> argparse.Namespace:
+  """
+  Parse input arguments
+  """
+  parser: argparse.ArgumentParser = argparse.ArgumentParser(
+    description = "run", 
+    formatter_class = argparse.ArgumentDefaultsHelpFormatter
+  )
+  parser.add_argument(
+    "-c", "--config",
+    help = "Configuration file",
+    type = str,
+    default = "config.json"
+  )
+  parser.add_argument(
+    "--n_experiments",
+    help = "Number of experiments to run for each configuration",
+    type = int,
+    default = 3
+  )
+  parser.add_argument(
+    "--run_centralized_only",
+    default = False,
+    action = "store_true"
+  )
+  parser.add_argument(
+    "--run_spcoord_only",
+    default = False,
+    action = "store_true"
+  )
+  parser.add_argument(
+    "--postprocessing_only",
+    default = False,
+    action = "store_true"
+  )
+  parser.add_argument(
+    "--fix_r",
+    default = False,
+    action = "store_true"
+  )
+  # Parse the arguments
+  args: argparse.Namespace = parser.parse_known_args()[0]
+  return args
+
+
+def generate_experiments_list(nodes, seed, n_experiments):
+  rng = np.random.default_rng(seed)
+  # list of Nn values
+  nodes_list = nodes.get("values", [])
+  if len(nodes_list) == 0:
+    step = nodes.get("step", 1)
+    nodes_list = list(range(nodes["min"], nodes["max"] + step, step))
+  # seed(s)
+  seed_list = [seed] + rng.integers(
+    1000, 10000, endpoint = True, size = (n_experiments - 1,)
+  ).tolist()
+  # list of experiments
+  return [[Nn, int(s)] for s in seed_list for Nn in nodes_list]
+
+
+def load_obj_value(solution_folder: str) -> pd.DataFrame:
+  obj = pd.DataFrame()
+  if os.path.exists(os.path.join(solution_folder, "obj.csv")):
+    obj = pd.read_csv(
+      os.path.join(solution_folder, "obj.csv")
+    )
+    obj = obj.loc[:,~obj.columns.str.startswith("Unnamed")]
+  return obj
+
+
+def load_termination_condition(
+    solution_folder: str, centralized: bool = False
+  ) -> pd.DataFrame:
+  tc = pd.DataFrame()
+  if os.path.exists(
+      os.path.join(solution_folder, "termination_condition.csv")
+    ):
+    tc = pd.read_csv(
+      os.path.join(solution_folder, "termination_condition.csv")
+    )
+    if not centralized:
+      tc.rename(columns = {"Unnamed: 0": "time"}, inplace = True)
+      criterion = []
+      iteration = []
+      deviation = []
+      best_it = []
+      for s in tc["0"]:
+        c, i, d, b = parse("{} (it: {}; obj. deviation: {}; best it: {})", s)
+        criterion.append(c)
+        iteration.append(int(i))
+        deviation.append(float(d))
+        best_it.append(int(b))
+      tc.drop("0", axis = "columns", inplace = True)
+      tc["criterion"] = criterion
+      tc["iteration"] = iteration
+      tc["deviation"] = deviation
+      tc["best_iteration"] = best_it
+    else:
+      tc["time"] = tc.index
+  return tc
+
+
+def merge_sol_dict(c_res: dict, i_res: dict) -> pd.DataFrame:
+  res = c_res["tot"].join(i_res["tot"])
+  res["time"] = "tot"
+  for key in c_res:
+    if key != "tot":
+      time = int(key.split(" ")[-1])
+      df = c_res[key].join(i_res[key])
+      df["time"] = time
+      res = pd.concat([res, df])
+  return res
+
+
+def plot_total_count(df: pd.DataFrame, plot_filename: str):
+  df[df["time"]=="tot"].drop(columns = "time").plot.bar(
+    rot = 0,
+    logy = True
+  )
+  plt.grid(True, which = "both")
+  plt.savefig(plot_filename, dpi = 300, format = "png", bbox_inches = "tight")
+  plt.close()
+
+
+def results_postprocessing(solution_folders: dict, base_folder: str):
+  # prepare folder to store plots
+  plot_folder = os.path.join(base_folder, "postprocessing")
+  os.makedirs(plot_folder, exist_ok = True)
+  all_obj_values = pd.DataFrame()
+  all_rej_values = pd.DataFrame()
+  ping_pong_list = []
+  # loop over experiments
+  for exp_description_tuple, c_folder, i_folder in zip(
+      solution_folders["experiments_list"], 
+      solution_folders["centralized"],
+      solution_folders["sp-coord"]
+    ):
+    print("blah")
+    # prepare folder to store results
+    exp_description = "_".join([str(s) for s in exp_description_tuple])
+    exp_plot_folder = os.path.join(plot_folder, exp_description)
+    os.makedirs(exp_plot_folder, exist_ok = True)
+    # local_count, fwd_count, rej_count, replicas, ping_pong
+    if c_folder is not None and i_folder is not None:
+      c_res = load_models_results(c_folder, ["LoadManagementModel"])
+      i_res = load_models_results(i_folder, ["LSP"])
+      if len(c_res[0]["by_function"]) > 0 and len(i_res[0]["by_function"]) > 0:
+        # check ping-pong problems
+        if len(c_res[-1]["LoadManagementModel"]) > 0:
+          ping_pong_list.append([exp_description, "centralized", c_folder])
+        if len(i_res[-1]["LSP"]) > 0:
+          ping_pong_list.append([exp_description, "sp-coord", i_folder])
+        # merge solutions
+        local_count = merge_sol_dict(
+          c_res[0]["by_function"], i_res[0]["by_function"]
+        )
+        fwd_count = merge_sol_dict(
+          c_res[1]["by_function"], i_res[1]["by_function"]
+        )
+        rej_count = merge_sol_dict(
+          c_res[2]["by_function"], i_res[2]["by_function"]
+        )
+        # plot
+        plot_total_count(
+          local_count, os.path.join(exp_plot_folder, "loc_by_function.png")
+        )
+        plot_total_count(
+          fwd_count, os.path.join(exp_plot_folder, "fwd_by_function.png")
+        )
+        plot_total_count(
+          rej_count, os.path.join(exp_plot_folder, "rej_by_function.png")
+        )
+        # save
+        local_count.to_csv(os.path.join(exp_plot_folder, "loc_by_function.csv"))
+        fwd_count.to_csv(os.path.join(exp_plot_folder, "fwd_by_function.csv"))
+        rej_count.to_csv(os.path.join(exp_plot_folder, "rej_by_function.csv"))
+        # objective function value
+        c_obj = load_obj_value(c_folder)
+        i_obj = load_obj_value(i_folder)
+        obj = c_obj.join(i_obj)
+        # total rejections
+        all_rej = rej_count.groupby("time").sum()
+        all_req = (
+          local_count.groupby("time").sum() + fwd_count.groupby("time").sum()
+        ) + all_rej
+        all_rej = all_rej / all_req * 100
+        all_rej.rename(columns = {"LSP": "SP/coord"}, inplace = True)
+        # plot
+        _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
+        obj.plot(marker = ".", grid = True, ax = axs[0])
+        all_rej.drop("tot").plot(marker = ".", grid = True, ax = axs[1])
+        axs[0].set_xlabel("Control time period $t$")
+        axs[1].set_xlabel("Control time period $t$")
+        axs[0].set_ylabel("Objective function value")
+        axs[1].set_ylabel("Total percentage of rejections")
+        plt.savefig(
+          os.path.join(exp_plot_folder, "obj.png"),
+          dpi = 300,
+          format = "png",
+          bbox_inches = "tight"
+        )
+        plt.close()
+        # compute deviation
+        obj["dev"] = (
+          obj["SP/coord"] - obj["LoadManagementModel"]
+        ) / obj["LoadManagementModel"] * 100
+        all_rej["dev"] = (
+          all_rej["SP/coord"] - all_rej["LoadManagementModel"]
+        )
+        # plot
+        _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
+        obj["dev"].plot(marker = ".", grid = True, ax = axs[0])
+        axs[0].axhline(
+          y = obj["dev"].mean(), 
+          color = mcolors.TABLEAU_COLORS["tab:red"],
+          linewidth = 2
+        )
+        all_rej["dev"].drop("tot").plot(marker = ".", grid = True, ax = axs[1])
+        axs[1].axhline(
+          y = all_rej["dev"].drop("tot").mean(), 
+          color = mcolors.TABLEAU_COLORS["tab:red"],
+          linewidth = 2
+        )
+        axs[0].set_xlabel("Control time period $t$")
+        axs[1].set_xlabel("Control time period $t$")
+        axs[0].set_ylabel(
+          "Objective function deviation ((SP/coord - LMM) / LMM )[%]"
+        )
+        axs[1].set_ylabel(
+          "Percentage rejections deviation (SP/coord - LMM) [%]"
+        )
+        plt.savefig(
+          os.path.join(exp_plot_folder, "obj_deviation.png"),
+          dpi = 300,
+          format = "png",
+          bbox_inches = "tight"
+        )
+        plt.close()
+        # save
+        obj.to_csv(os.path.join(exp_plot_folder, "obj.csv"), index = False)
+        # merge
+        obj["time"] = obj.index
+        obj["Nn"] = exp_description_tuple[0]
+        obj["seed"] = exp_description_tuple[1]
+        all_obj_values = pd.concat([all_obj_values, obj], ignore_index = True)
+        #
+        all_rej.drop("tot", inplace = True)
+        all_rej["time"] = all_rej.index
+        all_rej["Nn"] = exp_description_tuple[0]
+        all_rej["seed"] = exp_description_tuple[1]
+        all_rej_values = pd.concat(
+          [all_rej_values, all_rej], ignore_index = True
+        )
+        # termination condition
+        i_tc = load_termination_condition(i_folder)
+        _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (20,5))
+        i_tc.plot(
+          x = "time",
+          y = "iteration",
+          marker = ".",
+          grid = True,
+          ax = axs[0]
+        )
+        i_tc.plot(
+          x = "time",
+          y = "best_iteration",
+          marker = ".",
+          color = mcolors.TABLEAU_COLORS["tab:orange"],
+          grid = True,
+          ax = axs[0]
+        )
+        i_tc["criterion"].value_counts().plot.bar(
+          rot = 0,
+          grid = True,
+          ax = axs[1]
+        )
+        axs[0].set_xlabel("Control time period $t$")
+        axs[0].set_ylabel("Number of iterations")
+        axs[1].set_xlabel(None)
+        plt.savefig(
+          os.path.join(exp_plot_folder, "iterations.png"),
+          dpi = 300,
+          format = "png",
+          bbox_inches = "tight"
+        )
+        plt.close()
+    # runtime
+    c_runtime = pd.DataFrame()
+    i_runtime = pd.DataFrame()
+    if c_folder is not None:
+      c_runtime = pd.read_csv(os.path.join(c_folder, "runtime.csv"))
+    if i_folder is not None:
+      logs_df = parse_log_file(i_folder, exp_description, pd.DataFrame())
+      i_runtime = get_spcoord_runtime(logs_df, exp_plot_folder)
+    # plot runtime comparison
+    runtime_comparison = pd.DataFrame({
+      "LoadManagementModel": c_runtime["LoadManagementModel"],
+      "SP/coord": i_runtime["tot"]
+    })
+    _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (12,8))
+    runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
+    runtime_comparison["dev"] = (
+      runtime_comparison["SP/coord"] / runtime_comparison["LoadManagementModel"]
+    ).astype(int)
+    runtime_comparison["dev"].plot(
+      grid = True, marker = ".", ax = axs[1]
+    )
+    axs[1].axhline(
+      y = runtime_comparison["dev"].mean(),
+      color = mcolors.TABLEAU_COLORS["tab:red"]
+    )
+    axs[0].set_ylabel("Runtime [s]", fontsize = 14)
+    axs[1].set_ylabel("Runtime deviation [x]", fontsize = 14)
+    plt.savefig(
+      os.path.join(exp_plot_folder, "runtime_comparison.png"),
+      dpi = 300,
+      format = "png",
+      bbox_inches = "tight"
+    )
+    plt.close()
+  # cumulative plot
+  if len(all_obj_values) > 0:
+    for Nn, objs in all_obj_values.groupby("Nn"):
+      rejs = all_rej_values[all_rej_values["Nn"] == Nn]
+      _, axs = plt.subplots(
+        nrows = 2, ncols = 2, figsize = (12, 8), sharex = True
+      )
+      for seed, obj in objs.groupby("seed"):
+        rej = rejs[rejs["seed"] == seed]
+        # deviation
+        obj.plot(
+          x = "time", 
+          y = "dev", 
+          ax = axs[0,1], 
+          color = mcolors.TABLEAU_COLORS["tab:green"], 
+          linewidth = 1, 
+          marker = ".", 
+          grid = True,
+          legend = False
+        )
+        rej.plot(
+          x = "time", 
+          y = "dev", 
+          ax = axs[1,1], 
+          color = mcolors.TABLEAU_COLORS["tab:green"], 
+          linewidth = 1, 
+          marker = ".", 
+          grid = True,
+          legend = False
+        )
+        # centralized
+        obj.plot(
+          x = "time", 
+          y = "LoadManagementModel", 
+          ax = axs[0,0], 
+          color = mcolors.TABLEAU_COLORS["tab:blue"], 
+          linewidth = 1,
+          grid = True,
+          legend = False
+        )
+        rej.plot(
+          x = "time", 
+          y = "LoadManagementModel", 
+          ax = axs[1,0], 
+          color = mcolors.TABLEAU_COLORS["tab:blue"], 
+          linewidth = 1,
+          grid = True,
+          legend = False
+        )
+        # SP/coord
+        obj.plot(
+          x = "time", 
+          y = "SP/coord", 
+          ax = axs[0,0], 
+          color = mcolors.TABLEAU_COLORS["tab:orange"], 
+          linewidth = 1,
+          grid = True,
+          legend = False
+        )
+        rej.plot(
+          x = "time", 
+          y = "SP/coord", 
+          ax = axs[1,0], 
+          color = mcolors.TABLEAU_COLORS["tab:orange"], 
+          linewidth = 1,
+          grid = True,
+          legend = False
+        )
+      # average
+      avg = objs.groupby("time").mean(numeric_only = True)
+      avg_rej = rejs.groupby("time").mean(numeric_only = True)
+      # -- deviation
+      avg.plot(
+        y = "dev",
+        ax = axs[0,1],
+        color = mcolors.TABLEAU_COLORS["tab:red"],
+        linewidth = 2,
+        marker = ".", 
+        grid = True,
+        label = "Average deviation ((SP/coord - LMM) / LMM) [%]"
+      )
+      avg_rej.plot(
+        y = "dev",
+        ax = axs[1,1],
+        color = mcolors.TABLEAU_COLORS["tab:red"],
+        linewidth = 2,
+        marker = ".", 
+        grid = True,
+        label = "Average deviation (SP/coord - LMM) [%]"
+      )
+      # -- centralized
+      avg.plot(
+        y = "LoadManagementModel",
+        ax = axs[0,0],
+        color = mcolors.TABLEAU_COLORS["tab:blue"],
+        linewidth = 2,
+        grid = True,
+        label = "Average LMM"
+      )
+      avg_rej.plot(
+        y = "LoadManagementModel",
+        ax = axs[1,0],
+        color = mcolors.TABLEAU_COLORS["tab:blue"],
+        linewidth = 2,
+        grid = True,
+        label = "Average LMM"
+      )
+      # -- SP/coord
+      avg.plot(
+        y = "SP/coord",
+        ax = axs[0,0],
+        color = mcolors.TABLEAU_COLORS["tab:orange"],
+        linewidth = 2,
+        grid = True,
+        label = "Average SP/coord"
+      )
+      avg_rej.plot(
+        y = "SP/coord",
+        ax = axs[1,0],
+        color = mcolors.TABLEAU_COLORS["tab:orange"],
+        linewidth = 2,
+        grid = True,
+        label = "Average SP/coord"
+      )
+      axs[1,0].set_xlabel("Control time period $t$")
+      axs[1,1].set_xlabel("Control time period $t$")
+      axs[0,0].set_ylabel("Objective function value")
+      axs[0,1].set_ylabel("Objective function deviation [%]")
+      axs[1,0].set_ylabel("Total percentage of rejections [%]")
+      axs[1,1].set_ylabel("Percentage rejections deviation [%]")
+      plt.savefig(
+        os.path.join(plot_folder, f"obj-Nn_{Nn}.png"),
+        dpi = 300,
+        format = "png",
+        bbox_inches = "tight"
+      )
+      plt.close()
+  # save ping-pong problems info
+  with open(os.path.join(plot_folder, "ping_pong_problems.txt"), "w") as ost:
+    for el in ping_pong_list:
+      ost.write(f"{el}\n")
+
+
+def run(
+    base_config: dict, 
+    base_solution_folder: str, 
+    n_experiments: int, 
+    run_centralized_only: bool,
+    run_spcoord_only: bool,
+    fix_r: bool
+  ):
+  seed = base_config["seed"]
+  log_on_file = True if base_config["verbose"] > 0 else False
+  nodes = base_config["limits"]["Nn"]
+  # generate list of experiments
+  experiments_list = generate_experiments_list(nodes, seed, n_experiments)
+  # load list of already-run experiments (if any)
+  solution_folders = {
+    "experiments_list": [], "centralized": [], "sp-coord": []
+  }
+  if os.path.exists(os.path.join(base_solution_folder, "experiments.json")):
+    with open(
+        os.path.join(base_solution_folder, "experiments.json"), "r"
+      ) as ist:
+      solution_folders = json.load(ist)
+  # loop over the experiments list
+  for Nn, seed in tqdm(experiments_list):
+    # check if the experiment is still to run
+    run_c = False
+    run_i = False
+    experiment_idx = None
+    try:
+      experiment_idx = solution_folders["experiments_list"].index([Nn, seed])
+      if not run_spcoord_only and ((
+          len(solution_folders["centralized"]) <= experiment_idx
+        ) or (
+          solution_folders["centralized"][experiment_idx] is None
+        )):
+        run_c = True
+      if not run_centralized_only and ((
+          len(solution_folders["sp-coord"]) <= experiment_idx
+        ) or (
+          solution_folders["sp-coord"][experiment_idx] is None
+        )):
+        run_i = True
+    except ValueError:
+      run_c = True if not run_spcoord_only else False
+      run_i = True if not run_centralized_only else False
+    # if the experiment is still to run...
+    if run_c or run_i:
+      # -- update configuration
+      config = deepcopy(base_config)
+      config["limits"]["Nn"].pop("values", None)
+      config["limits"]["Nn"]["min"] = Nn
+      config["limits"]["Nn"]["max"] = Nn
+      config["seed"] = seed
+      # -- solve centralized model
+      c_folder = None
+      if run_c:
+        c_folder = run_centralized(config, log_on_file)
+        solution_folders["centralized"].append(c_folder)
+      else:
+        if experiment_idx is not None:
+          c_folder = solution_folders["centralized"][experiment_idx]
+      # -- solve iterative model
+      if fix_r:
+        config["opt_solution_folder"] = c_folder
+      if run_i:
+        i_folder = run_iterations(config, log_on_file, disable_plotting = True)
+        solution_folders["sp-coord"].append(i_folder)
+      # -- save info
+      if experiment_idx is None:
+        solution_folders["experiments_list"].append([Nn, seed])
+      # -- save
+      with open(
+        os.path.join(base_solution_folder,"experiments.json"),"w"
+      ) as ost:
+        ost.write(json.dumps(solution_folders, indent = 2))
+  # immediate postprocessing
+  results_postprocessing(solution_folders, base_solution_folder)
+
+
+if __name__ == "__main__":
+  args = parse_arguments()
+  config_file = args.config
+  n_experiments = args.n_experiments
+  run_centralized_only = args.run_centralized_only
+  run_spcoord_only = args.run_spcoord_only
+  postprocessing_only = args.postprocessing_only
+  fix_r = args.fix_r
+  # load configuration file
+  base_config = load_configuration(config_file)
+  base_solution_folder = base_config["base_solution_folder"]
+  if not postprocessing_only:
+    run(
+      base_config, 
+      base_solution_folder, 
+      n_experiments, 
+      run_centralized_only,
+      run_spcoord_only,
+      fix_r
+    )
+  else:
+    solution_folders = {}
+    with open(
+      os.path.join(base_solution_folder, "experiments.json"), "r"
+    ) as ist:
+      solution_folders = json.load(ist)
+    results_postprocessing(solution_folders, base_solution_folder)
