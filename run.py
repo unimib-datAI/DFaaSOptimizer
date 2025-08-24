@@ -15,6 +15,9 @@ import argparse
 import json
 import os
 
+import logging
+logging.getLogger('pyomo.core').setLevel(logging.ERROR)
+
 
 def parse_arguments() -> argparse.Namespace:
   """
