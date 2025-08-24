@@ -42,11 +42,6 @@ def parse_arguments() -> argparse.Namespace:
      type = str,
      default = "config.json"
    )
-   parser.add_argument(
-     "--postprocessing_only",
-     default = False,
-     action = "store_true"
-   )
    # Parse the arguments
    args: argparse.Namespace = parser.parse_known_args()[0]
    return args
