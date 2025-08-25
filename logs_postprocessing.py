@@ -37,12 +37,41 @@ def get_spcoord_runtime(
       "max": max_t["tot"],
       "tot": tot_t["tot"]
     })
-    _, axs = plt.subplots(nrows = 2, ncols = 1, sharex = True)
-    total_runtime.drop("tot", axis = "columns").plot(grid = True, ax = axs[0])
-    total_runtime["tot"].plot(grid = True, ax = axs[1])
-    axs[0].set_ylabel("Single iteration runtime [s]")
-    axs[1].set_ylabel("Total runtime [s]")
-    axs[1].set_xlabel("Control time period $t$")
+    _, axs = plt.subplots(
+      nrows = 5, ncols = 1, sharex = True, figsize = (8,20)
+    )
+    # -- min
+    min_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
+      grid = True, 
+      ax = axs[0],
+      stacked = True
+    )
+    # -- max
+    max_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
+      grid = True, 
+      ax = axs[1],
+      stacked = True
+    )
+    # -- tot
+    tot_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
+      grid = True, 
+      ax = axs[2],
+      stacked = True
+    )
+    # -- avg
+    avg_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
+      grid = True, 
+      ax = axs[3],
+      stacked = True
+    )
+    # -- tot
+    total_runtime["tot"].plot(grid = True, ax = axs[4])
+    axs[0].set_ylabel("Min 1-iter runtime [s]")
+    axs[1].set_ylabel("Max 1-iter runtime [s]")
+    axs[2].set_ylabel("Tot 1-iter runtime [s]")
+    axs[3].set_ylabel("Avg 1-iter runtime [s]")
+    axs[-1].set_ylabel("Total runtime [s]")
+    axs[-1].set_xlabel("Control time period $t$")
     plt.savefig(
       os.path.join(plot_folder, "runtime.png"),
       dpi = 300,
