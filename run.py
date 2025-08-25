@@ -156,7 +156,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       solution_folders["centralized"],
       solution_folders["sp-coord"]
     ):
-    print("blah")
+    print(f"Postprocessing exp: {exp_description_tuple}")
     # prepare folder to store results
     exp_description = "_".join([str(s) for s in exp_description_tuple])
     exp_plot_folder = os.path.join(plot_folder, exp_description)
@@ -311,7 +311,12 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     if c_folder is not None:
       c_runtime = pd.read_csv(os.path.join(c_folder, "runtime.csv"))
     if i_folder is not None:
-      logs_df = parse_log_file(i_folder, exp_description, pd.DataFrame())
+      logs_df = parse_log_file(
+        i_folder, 
+        exp_description, 
+        pd.DataFrame(), 
+        int(exp_description_tuple[0])
+      )
       i_runtime = get_spcoord_runtime(logs_df, exp_plot_folder)
     # plot runtime comparison
     runtime_comparison = pd.DataFrame({
@@ -573,6 +578,11 @@ if __name__ == "__main__":
   base_config = load_configuration(config_file)
   base_solution_folder = base_config["base_solution_folder"]
   if not postprocessing_only:
+    # write configuration file in the base folder
+    os.makedirs(base_solution_folder, exist_ok = True)
+    with open(os.path.join(base_solution_folder, "config.json"), "w") as ost:
+      ost.write(json.dumps(base_config, indent = 2))
+    # run
     run(
       base_config, 
       base_solution_folder, 

@@ -57,7 +57,7 @@ def get_spcoord_runtime(
 
 
 def parse_log_file(
-    complete_path: str, exp: str, logs_df: pd.DataFrame
+    complete_path: str, exp: str, logs_df: pd.DataFrame, Nn: int
   ) -> pd.DataFrame:
   # open log file
   lines = []
@@ -125,6 +125,8 @@ def parse_log_file(
           df["exp"].append(exp)
           # move to the next iteration
           t_row_idx = it_row_idx
+      # add number of nodes
+      df["Nn"] = [Nn] * len(df["exp"])
       # merge and move to the next time step
       logs_df = pd.concat(
         [logs_df, pd.DataFrame(df)], ignore_index = True
@@ -135,7 +137,6 @@ def parse_log_file(
 
 def parse_logs(base_folder: str) -> pd.DataFrame:
   social_welfare = pd.DataFrame()
-  nodes_list = []
   for foldername in os.listdir(base_folder):
     complete_path = os.path.join(base_folder, foldername)
     if os.path.isdir(complete_path) and not foldername.startswith("."):
@@ -146,12 +147,9 @@ def parse_logs(base_folder: str) -> pd.DataFrame:
           ) as istream:
           data = json.load(istream)
           Nn = int(data["None"]["Nn"]["None"])
-        n_elems = len(social_welfare)
         social_welfare = parse_log_file(
-          complete_path, foldername, social_welfare
+          complete_path, foldername, social_welfare, Nn
         )
-        nodes_list = nodes_list + [Nn] * (len(social_welfare) - n_elems)
-  social_welfare["Nn"] = nodes_list
   return social_welfare
 
 
