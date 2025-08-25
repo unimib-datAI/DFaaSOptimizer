@@ -314,10 +314,11 @@ def merge_agents_solutions(
     obj_dict[agent] = a_obj
     # -- runtime
     runtime_dict[agent] = agent_solution["runtime"]
-  # "total" objective function value, termination condition and runtime
+  # "total" objective function value, termination condition and runtime 
+  # (NOTE: the total runtime is the average runtime among agents)
   obj_dict["tot"] = sum(list(obj_dict.values()))
   tc_dict["tot"] = "-".join(tc_dict.values())
-  runtime_dict["tot"] = sum(list(runtime_dict.values()))
+  runtime_dict["tot"] = sum(list(runtime_dict.values())) / len(agents_sol)
   return x, omega, r, rho, obj_dict, tc_dict, runtime_dict
 
 
