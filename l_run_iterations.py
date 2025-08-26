@@ -17,6 +17,7 @@ from postprocessing import load_solution
 from rmp import RMPAbstractModel, LRMP, LRMP_freeMemory
 from sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, LSPr_fixedr
 
+import multiprocessing as mpp
 from datetime import datetime
 from collections import deque
 from copy import deepcopy
@@ -27,6 +28,13 @@ import argparse
 import json
 import sys
 import os
+
+
+# Globals for each parallel worker
+_sp_data = None
+_solver_options = None
+_solver_name = None
+_sp = None
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -208,13 +216,16 @@ def compute_social_welfare(
   spr_data[None]["omega_bar"] = {
     (n+1,f+1): max(rmp_omega[n,f], 0) for n in range(Nn) for f in range(Nf)
   }
-  agents_sol = {}
-  for agent in agents:
-    spr_data[None]["whoami"] = {None: agent + 1}
-    spr_instance = spr.generate_instance(spr_data)
-    agents_sol[agent] = spr.solve(
-      spr_instance, solver_options, solver_name
-    )
+  # solve for all agents
+  results = []
+  with mpp.Pool(
+      processes = mpp.cpu_count(),
+      initializer = init_parallel_worker,
+      initargs = (spr_data, solver_options, solver_name, spr),
+    ) as pool:
+    results = pool.map(solve_single_agent, agents)
+  agents_sol = {agent: sol for agent, sol in results}
+  # merge solutions
   spr_sol = merge_agents_solutions(
     spr_data, agents_sol
   )
@@ -270,6 +281,18 @@ def extract_best_solution(
       "U":    spr_U
     }
   }
+
+
+def init_parallel_worker(
+    sp_data: dict, solver_options: dict, solver_name: str, sp: SPAbstractModel
+  ):
+  """Initializer for each worker: store common data as globals."""
+  global _sp_data, _solver_options, _solver_name, _sp
+  # Each worker process will get its own copy (once)
+  _sp_data = sp_data
+  _solver_options = solver_options
+  _solver_name = solver_name
+  _sp = sp
 
 
 def merge_agents_solutions(
@@ -374,6 +397,16 @@ def solve_master_problem(
   )
 
 
+def solve_single_agent(agent: int):
+  """Function run in each worker, uses the global data initialized above."""
+  # Make a local copy of sp_data to modify safely
+  local_data = _sp_data.copy()
+  local_data[None]["whoami"] = {None: agent + 1}
+  sp_instance = _sp.generate_instance(local_data)
+  result = _sp.solve(sp_instance, _solver_options, _solver_name)
+  return agent, result
+
+
 def solve_subproblem(
     base_instance_data: dict, 
     agents: list, 
@@ -391,13 +424,14 @@ def solve_subproblem(
   else:
     sp_data[None]["pi"] = {f+1: 0 for f in range(Nf)}
   # solve for all agents
-  agents_sol = {}
-  for agent in agents:
-    sp_data[None]["whoami"] = {None: agent + 1}
-    sp_instance = sp.generate_instance(sp_data)
-    agents_sol[agent] = sp.solve(
-      sp_instance, solver_options, solver_name
-    )
+  results = []
+  with mpp.Pool(
+      processes = mpp.cpu_count(),
+      initializer = init_parallel_worker,
+      initargs = (sp_data, solver_options, solver_name, sp),
+    ) as pool:
+    results = pool.map(solve_single_agent, agents)
+  agents_sol = {agent: sol for agent, sol in results}
   # merge solutions
   sp_x, sp_omega, sp_r, sp_rho, obj, tc, runtime = merge_agents_solutions(
     sp_data, agents_sol
