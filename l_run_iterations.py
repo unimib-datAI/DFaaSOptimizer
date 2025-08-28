@@ -16,6 +16,7 @@ from postprocessing import load_solution
 
 from rmp import RMPAbstractModel, LRMP, LRMP_freeMemory
 from sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, LSPr_fixedr
+from heuristic_coordinator import GreedyCoordinator
 
 import multiprocessing as mpp
 from datetime import datetime
@@ -348,7 +349,6 @@ def merge_agents_solutions(
 def solve_master_problem(
     base_instance_data: dict, 
     rmp1: RMPAbstractModel, 
-    rmp2: RMPAbstractModel, 
     solver_name: str, 
     solver_options: dict, 
     sp_solution: Tuple
@@ -370,8 +370,14 @@ def solve_master_problem(
         for f in range(Nf)
   }
   # solve
-  rmp_instance = rmp1.generate_instance(rmp_data)
-  rmp_solution = rmp1.solve(rmp_instance, solver_options, solver_name)
+  rmp_solution = {}
+  if "sorting_rule" not in solver_options:
+    rmp_instance = rmp1.generate_instance(rmp_data)
+    rmp_solution = rmp1.solve(rmp_instance, solver_options, solver_name)
+  else:
+    GC = GreedyCoordinator()
+    rmp_instance = {**rmp_data, "sp_rho": sp_rho}
+    rmp_solution = GC.solve(rmp_instance, solver_options)
   tc = rmp_solution["termination_condition"]
   runtime = rmp_solution["runtime"]
   # extract solution
@@ -380,20 +386,8 @@ def solve_master_problem(
   ) = extract_solution(
     rmp_data, rmp_solution
   )
-  # # solve second model
-  # rmp2_instance = rmp2.generate_instance(rmp_data)
-  # rmp2_solution = rmp2.solve(rmp2_instance, solver_options, solver_name)
-  # tc2 = rmp_solution["termination_condition"]
-  # # extract solution
-  # (
-  #   rmp2_x, rmp2_y, rmp2_z, rmp2_r, rmp2_xi, rmp2_omega, rmp2_rho, obj2
-  # ) = extract_solution(
-  #   rmp_data, rmp2_solution
-  # )
-  rmp2_x, rmp2_y, rmp2_z, rmp2_r, rmp2_xi, rmp2_omega, rmp2_rho, obj2, tc2 = [None] * 9
   return (
-    (rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj, tc, runtime),
-    (rmp2_x, rmp2_y, rmp2_z, rmp2_r, rmp2_xi, rmp2_omega, rmp2_rho, obj2, tc2)
+    rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj, tc, runtime
   )
 
 
@@ -603,8 +597,7 @@ def run(
         )
       # solve master problem
       (
-        (rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj, tc, runtime),
-        (rmp2_x, rmp2_y, rmp2_z, rmp2_r, rmp2_xi, rmp2_omega, rmp2_rho, obj2, tc2)
+        rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj, tc, runtime
       ) = solve_master_problem(
         rmp_data, 
         rmp, 
