@@ -14,7 +14,7 @@ from utilities import load_configuration
 from generate_data import update_data
 from postprocessing import load_solution
 
-from rmp import RMPAbstractModel, LRMP, LRMP_freeMemory
+from rmp import RMPAbstractModel, LRMP
 from sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, LSPr_fixedr
 from heuristic_coordinator import GreedyCoordinator
 
@@ -533,7 +533,6 @@ def run(
     sp = LSP() if opt_solution is None else LSP_fixedr()
     spr = LSPr()# if opt_solution is None else LSPr_fixedr()
     rmp = LRMP()
-    rmp_freememory = LRMP_freeMemory()
     sp_data = deepcopy(data)
     rmp_data = deepcopy(data)
     rmp_y = None
@@ -601,7 +600,6 @@ def run(
       ) = solve_master_problem(
         rmp_data, 
         rmp, 
-        rmp_freememory,
         solver_name, 
         coordinator_options, 
         (sp_x, sp_omega, sp_r, sp_rho)
