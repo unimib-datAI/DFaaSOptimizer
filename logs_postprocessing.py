@@ -16,11 +16,11 @@ def get_spcoord_runtime(
       time_data = t_data.loc[:,t_data.columns.str.endswith("runtime")].copy(
         deep = True
       )
-      # TODO: remove lines 19--23 when parallel experiments will be executed
-      Nn = logs_df.loc[time_data.index, "Nn"]
-      for col in time_data.columns:
-        if not col.startswith("coord"):
-          time_data[col] /= Nn
+      # # TODO: remove lines 19--23 when parallel experiments will be executed
+      # Nn = logs_df.loc[time_data.index, "Nn"]
+      # for col in time_data.columns:
+      #   if not col.startswith("coord"):
+      #     time_data[col] /= Nn
       time_data["tot_runtime"] = time_data.sum(axis = "columns")
       time_data.columns = [c.split("_")[0] for c in time_data.columns]
       time_data["iteration"] = t_data["iteration"]
