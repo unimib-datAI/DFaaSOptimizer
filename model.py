@@ -2,6 +2,7 @@ from pyomo.util.infeasible import log_infeasible_constraints
 from pyomo.opt.results import SolverStatus
 from pyomo.opt import TerminationCondition
 import pyomo.environ as pyo
+from abc import ABC, abstractmethod
 from datetime import datetime
 import logging
 
@@ -9,22 +10,37 @@ PYO_VAR_TYPE = pyo.NonNegativeReals
 PYO_PARAM_TYPE = pyo.NonNegativeReals
 
 
-class BaseAbstractModel:
+class BaseAbstractModel():
   def __init__(self):
     self.model = pyo.AbstractModel()
     self.name = "BaseAbstractModel"
   
+  # @abstractmethod
+  def _provide_initial_solution(self, instance, initial_solution):
+    pass
+  
   def generate_instance(self, data: dict):
     return self.model.create_instance(data)
   
-  def solve(self, instance, solver_options: dict, solver_name: str = "glpk"):
+  def solve(
+      self, 
+      instance, 
+      solver_options: dict, 
+      solver_name: str = "glpk",
+      initial_solution: dict = None
+    ):
     # initialize solver and set options
     solver = pyo.SolverFactory(solver_name)
     for k, v in solver_options.items():
       solver.options[k] = v
+    # provide initial solution (if any)
+    warmstart = False
+    if initial_solution is not None:
+      instance = self._provide_initial_solution(instance, initial_solution)
+      warmstart = True
     # solve
     s = datetime.now()
-    results = solver.solve(instance)
+    results = solver.solve(instance, warmstart = warmstart)
     e = datetime.now()
     # check solver status
     get_solution_ok = results.solver.status == SolverStatus.ok

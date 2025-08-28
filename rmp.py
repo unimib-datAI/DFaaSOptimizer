@@ -114,6 +114,22 @@ class LRMP(RMPAbstractModel):
       rule = self.maximize_processing, sense = pyo.maximize
     )
   
+  def _provide_initial_solution(self, instance, initial_solution):
+    Nn = instance.Nn.value
+    Nf = instance.Nf.value
+    # y
+    y = initial_solution["y"].reshape((Nn,Nn,Nf))
+    for n1 in range(1, Nn + 1):
+      for n2 in range(1, Nn + 1):
+        for f in range(1, Nf + 1):
+          instance.y[(n1,n2,f)] = y[n1 - 1, n2 - 1, f - 1]
+    # r
+    r = initial_solution["r"].reshape((Nn,Nf))
+    for n in range(1, Nn + 1):
+      for f in range(1, Nf + 1):
+        instance.r[(n,f)] = r[n - 1, f - 1]
+    return instance
+  
   @staticmethod
   def no_traffic_loss(model, n, f):
     return sum(model.y[n,m,f] for m in model.N) <= model.omega_bar[n,f]

@@ -378,6 +378,14 @@ def solve_master_problem(
     GC = GreedyCoordinator()
     rmp_instance = {**rmp_data, "sp_rho": sp_rho}
     rmp_solution = GC.solve(rmp_instance, solver_options)
+    _ = solver_options.pop("sorting_rule")
+    # check if the greedy solution should be provided as starting point to the 
+    # model
+    if not solver_options.pop("heuristic_only", True):
+      rmp_instance = rmp1.generate_instance(rmp_data)
+      rmp_solution = rmp1.solve(
+        rmp_instance, solver_options, solver_name, rmp_solution
+      )
   tc = rmp_solution["termination_condition"]
   runtime = rmp_solution["runtime"]
   # extract solution
