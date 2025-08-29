@@ -322,7 +322,9 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     # plot runtime comparison
     runtime_comparison = pd.DataFrame({
       "LoadManagementModel": c_runtime["LoadManagementModel"],
-      "SP/coord": i_runtime["tot"]
+      "SP/coord": i_runtime["tot"],
+      "iteration": i_tc["iteration"],
+      "best_iteration": i_tc["best_iteration"],
     })
     _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (12,8))
     runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
@@ -369,7 +371,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         nrows = 2, ncols = 2, figsize = (12, 8), sharex = True
       )
       fig2, axs2 = plt.subplots(
-        nrows = 1, ncols = 2, figsize = (12, 4), sharex = True
+        nrows = 1, ncols = 3, figsize = (18, 4), sharex = True
       )
       for seed, obj in objs.groupby("seed"):
         rej = rejs[rejs["seed"] == seed]
@@ -401,6 +403,27 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
           ax = axs2[1], 
           color = mcolors.TABLEAU_COLORS["tab:green"], 
           linewidth = 1, 
+          marker = ".", 
+          grid = True,
+          legend = False
+        )
+        rtv.plot(
+          x = "time", 
+          y = "best_iteration", 
+          ax = axs2[2], 
+          color = mcolors.TABLEAU_COLORS["tab:pink"], 
+          linewidth = 1, 
+          marker = ".", 
+          grid = True,
+          legend = False
+        )
+        rtv.plot(
+          x = "time", 
+          y = "iteration", 
+          ax = axs2[2], 
+          color = mcolors.TABLEAU_COLORS["tab:pink"], 
+          linewidth = 1, 
+          linestyle = "dashed",
           marker = ".", 
           grid = True,
           legend = False
@@ -493,6 +516,25 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         grid = True,
         label = "Average deviation (SP/coord / LMM) [x]"
       )
+      avg_rtv.plot(
+        y = "best_iteration",
+        ax = axs2[2],
+        color = "black",
+        linewidth = 2,
+        marker = ".", 
+        grid = True,
+        label = "Best iteration"
+      )
+      avg_rtv.plot(
+        y = "iteration",
+        ax = axs2[2],
+        color = "black",
+        linewidth = 1,
+        linestyle = "dashed",
+        marker = ".", 
+        grid = True,
+        label = "# iterations"
+      )
       # -- centralized
       avg.plot(
         y = "LoadManagementModel",
@@ -551,8 +593,10 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       axs[1,1].set_ylabel("Percentage rejections deviation [%]")
       axs2[0].set_xlabel("Control time period $t$")
       axs2[1].set_xlabel("Control time period $t$")
+      axs2[2].set_xlabel("Control time period $t$")
       axs2[0].set_ylabel("Runtime [s]")
       axs2[1].set_ylabel("Runtime deviation [x]")
+      axs2[2].set_ylabel("Number of iterations")
       fig.savefig(
         os.path.join(plot_folder, f"obj-Nn_{Nn}.png"),
         dpi = 300,
