@@ -354,6 +354,14 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     )
   # cumulative plot
   if len(all_obj_values) > 0:
+    # -- save
+    all_obj_values.to_csv(
+      os.path.join(plot_folder, "obj.csv"), index = False
+    )
+    all_runtime_values.to_csv(
+      os.path.join(plot_folder, "runtime.csv"), index = False
+    )
+    # -- plot
     for Nn, objs in all_obj_values.groupby("Nn"):
       rejs = all_rej_values[all_rej_values["Nn"] == Nn]
       rtvs = all_runtime_values[all_runtime_values["Nn"] == Nn]
