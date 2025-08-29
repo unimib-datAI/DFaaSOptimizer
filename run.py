@@ -149,6 +149,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
   os.makedirs(plot_folder, exist_ok = True)
   all_obj_values = pd.DataFrame()
   all_rej_values = pd.DataFrame()
+  all_runtime_values = pd.DataFrame()
   ping_pong_list = []
   # loop over experiments
   for exp_description_tuple, c_folder, i_folder in zip(
@@ -344,15 +345,27 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       bbox_inches = "tight"
     )
     plt.close()
+    # merge
+    runtime_comparison["time"] = runtime_comparison.index
+    runtime_comparison["Nn"] = exp_description_tuple[0]
+    runtime_comparison["seed"] = exp_description_tuple[1]
+    all_runtime_values = pd.concat(
+      [all_runtime_values, runtime_comparison], ignore_index = True
+    )
   # cumulative plot
   if len(all_obj_values) > 0:
     for Nn, objs in all_obj_values.groupby("Nn"):
       rejs = all_rej_values[all_rej_values["Nn"] == Nn]
-      _, axs = plt.subplots(
+      rtvs = all_runtime_values[all_runtime_values["Nn"] == Nn]
+      fig, axs = plt.subplots(
         nrows = 2, ncols = 2, figsize = (12, 8), sharex = True
+      )
+      fig2, axs2 = plt.subplots(
+        nrows = 1, ncols = 2, figsize = (12, 4), sharex = True
       )
       for seed, obj in objs.groupby("seed"):
         rej = rejs[rejs["seed"] == seed]
+        rtv = rtvs[rtvs["seed"] == seed]
         # deviation
         obj.plot(
           x = "time", 
@@ -368,6 +381,16 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
           x = "time", 
           y = "dev", 
           ax = axs[1,1], 
+          color = mcolors.TABLEAU_COLORS["tab:green"], 
+          linewidth = 1, 
+          marker = ".", 
+          grid = True,
+          legend = False
+        )
+        rtv.plot(
+          x = "time", 
+          y = "dev", 
+          ax = axs2[1], 
           color = mcolors.TABLEAU_COLORS["tab:green"], 
           linewidth = 1, 
           marker = ".", 
@@ -393,6 +416,15 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
           grid = True,
           legend = False
         )
+        rtv.plot(
+          x = "time", 
+          y = "LoadManagementModel", 
+          ax = axs2[0], 
+          color = mcolors.TABLEAU_COLORS["tab:blue"], 
+          linewidth = 1,
+          grid = True,
+          legend = False
+        )
         # SP/coord
         obj.plot(
           x = "time", 
@@ -412,9 +444,19 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
           grid = True,
           legend = False
         )
+        rtv.plot(
+          x = "time", 
+          y = "SP/coord", 
+          ax = axs2[0], 
+          color = mcolors.TABLEAU_COLORS["tab:orange"], 
+          linewidth = 1,
+          grid = True,
+          legend = False
+        )
       # average
       avg = objs.groupby("time").mean(numeric_only = True)
       avg_rej = rejs.groupby("time").mean(numeric_only = True)
+      avg_rtv = rtvs.groupby("time").mean(numeric_only = True)
       # -- deviation
       avg.plot(
         y = "dev",
@@ -434,6 +476,15 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         grid = True,
         label = "Average deviation (SP/coord - LMM) [%]"
       )
+      avg_rtv.plot(
+        y = "dev",
+        ax = axs2[1],
+        color = mcolors.TABLEAU_COLORS["tab:red"],
+        linewidth = 2,
+        marker = ".", 
+        grid = True,
+        label = "Average deviation (SP/coord / LMM) [x]"
+      )
       # -- centralized
       avg.plot(
         y = "LoadManagementModel",
@@ -446,6 +497,14 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       avg_rej.plot(
         y = "LoadManagementModel",
         ax = axs[1,0],
+        color = mcolors.TABLEAU_COLORS["tab:blue"],
+        linewidth = 2,
+        grid = True,
+        label = "Average LMM"
+      )
+      avg_rtv.plot(
+        y = "LoadManagementModel",
+        ax = axs2[0],
         color = mcolors.TABLEAU_COLORS["tab:blue"],
         linewidth = 2,
         grid = True,
@@ -468,19 +527,38 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         grid = True,
         label = "Average SP/coord"
       )
+      avg_rtv.plot(
+        y = "SP/coord",
+        ax = axs2[0],
+        color = mcolors.TABLEAU_COLORS["tab:orange"],
+        linewidth = 2,
+        grid = True,
+        label = "Average SP/coord"
+      )
       axs[1,0].set_xlabel("Control time period $t$")
       axs[1,1].set_xlabel("Control time period $t$")
       axs[0,0].set_ylabel("Objective function value")
       axs[0,1].set_ylabel("Objective function deviation [%]")
       axs[1,0].set_ylabel("Total percentage of rejections [%]")
       axs[1,1].set_ylabel("Percentage rejections deviation [%]")
-      plt.savefig(
+      axs2[0].set_xlabel("Control time period $t$")
+      axs2[1].set_xlabel("Control time period $t$")
+      axs2[0].set_ylabel("Runtime [s]")
+      axs2[1].set_ylabel("Runtime deviation [x]")
+      fig.savefig(
         os.path.join(plot_folder, f"obj-Nn_{Nn}.png"),
         dpi = 300,
         format = "png",
         bbox_inches = "tight"
       )
-      plt.close()
+      plt.close(fig)
+      fig2.savefig(
+        os.path.join(plot_folder, f"runtime-Nn_{Nn}.png"),
+        dpi = 300,
+        format = "png",
+        bbox_inches = "tight"
+      )
+      plt.close(fig2)
   # save ping-pong problems info
   with open(os.path.join(plot_folder, "ping_pong_problems.txt"), "w") as ost:
     for el in ping_pong_list:
