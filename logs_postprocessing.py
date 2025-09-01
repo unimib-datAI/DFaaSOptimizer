@@ -38,7 +38,7 @@ def get_spcoord_runtime(
       "tot": tot_t["tot"]
     })
     _, axs = plt.subplots(
-      nrows = 5, ncols = 1, sharex = True, figsize = (8,20)
+      nrows = 4, ncols = 1, sharex = True, figsize = (8,20)
     )
     # -- min
     min_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
@@ -52,24 +52,33 @@ def get_spcoord_runtime(
       ax = axs[1],
       stacked = True
     )
-    # -- tot
-    tot_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
+    # -- avg
+    avg_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
       grid = True, 
       ax = axs[2],
       stacked = True
     )
-    # -- avg
-    avg_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
+    # -- tot
+    tot_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
       grid = True, 
       ax = axs[3],
       stacked = True
     )
-    # -- tot
-    total_runtime["tot"].plot(grid = True, ax = axs[4])
+    total_runtime["tot"].plot(
+      grid = True, 
+      ax = axs[3],
+      linewidth = 3,
+      color = "k"
+    )
+    axs[3].axhline(
+      y = total_runtime["tot"].mean(),
+      linestyle = "dashed",
+      linewidth = 3,
+      color = mcolors.TABLEAU_COLORS["tab:red"]
+    )
     axs[0].set_ylabel("Min 1-iter runtime [s]")
     axs[1].set_ylabel("Max 1-iter runtime [s]")
-    axs[2].set_ylabel("Tot 1-iter runtime [s]")
-    axs[3].set_ylabel("Avg 1-iter runtime [s]")
+    axs[2].set_ylabel("Avg 1-iter runtime [s]")
     axs[-1].set_ylabel("Total runtime [s]")
     axs[-1].set_xlabel("Control time period $t$")
     plt.savefig(
@@ -185,69 +194,69 @@ def parse_logs(base_folder: str) -> pd.DataFrame:
 if __name__ == "__main__":
   base_folder = "solutions/homogeneous_demands/Nf4"
   social_welfare = parse_logs(base_folder)
-  # total_runtime = get_spcoord_runtime(social_welfare, ".")
+  total_runtime = get_spcoord_runtime(social_welfare, ".")
   # total_runtime.to_csv(os.path.join(base_folder, "spcoord_runtime.csv"))
-  for exp, data in social_welfare.groupby("exp"):
-    last_it = 0
-    # social welfare pattern
-    _, axs = plt.subplots(nrows = 2, ncols = 1, sharex = True, figsize = (12,8))
-    for t, iter_data in data.groupby("time"):
-      iter_data["time+iteration"] = iter_data["iteration"] + last_it
-      # social welfare
-      iter_data.plot(
-        x = "time+iteration",
-        y = "social_welfare",
-        color = mcolors.TABLEAU_COLORS["tab:blue"],
-        linestyle = "dashed",
-        linewidth = 1,
-        marker = ".",
-        grid = True,
-        label = None,
-        legend = False,
-        ax = axs[0]
-      )
-      # "best" social welfare
-      iter_data.plot(
-        x = "time+iteration",
-        y = "best_social_welfare",
-        color = "r",
-        # linestyle = "dashed",
-        linewidth = 1,
-        marker = ".",
-        grid = True,
-        label = None,
-        legend = False,
-        ax = axs[0]
-      )
-      # coord termination condition
-      iter_data["tc"] = 1
-      iter_data["tc_color"] = [
-        mcolors.TABLEAU_COLORS["tab:green"] if tc == "optimal" 
-          else mcolors.TABLEAU_COLORS["tab:red"] for tc in iter_data["coord_tc"]
-      ]
-      iter_data.plot.scatter(
-        x = "time+iteration",
-        y = "tc",
-        marker = "*",
-        c = "tc_color",
-        ax = axs[1]
-      )
-      # next time step
-      axs[0].axvline(
-        x = last_it,
-        linestyle = "dotted",
-        linewidth = 1,
-        color = "k"
-      )
-      axs[1].axvline(
-        x = last_it,
-        linestyle = "dotted",
-        linewidth = 1,
-        color = "k"
-      )
-      if iter_data["iteration"].max() > 0:
-        last_it += iter_data["iteration"].max()
-      else:
-        last_it += t
-    plt.title(exp)
-    plt.show()
+  # for exp, data in social_welfare.groupby("exp"):
+  #   last_it = 0
+  #   # social welfare pattern
+  #   _, axs = plt.subplots(nrows = 2, ncols = 1, sharex = True, figsize = (12,8))
+  #   for t, iter_data in data.groupby("time"):
+  #     iter_data["time+iteration"] = iter_data["iteration"] + last_it
+  #     # social welfare
+  #     iter_data.plot(
+  #       x = "time+iteration",
+  #       y = "social_welfare",
+  #       color = mcolors.TABLEAU_COLORS["tab:blue"],
+  #       linestyle = "dashed",
+  #       linewidth = 1,
+  #       marker = ".",
+  #       grid = True,
+  #       label = None,
+  #       legend = False,
+  #       ax = axs[0]
+  #     )
+  #     # "best" social welfare
+  #     iter_data.plot(
+  #       x = "time+iteration",
+  #       y = "best_social_welfare",
+  #       color = "r",
+  #       # linestyle = "dashed",
+  #       linewidth = 1,
+  #       marker = ".",
+  #       grid = True,
+  #       label = None,
+  #       legend = False,
+  #       ax = axs[0]
+  #     )
+  #     # coord termination condition
+  #     iter_data["tc"] = 1
+  #     iter_data["tc_color"] = [
+  #       mcolors.TABLEAU_COLORS["tab:green"] if tc == "optimal" 
+  #         else mcolors.TABLEAU_COLORS["tab:red"] for tc in iter_data["coord_tc"]
+  #     ]
+  #     iter_data.plot.scatter(
+  #       x = "time+iteration",
+  #       y = "tc",
+  #       marker = "*",
+  #       c = "tc_color",
+  #       ax = axs[1]
+  #     )
+  #     # next time step
+  #     axs[0].axvline(
+  #       x = last_it,
+  #       linestyle = "dotted",
+  #       linewidth = 1,
+  #       color = "k"
+  #     )
+  #     axs[1].axvline(
+  #       x = last_it,
+  #       linestyle = "dotted",
+  #       linewidth = 1,
+  #       color = "k"
+  #     )
+  #     if iter_data["iteration"].max() > 0:
+  #       last_it += iter_data["iteration"].max()
+  #     else:
+  #       last_it += t
+  #   plt.title(exp)
+  #   plt.show()
