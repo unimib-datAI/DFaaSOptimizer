@@ -330,7 +330,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
     runtime_comparison["dev"] = (
       runtime_comparison["SP/coord"] / runtime_comparison["LoadManagementModel"]
-    ).astype(int)
+    )
     runtime_comparison["dev"].plot(
       grid = True, marker = ".", ax = axs[1]
     )
