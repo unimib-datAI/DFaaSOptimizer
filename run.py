@@ -360,6 +360,9 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     all_obj_values.to_csv(
       os.path.join(plot_folder, "obj.csv"), index = False
     )
+    all_rej_values.to_csv(
+      os.path.join(plot_folder, "rejections.csv"), index = False
+    )
     all_runtime_values.to_csv(
       os.path.join(plot_folder, "runtime.csv"), index = False
     )
