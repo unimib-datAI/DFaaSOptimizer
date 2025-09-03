@@ -330,7 +330,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
     runtime_comparison["dev"] = (
       runtime_comparison["SP/coord"] / runtime_comparison["LoadManagementModel"]
-    ).astype(int)
+    )#.astype(int)
     runtime_comparison["dev"].plot(
       grid = True, marker = ".", ax = axs[1]
     )
@@ -359,6 +359,9 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     # -- save
     all_obj_values.to_csv(
       os.path.join(plot_folder, "obj.csv"), index = False
+    )
+    all_rej_values.to_csv(
+      os.path.join(plot_folder, "rejections.csv"), index = False
     )
     all_runtime_values.to_csv(
       os.path.join(plot_folder, "runtime.csv"), index = False
