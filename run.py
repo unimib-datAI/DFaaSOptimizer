@@ -106,7 +106,17 @@ def load_termination_condition(
       deviation = []
       best_it = []
       for s in tc["0"]:
-        c, i, d, b = parse("{} (it: {}; obj. deviation: {}; best it: {})", s)
+        c, i, d, b, trt = [None] * 5
+        if "total runtime" in s:
+          c, i, d, b, trt = parse(
+            "{} (it: {}; obj. deviation: {}; best it: {}; total runtime: {})", 
+            s
+          )
+        else:
+          c, i, d, b = parse(
+            "{} (it: {}; obj. deviation: {}; best it: {})", 
+            s
+          )
         criterion.append(c)
         iteration.append(int(i))
         deviation.append(float(d))

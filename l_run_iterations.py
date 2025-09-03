@@ -64,9 +64,12 @@ def check_stopping_criteria(
     pi_queue: deque, 
     dev_queue: deque,
     sw_queue: deque,
+    current_sw_queue: deque,
     odev_queue: deque,
     psi: float,
-    tolerance: float
+    tolerance: float,
+    total_runtime: float,
+    time_limit: float
   ) -> Tuple[bool, str]:
   stop = False
   why_stopping = None
@@ -79,16 +82,27 @@ def check_stopping_criteria(
   elif psi < 1e-12:
     stop = True
     why_stopping = "psi < tol"
-  elif len(odev_queue) >= odev_queue.maxlen:
+  elif (dev_queue[-1] < tolerance).all():
+    stop = True
+    why_stopping = "dev < tol"
+  elif total_runtime >= time_limit:
+    stop = True
+    why_stopping = f"reached time limit: {total_runtime} >= {time_limit}"
+  if not stop and len(odev_queue) >= odev_queue.maxlen:
     stop = True
     why_stopping = "UB/LB diff < tol"
     for odev in odev_queue:
       if odev >= tolerance:
         stop = False
         break
-  elif (dev_queue[-1] < tolerance).all():
-    stop = True
-    why_stopping = "dev < tol"
+    if not stop:
+      last_sw = None
+      for sw in current_sw_queue:
+        if last_sw is not None and sw < last_sw:
+          stop = True
+          why_stopping = "SW starts decreasing"
+          break
+        last_sw = sw
   #
   if not stop:
     if len(pi_queue) >= pi_queue.maxlen and len(dev_queue) >= dev_queue.maxlen:
@@ -484,6 +498,7 @@ def run(
   if "coordinator" in solver_options:
     for k, v in solver_options["coordinator"].items():
       coordinator_options[k] = v
+  time_limit = general_solver_options.get("TimeLimit", np.inf)
   # -- maximum number of iterations
   max_iterations = config["max_iterations"]
   plot_interval = config.get("plot_interval", max_iterations)
@@ -552,10 +567,13 @@ def run(
     pi_queue = deque(maxlen = patience)
     dev_queue = deque(maxlen = patience)
     sw_queue = deque(maxlen = patience)
+    current_sw_queue = deque(maxlen = patience)
     odev_queue = deque(maxlen = patience)
     best_solution_so_far = None
     best_cost_so_far = np.inf
     best_it_so_far = -1
+    total_runtime = 0
+    ss = datetime.now()
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it} (psi = {psi})", file = log_stream, flush = True)
@@ -588,12 +606,14 @@ def run(
                 )
               else:
                 sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r_for_x[n,f])
+      s = datetime.now()
       # solve sub-problem
       (
         sp_data, sp_x, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
       ) = solve_subproblem(
         sp_data, agents, sp, solver_name, general_solver_options, pi = pi
       )
+      e = datetime.now()
       obj_dict["LSP"][it].append(obj["tot"])
       tc_dict["LSP"][it].append(tc["tot"])
       if verbose > 1:
@@ -603,6 +623,7 @@ def run(
           file = log_stream, 
           flush = True
         )
+      total_runtime += sp_runtime["tot"]
       # solve master problem
       (
         rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj, tc, runtime
@@ -621,20 +642,24 @@ def run(
           file = log_stream, 
           flush = True
         )
+      total_runtime += runtime
       # compute deviation
+      s = datetime.now()
       dev, Nfthr, Nfthr_lb = compute_deviation(
         rmp_data, sp_x, sp_omega, rmp_r, sp_rho, sp_r
       )
+      e = datetime.now()
       dev_queue.append(dev)
       if verbose > 1:
         print(
           f"        compute_deviation: DONE (dev = {dev}; "
           f"Nf = {Nfthr}; omega = {sp_omega.sum(axis=0)}; ", 
-          f"ni = {rmp_omega.sum(axis=0)})", 
+          f"ni = {rmp_omega.sum(axis=0)}; runtime = {(e-s).total_seconds()})", 
           file = log_stream, 
           flush = True
         )
       # compute lower bound
+      s = datetime.now()
       lb = compute_lower_bound(
         obj_dict["LSP"][it][-1], 
         sp_data[None]["pi"], 
@@ -644,10 +669,11 @@ def run(
         sp_omega
       )
       lower_bound = min(lower_bound, lb)
+      e = datetime.now()
       if verbose > 1:
         print(
           f"        compute_lower_bound: DONE (current: {lb};"
-          f" bound: {lower_bound})", 
+          f" bound: {lower_bound}; runtime = {(e-s).total_seconds()})", 
           file = log_stream, 
           flush = True
         )
@@ -655,6 +681,7 @@ def run(
       spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
         spr, sp_data, agents, solver_name, general_solver_options, rmp_y, rmp_omega
       )
+      total_runtime += spr_runtime
       # -- rejection cost
       rej_cost = 0
       for n in range(Nn):
@@ -666,6 +693,7 @@ def run(
       # update social welfare
       social_welfare = min(social_welfare, spr_obj)
       sw_queue.append(social_welfare)
+      current_sw_queue.append(spr_obj)
       obj_dict["LSPr"][it].append(spr_obj)
       if verbose > 1:
         print(
@@ -716,6 +744,7 @@ def run(
             flush = True
           )
         # check stopping criterion
+        s = datetime.now()
         stop_searching, why_stop_searching, psi = check_stopping_criteria(
           it,
           max_iterations,
@@ -724,10 +753,21 @@ def run(
           pi_queue,
           dev_queue,
           sw_queue,
+          current_sw_queue,
           odev_queue,
           psi,
-          tolerance
+          tolerance,
+          total_runtime,
+          time_limit
         )
+        e = datetime.now()
+        if verbose > 1:
+          print(
+            f"        check_stopping_criteria: DONE "
+            f"(runtime = {(e - s).total_seconds()})", 
+            file = log_stream, 
+            flush = True
+          )
       else:
         stop_searching = True
         why_stop_searching = "dev < 0"
@@ -762,8 +802,17 @@ def run(
         )
         tc_dict["LSPr"].append(
           f"{why_stop_searching} "
-          f"(it: {it}; obj. deviation: {odev}; best it: {best_it_so_far})"
+          f"(it: {it}; obj. deviation: {odev}; best it: {best_it_so_far}; "
+          f"total runtime: {total_runtime})"
         )
+    ee = datetime.now()
+    if verbose > 0:
+      print(
+        f"    TOTAL RUNTIME [s] = {total_runtime} "
+        f"(wallclock: {(ee-ss).total_seconds()})",
+        file = log_stream, 
+        flush = True
+      )
   # join
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
     sp_complete_solution
