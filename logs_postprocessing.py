@@ -113,9 +113,7 @@ def parse_log_file(
         "social_welfare_runtime": [],
         "coord_tc": [],
         "coord_runtime": [],
-        "sp_runtime": [],
-        "measured_total_time": [],
-        "wallclock_time": []
+        "sp_runtime": []
       }
       n_iterations = 0
       while t_row_idx < len(lines) and not (
@@ -166,10 +164,17 @@ def parse_log_file(
           t_row_idx = it_row_idx
           # if the iterations are finished, save info on total runtime and 
           # wallclock time
-          if lines[it_row_idx].startswith("    TOTAL RUNTIME"):
+          if (
+              it_row_idx < len(lines) and 
+                lines[it_row_idx].startswith("    TOTAL RUNTIME")
+            ):
             trt, wct = parse.parse(
               "    TOTAL RUNTIME [s] = {} (wallclock: {})\n", lines[it_row_idx]
             )
+            if "measured_total_time" not in df:
+              df["measured_total_time"] = []
+            if "wallclock_time" not in df:
+              df["wallclock_time"] = []
             df["measured_total_time"] += [float(trt)] * n_iterations
             df["wallclock_time"] += [float(wct)] * n_iterations
             t_row_idx += 1
@@ -181,7 +186,10 @@ def parse_log_file(
         [logs_df, pd.DataFrame(df)], ignore_index = True
       )
       row_idx = t_row_idx
-      if lines[t_row_idx].startswith("All solutions saved"):
+      if (
+          t_row_idx < len(lines) and 
+            lines[t_row_idx].startswith("All solutions saved")
+        ):
         row_idx += 1
   return logs_df
 
@@ -205,7 +213,7 @@ def parse_logs(base_folder: str) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-  base_folder = "solutions/prova3"
+  base_folder = "solutions/prova4"
   social_welfare = parse_logs(base_folder)
   total_runtime = get_spcoord_runtime(social_welfare, base_folder)
   social_welfare[
