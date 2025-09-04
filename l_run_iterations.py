@@ -534,6 +534,7 @@ def run(
   max_iterations = config["max_iterations"]
   plot_interval = config.get("plot_interval", max_iterations)
   patience = config["patience"]
+  sw_patience = config.get("sw_patience", max_iterations)
   verbose = config.get("verbose", 0)
   tolerance = config.get("tolerance", 1e-3)
   # generate solution folder
@@ -598,8 +599,8 @@ def run(
     pi_queue = deque(maxlen = patience)
     dev_queue = deque(maxlen = patience)
     sw_queue = deque(maxlen = patience)
-    current_sw_queue = deque(maxlen = patience)
     odev_queue = deque(maxlen = patience)
+    current_sw_queue = deque(maxlen = sw_patience)
     best_solution_so_far = None
     best_cost_so_far = np.inf
     best_it_so_far = -1
