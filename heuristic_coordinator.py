@@ -48,6 +48,7 @@ class GreedyCoordinator(HeuristicCoordinator):
       self, instance: dict, rule: str = "beta"
     ) -> pd.DataFrame:
     Nn = instance[None]["Nn"][None]
+    neighbors = instance[None]["neighborhood"]
     profit = {
       "n1": [],
       "n2": [],
@@ -59,7 +60,7 @@ class GreedyCoordinator(HeuristicCoordinator):
     for (n1,f), omega in instance[None]["omega_bar"].items():
       if omega > 0:
         for n2 in range(1,Nn+1):
-          if n2 != n1:
+          if n2 != n1 and neighbors[(n1,n2)]:
             beta = instance[None]["beta"][(n1,n2,f)]
             profit["n1"].append(n1 - 1)
             profit["n2"].append(n2 - 1)
