@@ -530,6 +530,7 @@ def run(
     for k, v in solver_options["coordinator"].items():
       coordinator_options[k] = v
   time_limit = general_solver_options.get("TimeLimit", np.inf)
+  start_from_last_pi = solver_options.get("start_from_last_pi", False)
   # -- maximum number of iterations
   max_iterations = config["max_iterations"]
   plot_interval = config.get("plot_interval", max_iterations)
@@ -560,6 +561,7 @@ def run(
       config["opt_solution_folder"], "LoadManagementModel"
     )
   # loop over time
+  final_pi = None
   sp_complete_solution = init_complete_solution()
   spr_complete_solution = init_complete_solution()
   rmp_complete_solution = init_complete_solution()
@@ -592,7 +594,7 @@ def run(
     sp_data = deepcopy(data)
     rmp_data = deepcopy(data)
     rmp_y = None
-    pi = None
+    pi = None if not start_from_last_pi or final_pi is None else final_pi
     it = 0
     stop_searching = False
     psi = 2
@@ -768,6 +770,7 @@ def run(
           rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
         )
         best_it_so_far = it
+        final_pi = deepcopy(pi)
       # check that the deviation is >= 0 (otherwise, no iterations needed)
       if not (dev < 0).all():
         if social_welfare < lower_bound and (
