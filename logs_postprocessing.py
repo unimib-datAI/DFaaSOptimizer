@@ -16,11 +16,6 @@ def get_spcoord_runtime(
       time_data = t_data.loc[:,t_data.columns.str.endswith("runtime")].copy(
         deep = True
       )
-      # # TODO: remove lines 19--23 when parallel experiments will be executed
-      # Nn = logs_df.loc[time_data.index, "Nn"]
-      # for col in time_data.columns:
-      #   if not col.startswith("coord"):
-      #     time_data[col] /= Nn
       time_data["tot_runtime"] = time_data.sum(axis = "columns")
       time_data.columns = [c.split("_")[0] for c in time_data.columns]
       time_data["iteration"] = t_data["iteration"]
@@ -118,12 +113,17 @@ def parse_log_file(
         "social_welfare_runtime": [],
         "coord_tc": [],
         "coord_runtime": [],
-        "sp_runtime": []
+        "sp_runtime": [],
+        "measured_total_time": [],
+        "wallclock_time": []
       }
+      n_iterations = 0
       while t_row_idx < len(lines) and not (
-          lines[t_row_idx].startswith("t = ")
+          lines[t_row_idx].startswith("t = ") or
+            lines[t_row_idx].startswith("All solutions saved")
         ):
         if lines[t_row_idx].startswith("    it = "):
+          n_iterations += 1
           it, psi = parse.parse(
             "    it = {} (psi = {})\n", lines[t_row_idx]
           )
@@ -133,7 +133,8 @@ def parse_log_file(
           it_row_idx = t_row_idx + 1
           while it_row_idx < len(lines) and not (
               lines[it_row_idx].startswith("    it = ") or 
-                lines[it_row_idx].startswith("t = ")
+                lines[it_row_idx].startswith("t = ") or
+                  lines[it_row_idx].startswith("    TOTAL RUNTIME")
             ):
             if "compute_social_welfare" in lines[it_row_idx]:
               _, c_val, val, runtime = parse.parse(
@@ -163,6 +164,16 @@ def parse_log_file(
           df["exp"].append(exp)
           # move to the next iteration
           t_row_idx = it_row_idx
+          # if the iterations are finished, save info on total runtime and 
+          # wallclock time
+          if lines[it_row_idx].startswith("    TOTAL RUNTIME"):
+            trt, wct = parse.parse(
+              "    TOTAL RUNTIME [s] = {} (wallclock: {})\n", lines[it_row_idx]
+            )
+            df["measured_total_time"] += [float(trt)] * n_iterations
+            df["wallclock_time"] += [float(wct)] * n_iterations
+            t_row_idx += 1
+            n_iterations = 0
       # add number of nodes
       df["Nn"] = [Nn] * len(df["exp"])
       # merge and move to the next time step
@@ -170,6 +181,8 @@ def parse_log_file(
         [logs_df, pd.DataFrame(df)], ignore_index = True
       )
       row_idx = t_row_idx
+      if lines[t_row_idx].startswith("All solutions saved"):
+        row_idx += 1
   return logs_df
 
 
@@ -192,9 +205,14 @@ def parse_logs(base_folder: str) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-  base_folder = "solutions/homogeneous_demands/Nf4"
+  base_folder = "solutions/prova3"
   social_welfare = parse_logs(base_folder)
-  total_runtime = get_spcoord_runtime(social_welfare, ".")
+  total_runtime = get_spcoord_runtime(social_welfare, base_folder)
+  social_welfare[
+    ["exp", "Nn", "time", "measured_total_time", "wallclock_time"]
+  ].groupby(["exp", "time"]).mean().reset_index().to_csv(
+    os.path.join(base_folder, "postprocessing", "wallclock.csv"), index = False
+  )
   # total_runtime.to_csv(os.path.join(base_folder, "spcoord_runtime.csv"))
   # for exp, data in social_welfare.groupby("exp"):
   #   last_it = 0
