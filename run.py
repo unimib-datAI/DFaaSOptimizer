@@ -59,6 +59,12 @@ def parse_arguments() -> argparse.Namespace:
     default = False,
     action = "store_true"
   )
+  parser.add_argument(
+    "-j", "--sp_parallelism",
+    help = "Number of parallel processes to start (-1: auto, 0: sequential)",
+    type = int,
+    default = -1
+  )
   # Parse the arguments
   args: argparse.Namespace = parser.parse_known_args()[0]
   return args
@@ -636,7 +642,8 @@ def run(
     n_experiments: int, 
     run_centralized_only: bool,
     run_spcoord_only: bool,
-    fix_r: bool
+    fix_r: bool,
+    sp_parallelism: int
   ):
   seed = base_config["seed"]
   log_on_file = True if base_config["verbose"] > 0 else False
@@ -695,7 +702,12 @@ def run(
       if fix_r:
         config["opt_solution_folder"] = c_folder
       if run_i:
-        i_folder = run_iterations(config, log_on_file, disable_plotting = True)
+        i_folder = run_iterations(
+          config, 
+          sp_parallelism,
+          log_on_file = log_on_file, 
+          disable_plotting = True
+        )
         solution_folders["sp-coord"].append(i_folder)
       # -- save info
       if experiment_idx is None:
@@ -717,6 +729,7 @@ if __name__ == "__main__":
   run_spcoord_only = args.run_spcoord_only
   postprocessing_only = args.postprocessing_only
   fix_r = args.fix_r
+  sp_parallelism = args.sp_parallelism
   # load configuration file
   base_config = load_configuration(config_file)
   base_solution_folder = base_config["base_solution_folder"]
@@ -732,7 +745,8 @@ if __name__ == "__main__":
       n_experiments, 
       run_centralized_only,
       run_spcoord_only,
-      fix_r
+      fix_r,
+      sp_parallelism
     )
   else:
     solution_folders = {}

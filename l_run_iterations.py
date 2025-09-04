@@ -51,6 +51,12 @@ def parse_arguments() -> argparse.Namespace:
      type = str,
      default = "config.json"
    )
+   parser.add_argument(
+     "-j", "--parallelism",
+     help = "Number of parallel processes to start (-1: auto, 0: sequential)",
+     type = int,
+     default = -1
+   )
    # Parse the arguments
    args: argparse.Namespace = parser.parse_known_args()[0]
    return args
@@ -216,7 +222,8 @@ def compute_social_welfare(
     solver_name: str,
     solver_options: dict,
     rmp_y: np.array, 
-    rmp_omega: np.array
+    rmp_omega: np.array,
+    parallelism: int
   ) -> Tuple[list, float, list]:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
@@ -232,14 +239,24 @@ def compute_social_welfare(
     (n+1,f+1): max(rmp_omega[n,f], 0) for n in range(Nn) for f in range(Nf)
   }
   # solve for all agents
-  results = []
-  with mpp.Pool(
-      processes = mpp.cpu_count(),
-      initializer = init_parallel_worker,
-      initargs = (spr_data, solver_options, solver_name, spr),
-    ) as pool:
-    results = pool.map(solve_single_agent, agents)
-  agents_sol = {agent: sol for agent, sol in results}
+  agents_sol = {}
+  if parallelism != 0:
+    results = []
+    n_proc = mpp.cpu_count() if parallelism < 0 else parallelism
+    with mpp.Pool(
+        processes = n_proc,
+        initializer = init_parallel_worker,
+        initargs = (spr_data, solver_options, solver_name, spr),
+      ) as pool:
+      results = pool.map(solve_single_agent, agents)
+    agents_sol = {agent: sol for agent, sol in results}
+  else:
+    for agent in agents:
+      spr_data[None]["whoami"] = {None: agent + 1}
+      spr_instance = spr.generate_instance(spr_data)
+      agents_sol[agent] = spr.solve(
+        spr_instance, solver_options, solver_name
+      )
   # merge solutions
   spr_sol = merge_agents_solutions(
     spr_data, agents_sol
@@ -430,6 +447,7 @@ def solve_subproblem(
     sp: SPAbstractModel,
     solver_name: str,
     solver_options: dict,
+    parallelism: int,
     pi: np.array = None
   ):
   Nn = base_instance_data[None]["Nn"][None]
@@ -441,14 +459,24 @@ def solve_subproblem(
   else:
     sp_data[None]["pi"] = {f+1: 0 for f in range(Nf)}
   # solve for all agents
-  results = []
-  with mpp.Pool(
-      processes = mpp.cpu_count(),
-      initializer = init_parallel_worker,
-      initargs = (sp_data, solver_options, solver_name, sp),
-    ) as pool:
-    results = pool.map(solve_single_agent, agents)
-  agents_sol = {agent: sol for agent, sol in results}
+  agents_sol = {}
+  if parallelism != 0:
+    results = []
+    n_proc = mpp.cpu_count() if parallelism < 0 else parallelism
+    with mpp.Pool(
+        processes = n_proc,
+        initializer = init_parallel_worker,
+        initargs = (sp_data, solver_options, solver_name, sp),
+      ) as pool:
+      results = pool.map(solve_single_agent, agents)
+    agents_sol = {agent: sol for agent, sol in results}
+  else:
+    for agent in agents:
+      sp_data[None]["whoami"] = {None: agent + 1}
+      sp_instance = sp.generate_instance(sp_data)
+      agents_sol[agent] = sp.solve(
+        sp_instance, solver_options, solver_name
+      )
   # merge solutions
   sp_x, sp_omega, sp_r, sp_rho, obj, tc, runtime = merge_agents_solutions(
     sp_data, agents_sol
@@ -479,7 +507,10 @@ def update_prices(
 
 
 def run(
-    config: dict, log_on_file: bool = False, disable_plotting: bool = False
+    config: dict, 
+    parallelism: int,
+    log_on_file: bool = False, 
+    disable_plotting: bool = False
   ):
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
@@ -611,7 +642,13 @@ def run(
       (
         sp_data, sp_x, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
       ) = solve_subproblem(
-        sp_data, agents, sp, solver_name, general_solver_options, pi = pi
+        sp_data, 
+        agents, 
+        sp, 
+        solver_name, 
+        general_solver_options, 
+        parallelism,
+        pi = pi
       )
       e = datetime.now()
       obj_dict["LSP"][it].append(obj["tot"])
@@ -679,7 +716,14 @@ def run(
         )
       # solve "restricted problem"
       spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
-        spr, sp_data, agents, solver_name, general_solver_options, rmp_y, rmp_omega
+        spr, 
+        sp_data, 
+        agents, 
+        solver_name, 
+        general_solver_options, 
+        rmp_y, 
+        rmp_omega,
+        parallelism
       )
       total_runtime += spr_runtime
       # -- rejection cost
@@ -909,7 +953,8 @@ def run(
 if __name__ == "__main__":
   args = parse_arguments()
   config_file = args.config
+  parallelism = args.parallelism
   # load configuration file
   config = load_configuration(config_file)
   # run
-  run(config)
+  run(config, parallelism)
