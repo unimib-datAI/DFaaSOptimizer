@@ -8,6 +8,53 @@ class HeuristicCoordinator(ABC):
   def __init__(self) -> None:
     self._name = "HeuristicCoordinator"
   
+  def _check_feasibility(
+      self,
+      instance: dict,
+      y: np.array, 
+      z: np.array, 
+      r: np.array
+    ) -> bool:
+    utilization = self._compute_utilization(
+      instance[None]["demand"], 
+      instance[None]["x_bar"], 
+      y, 
+      r, 
+      instance[None]["r_bar"]
+    )
+    total_r = np.zeros(r.shape)
+    for (n,f), load in instance[None]["incoming_load"].items():
+      x = instance[None]["x_bar"][(n,f)]
+      # no traffic loss
+      managed_load = x + z[n-1,f-1] + y[n-1,:,f-1].sum()
+      if abs(managed_load - load) > 1e-3:
+        return False
+      # max utilization
+      if utilization[n-1,f-1] - instance[None]["max_utilization"][f] > 1e-5:
+        return False
+      # total number of function replicas
+      total_r[n-1,f-1] = r[n-1,f-1] + instance[None]["r_bar"][(n,f)]
+    # memory capacity
+    for n, ram in instance[None]["memory_capacity"].items():
+      used_memory = 0
+      for f, req_memory in instance[None]["memory_requirement"].items():
+        used_memory += total_r[n-1,f-1] * req_memory
+        if used_memory - ram > 1e-5:
+          return False
+    return True
+
+  def _compute_utilization(
+      self, demand: dict, x: dict, y: np.array, a: np.array, r: dict
+    ) -> np.array:
+    utilization = np.zeros(shape = a.shape)
+    for (n,f), d in demand.items():
+      rr = a[n-1, f-1] + r[(n,f)]
+      if rr > 0:
+        utilization[n-1, f-1] = d * (
+          x[(n,f)] + y[:, n-1, f-1].sum()
+        ) / rr
+    return utilization   
+  
   def _objective_function(
       self, 
       y: np.array, 
@@ -127,6 +174,9 @@ class GreedyCoordinator(HeuristicCoordinator):
       if idx == len(data) and omega > 0:
         z[n1,f] += omega
     e = datetime.now()
+    # check feasibility
+    feasible = self._check_feasibility(instance, y, z, r)
+    assert feasible
     # build solution dictionary
     solution = {
       "y": y.flatten(),
