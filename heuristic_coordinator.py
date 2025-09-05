@@ -28,10 +28,10 @@ class HeuristicCoordinator(ABC):
       # no traffic loss
       managed_load = x + z[n-1,f-1] + y[n-1,:,f-1].sum()
       if abs(managed_load - load) > 1e-3:
-        return False
+        return False, f"no traffic loss: {abs(managed_load - load)} > 1e-3"
       # max utilization
       if utilization[n-1,f-1] - instance[None]["max_utilization"][f] > 1e-5:
-        return False
+        return False, f"max utilization: {utilization[n-1,f-1]}"
       # total number of function replicas
       total_r[n-1,f-1] = r[n-1,f-1] + instance[None]["r_bar"][(n,f)]
     # memory capacity
@@ -40,8 +40,8 @@ class HeuristicCoordinator(ABC):
       for f, req_memory in instance[None]["memory_requirement"].items():
         used_memory += total_r[n-1,f-1] * req_memory
         if used_memory - ram > 1e-5:
-          return False
-    return True
+          return False, f"memory capacity: {used_memory} > {ram}"
+    return True, ""
 
   def _compute_utilization(
       self, demand: dict, x: dict, y: np.array, a: np.array, r: dict
@@ -148,15 +148,15 @@ class GreedyCoordinator(HeuristicCoordinator):
             (
               instance[None]["r_bar"][(n2+1,f+1)] + max_a
             ) * instance[None]["max_utilization"][f+1] / demand[(n2+1,f+1)]
-          ) - instance[None]["x_bar"][(n2+1,f+1)]
+          ) - instance[None]["x_bar"][(n2+1,f+1)] - y[:,n2,f].sum()
           # determine actual offloading and additional number of replicas
           if omega <= max_acceptable:
             y[n1,n2,f] += omega
             used_a = int(np.ceil((
               (
-                omega + instance[None]["x_bar"][(n2+1,f+1)]
+                y[:,n2,f].sum() + instance[None]["x_bar"][(n2+1,f+1)]
               ) * demand[(n2+1,f+1)] / instance[None]["max_utilization"][f+1]
-            ) - instance[None]["r_bar"][(n2+1,f+1)]))
+            ) - instance[None]["r_bar"][(n2+1,f+1)])) - r[n2,f]
             r[n2,f] += used_a
             residual_capacity[n2] -= (used_a * ram[f+1])
             omega = 0
@@ -175,8 +175,8 @@ class GreedyCoordinator(HeuristicCoordinator):
         z[n1,f] += omega
     e = datetime.now()
     # check feasibility
-    feasible = self._check_feasibility(instance, y, z, r)
-    assert feasible
+    feasible, message = self._check_feasibility(instance, y, z, r)
+    assert feasible, message
     # build solution dictionary
     solution = {
       "y": y.flatten(),
