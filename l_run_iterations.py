@@ -174,32 +174,30 @@ def compute_centralized_objective(
 
 
 def compute_deviation(
-    rmp_data: dict, sp_x: np.array, sp_omega: np.array, rmp_r: np.array, sp_rho: np.array, sp_r: np.array
-  ) -> Tuple[np.array, list]:
+    rmp_data: dict, 
+    sp_x: np.array, 
+    sp_omega: np.array, 
+    rmp_r: np.array, 
+    rmp_omega: np.array
+  ) -> Tuple[np.array, list, np.array]:
   Nn = rmp_data[None]["Nn"][None]
   Nf = rmp_data[None]["Nf"][None]
   dev = np.array([sp_omega[:,f].sum() for f in range(Nf)])
+  detailed_dev = np.zeros((Nn,Nf))
   Nfthr = []
-  Nfthr_lb = []
-  min_demand = {
-    f: min([rmp_data[None]["demand"][(n+1,f+1)] for n in range(Nn)]) for f in range(Nf)
-  }
   for f in range(Nf):
     n_f = 0
-    n_f_lb = 0
     for n in range(Nn):
       d = rmp_data[None]["demand"][n+1,f+1]
       u = rmp_data[None]["max_utilization"][f+1]
       n_f += (u * rmp_r[n,f] / d - sp_x[n,f])
-      n_f_lb += (u * rmp_r[n,f] / min_demand[f] - sp_x[n,f])
-      # n_f_lb += (u * (sp_r[n,f] + sp_rho[n] / rmp_data[None]["memory_requirement"][f+1]) / d - sp_x[n,f])
+      detailed_dev[n,f] = sp_omega[n,f] - rmp_omega[n,f]
     # deviation
     dev[f] -= n_f
     # if abs(dev[f]) < tolerance:
     #   dev[f] = 0
     Nfthr.append(n_f)
-    Nfthr_lb.append(n_f_lb)
-  return dev, Nfthr, Nfthr_lb
+  return dev, Nfthr, detailed_dev
 
 
 def compute_lower_bound(
@@ -447,7 +445,8 @@ def solve_subproblem(
     solver_name: str,
     solver_options: dict,
     parallelism: int,
-    pi: np.array = None
+    pi: dict = None,
+    detailed_pi: np.array = None
   ):
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
@@ -471,8 +470,13 @@ def solve_subproblem(
     agents_sol = {agent: sol for agent, sol in results}
   else:
     for agent in agents:
+      # generate instance
       sp_data[None]["whoami"] = {None: agent + 1}
+      if detailed_pi is not None:
+        print("here")
+        sp_data[None]["pi"] = {f+1: detailed_pi[agent,f] for f in range(Nf)}
       sp_instance = sp.generate_instance(sp_data)
+      # solve
       agents_sol[agent] = sp.solve(
         sp_instance, solver_options, solver_name
       )
@@ -491,10 +495,17 @@ def solve_subproblem(
 
 
 def update_prices(
-    dev: np.array, psi: float, delta_w: float, old_pi: dict
-  ) -> dict:
+    dev: np.array, 
+    detailed_dev: np.array, 
+    psi: float, 
+    delta_w: float, 
+    old_pi: dict,
+    old_detailed_pi: np.array
+  ) -> Tuple[dict, np.array]:
   pi = {}
+  detailed_pi = deepcopy(old_detailed_pi)
   for f in range(len(old_pi)):
+    # update per-function prices
     if (dev != 0).any():
       pi[f+1] = max(
         0,
@@ -502,7 +513,16 @@ def update_prices(
       )
     else:
       pi[f+1] = old_pi[f+1]
-  return pi
+    # update detailed prices
+    for n in range(detailed_pi.shape[0]):
+      if detailed_dev[n,f] != 0:
+        detailed_pi[n,f] = max(
+          0,
+          detailed_pi[n,f] + (
+            psi * delta_w * detailed_dev[n,f] / (detailed_dev**2).sum()
+          )
+        )
+  return pi, detailed_pi
 
 
 def run(
@@ -530,6 +550,7 @@ def run(
       coordinator_options[k] = v
   time_limit = general_solver_options.get("TimeLimit", np.inf)
   start_from_last_pi = solver_options.get("start_from_last_pi", False)
+  use_detailed_pi = solver_options.get("use_detailed_pi", False)
   # -- maximum number of iterations
   max_iterations = config["max_iterations"]
   plot_interval = config.get("plot_interval", max_iterations)
@@ -561,6 +582,7 @@ def run(
     )
   # loop over time
   final_pi = None
+  final_detailed_pi = np.zeros((Nn,Nf))
   sp_complete_solution = init_complete_solution()
   spr_complete_solution = init_complete_solution()
   rmp_complete_solution = init_complete_solution()
@@ -593,7 +615,10 @@ def run(
     sp_data = deepcopy(data)
     rmp_data = deepcopy(data)
     rmp_y = None
-    pi = None if not start_from_last_pi or final_pi is None else final_pi
+    pi = None if (not start_from_last_pi or final_pi is None) else final_pi
+    detailed_pi = np.zeros(
+      (Nn,Nf)
+    ) if not start_from_last_pi else final_detailed_pi
     it = 0
     stop_searching = False
     psi = 2
@@ -650,7 +675,8 @@ def run(
         solver_name, 
         general_solver_options, 
         parallelism,
-        pi = pi
+        pi = pi,
+        detailed_pi = detailed_pi if use_detailed_pi else None
       )
       e = datetime.now()
       obj_dict["LSP"][it].append(obj["tot"])
@@ -684,8 +710,8 @@ def run(
       total_runtime += runtime
       # compute deviation
       s = datetime.now()
-      dev, Nfthr, Nfthr_lb = compute_deviation(
-        rmp_data, sp_x, sp_omega, rmp_r, sp_rho, sp_r
+      dev, Nfthr, detailed_dev = compute_deviation(
+        rmp_data, sp_x, sp_omega, rmp_r, rmp_omega
       )
       e = datetime.now()
       dev_queue.append(dev)
@@ -756,9 +782,6 @@ def run(
         for f in range(sp_x.shape[1]):
           x_cost_n += (sp_x[n,f] * sp_data[None]["alpha"][(n+1,f+1)])
         x_cost += x_cost_n
-      odev2 = abs(
-        (spr_obj - obj_dict["LSP"][it][-1]) / (obj_dict["LSP"][it][-1] + x_cost)
-      )
       odev_queue.append(odev)
       # update best solution so far
       if spr_obj < best_cost_so_far:
@@ -770,6 +793,7 @@ def run(
         )
         best_it_so_far = it
         final_pi = deepcopy(pi)
+        final_detailed_pi = deepcopy(detailed_pi)
       # check that the deviation is >= 0 (otherwise, no iterations needed)
       if not (dev < 0).all():
         if social_welfare < lower_bound and (
@@ -777,11 +801,13 @@ def run(
           ) >= 1e-6:
           return
         # update prices
-        pi = update_prices(
+        pi, detailed_pi = update_prices(
           dev, 
+          detailed_dev, 
           psi, 
           social_welfare - lower_bound, 
-          sp_data[None]["pi"]
+          sp_data[None]["pi"],
+          detailed_pi
         )
         pi_queue.append(pi)
         if verbose > 1:
