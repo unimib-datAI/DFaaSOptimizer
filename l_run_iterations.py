@@ -101,15 +101,14 @@ def check_stopping_criteria(
       if odev >= tolerance:
         stop = False
         break
-    if not stop:
-      last_sw = None
-      for sw in current_sw_queue:
-        if last_sw is not None and sw < last_sw:
-          stop = True
-          why_stopping = "SW starts decreasing"
-          break
-        last_sw = sw
-  #
+  if not stop and len(current_sw_queue) >= current_sw_queue.maxlen:
+    last_sw = None
+    for sw in current_sw_queue:
+      if last_sw is not None and sw < last_sw:
+        stop = True
+        why_stopping = "SW starts decreasing"
+        break
+      last_sw = sw
   if not stop:
     if len(pi_queue) >= pi_queue.maxlen and len(dev_queue) >= dev_queue.maxlen:
       stop = True
