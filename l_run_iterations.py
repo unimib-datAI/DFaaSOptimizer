@@ -811,7 +811,8 @@ def run(
         pi_queue.append(pi)
         if verbose > 1:
           print(
-            f"        update_prices: DONE ({pi})", 
+            "        update_prices: DONE "
+            f"({pi if not use_detailed_pi else detailed_pi.flatten()})", 
             file = log_stream, 
             flush = True
           )
