@@ -473,7 +473,6 @@ def solve_subproblem(
       # generate instance
       sp_data[None]["whoami"] = {None: agent + 1}
       if detailed_pi is not None:
-        print("here")
         sp_data[None]["pi"] = {f+1: detailed_pi[agent,f] for f in range(Nf)}
       sp_instance = sp.generate_instance(sp_data)
       # solve
