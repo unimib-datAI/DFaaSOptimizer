@@ -135,26 +135,42 @@ def parse_log_file(
                   lines[it_row_idx].startswith("    TOTAL RUNTIME")
             ):
             if "compute_social_welfare" in lines[it_row_idx]:
-              _, c_val, val, runtime = parse.parse(
-                "        compute_social_welfare: DONE ({}; current: {}; sw: {}; runtime = {})\n",
-                lines[it_row_idx]
-              )
+              runtime = None
+              if "runtime" in lines[it_row_idx]:
+                _, c_val, val, runtime = parse.parse(
+                  "        compute_social_welfare: DONE ({}; current: {}; sw: {}; runtime = {})\n",
+                  lines[it_row_idx]
+                )
+              else:
+                _, c_val, val = parse.parse(
+                  "        compute_social_welfare: DONE ({}; current: {}; sw: {})\n",
+                  lines[it_row_idx]
+                )
               df["social_welfare"].append(float(c_val))
               df["best_social_welfare"].append(float(val))
-              df["social_welfare_runtime"].append(float(runtime))
+              df["social_welfare_runtime"].append(float(runtime) if runtime else None)
             elif "rmp" in lines[it_row_idx]:
-              tc, _, runtime = parse.parse(
-                "        rmp: DONE ({}; obj = {}; runtime = {})\n", 
-                lines[it_row_idx]
-              )
+              runtime = None
+              if "runtime" in lines[it_row_idx]:
+                tc, _, runtime = parse.parse(
+                  "        rmp: DONE ({}; obj = {}; runtime = {})\n", 
+                  lines[it_row_idx]
+                )
+              else:
+                tc, _ = parse.parse(
+                  "        rmp: DONE ({}; obj = {})\n", 
+                  lines[it_row_idx]
+                )
               df["coord_tc"].append(tc)
-              df["coord_runtime"].append(float(runtime))
+              df["coord_runtime"].append(float(runtime) if runtime else None)
             elif "sp" in lines[it_row_idx]:
-              _, _, runtime = parse.parse(
-                "        sp: DONE  ({}; obj = {}; runtime = {})\n", 
-                lines[it_row_idx]
-              )
-              df["sp_runtime"].append(float(runtime))
+              runtime = None
+              if "runtime" in lines[it_row_idx]:
+                _, _, runtime = parse.parse(
+                  "        sp: DONE  ({}; obj = {}; runtime = {})\n", 
+                  lines[it_row_idx]
+                )
+              df["sp_runtime"].append(float(runtime) if runtime else None)
             it_row_idx += 1
           # save iteration info
           df["iteration"].append(it)

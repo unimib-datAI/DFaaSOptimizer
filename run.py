@@ -118,15 +118,20 @@ def load_termination_condition(
             "{} (it: {}; obj. deviation: {}; best it: {}; total runtime: {})", 
             s
           )
-        else:
+        elif "best it" in s:
           c, i, d, b = parse(
             "{} (it: {}; obj. deviation: {}; best it: {})", 
+            s
+          )
+        else:
+          c, i, d = parse(
+            "{} (it: {}; obj. deviation: {})", 
             s
           )
         criterion.append(c)
         iteration.append(int(i))
         deviation.append(float(d))
-        best_it.append(int(b))
+        best_it.append(int(b) if b is not None else b)
       tc.drop("0", axis = "columns", inplace = True)
       tc["criterion"] = criterion
       tc["iteration"] = iteration
@@ -299,14 +304,15 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
           grid = True,
           ax = axs[0]
         )
-        i_tc.plot(
-          x = "time",
-          y = "best_iteration",
-          marker = ".",
-          color = mcolors.TABLEAU_COLORS["tab:orange"],
-          grid = True,
-          ax = axs[0]
-        )
+        if not i_tc["best_iteration"].isnull().all():
+          i_tc.plot(
+            x = "time",
+            y = "best_iteration",
+            marker = ".",
+            color = mcolors.TABLEAU_COLORS["tab:orange"],
+            grid = True,
+            ax = axs[0]
+          )
         i_tc["criterion"].value_counts().plot.bar(
           rot = 0,
           grid = True,
@@ -325,7 +331,9 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     # runtime
     c_runtime = pd.DataFrame()
     i_runtime = pd.DataFrame()
-    if c_folder is not None:
+    if c_folder is not None and os.path.exists(
+        os.path.join(c_folder, "runtime.csv")
+      ):
       c_runtime = pd.read_csv(os.path.join(c_folder, "runtime.csv"))
     if i_folder is not None:
       logs_df = parse_log_file(
@@ -336,40 +344,41 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       )
       i_runtime = get_spcoord_runtime(logs_df, exp_plot_folder)
     # plot runtime comparison
-    runtime_comparison = pd.DataFrame({
-      "LoadManagementModel": c_runtime["LoadManagementModel"],
-      "SP/coord": i_runtime["tot"],
-      "iteration": i_tc["iteration"],
-      "best_iteration": i_tc["best_iteration"],
-    })
-    _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (12,8))
-    runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
-    runtime_comparison["dev"] = (
-      runtime_comparison["SP/coord"] / runtime_comparison["LoadManagementModel"]
-    )
-    runtime_comparison["dev"].plot(
-      grid = True, marker = ".", ax = axs[1]
-    )
-    axs[1].axhline(
-      y = runtime_comparison["dev"].mean(),
-      color = mcolors.TABLEAU_COLORS["tab:red"]
-    )
-    axs[0].set_ylabel("Runtime [s]", fontsize = 14)
-    axs[1].set_ylabel("Runtime deviation [x]", fontsize = 14)
-    plt.savefig(
-      os.path.join(exp_plot_folder, "runtime_comparison.png"),
-      dpi = 300,
-      format = "png",
-      bbox_inches = "tight"
-    )
-    plt.close()
-    # merge
-    runtime_comparison["time"] = runtime_comparison.index
-    runtime_comparison["Nn"] = exp_description_tuple[0]
-    runtime_comparison["seed"] = exp_description_tuple[1]
-    all_runtime_values = pd.concat(
-      [all_runtime_values, runtime_comparison], ignore_index = True
-    )
+    if len(c_runtime) > 0 and len(i_runtime) > 0:
+      runtime_comparison = pd.DataFrame({
+        "LoadManagementModel": c_runtime["LoadManagementModel"],
+        "SP/coord": i_runtime["tot"],
+        "iteration": i_tc["iteration"],
+        "best_iteration": i_tc["best_iteration"],
+      })
+      _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (12,8))
+      runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
+      runtime_comparison["dev"] = (
+        runtime_comparison["SP/coord"] / runtime_comparison["LoadManagementModel"]
+      )
+      runtime_comparison["dev"].plot(
+        grid = True, marker = ".", ax = axs[1]
+      )
+      axs[1].axhline(
+        y = runtime_comparison["dev"].mean(),
+        color = mcolors.TABLEAU_COLORS["tab:red"]
+      )
+      axs[0].set_ylabel("Runtime [s]", fontsize = 14)
+      axs[1].set_ylabel("Runtime deviation [x]", fontsize = 14)
+      plt.savefig(
+        os.path.join(exp_plot_folder, "runtime_comparison.png"),
+        dpi = 300,
+        format = "png",
+        bbox_inches = "tight"
+      )
+      plt.close()
+      # merge
+      runtime_comparison["time"] = runtime_comparison.index
+      runtime_comparison["Nn"] = exp_description_tuple[0]
+      runtime_comparison["seed"] = exp_description_tuple[1]
+      all_runtime_values = pd.concat(
+        [all_runtime_values, runtime_comparison], ignore_index = True
+      )
   # cumulative plot
   if len(all_obj_values) > 0:
     # -- save
@@ -426,16 +435,17 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
           grid = True,
           legend = False
         )
-        rtv.plot(
-          x = "time", 
-          y = "best_iteration", 
-          ax = axs2[2], 
-          color = mcolors.TABLEAU_COLORS["tab:pink"], 
-          linewidth = 1, 
-          marker = ".", 
-          grid = True,
-          legend = False
-        )
+        if not rtv["best_iteration"].isnull().all():
+          rtv.plot(
+            x = "time", 
+            y = "best_iteration", 
+            ax = axs2[2], 
+            color = mcolors.TABLEAU_COLORS["tab:pink"], 
+            linewidth = 1, 
+            marker = ".", 
+            grid = True,
+            legend = False
+          )
         rtv.plot(
           x = "time", 
           y = "iteration", 
@@ -526,24 +536,26 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         grid = True,
         label = "Average deviation (SP/coord - LMM) [%]"
       )
-      avg_rtv.plot(
-        y = "dev",
-        ax = axs2[1],
-        color = mcolors.TABLEAU_COLORS["tab:red"],
-        linewidth = 2,
-        marker = ".", 
-        grid = True,
-        label = "Average deviation (SP/coord / LMM) [x]"
-      )
-      avg_rtv.plot(
-        y = "best_iteration",
-        ax = axs2[2],
-        color = "black",
-        linewidth = 2,
-        marker = ".", 
-        grid = True,
-        label = "Best iteration"
-      )
+      if "dev" in avg_rtv:
+        avg_rtv.plot(
+          y = "dev",
+          ax = axs2[1],
+          color = mcolors.TABLEAU_COLORS["tab:red"],
+          linewidth = 2,
+          marker = ".", 
+          grid = True,
+          label = "Average deviation (SP/coord / LMM) [x]"
+        )
+      if "best_iteration" in avg_rtv:
+        avg_rtv.plot(
+          y = "best_iteration",
+          ax = axs2[2],
+          color = "black",
+          linewidth = 2,
+          marker = ".", 
+          grid = True,
+          label = "Best iteration"
+        )
       avg_rtv.plot(
         y = "iteration",
         ax = axs2[2],
@@ -596,14 +608,15 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         grid = True,
         label = "Average SP/coord"
       )
-      avg_rtv.plot(
-        y = "SP/coord",
-        ax = axs2[0],
-        color = mcolors.TABLEAU_COLORS["tab:orange"],
-        linewidth = 2,
-        grid = True,
-        label = "Average SP/coord"
-      )
+      if "SP/coord" in avg_rtv:
+        avg_rtv.plot(
+          y = "SP/coord",
+          ax = axs2[0],
+          color = mcolors.TABLEAU_COLORS["tab:orange"],
+          linewidth = 2,
+          grid = True,
+          label = "Average SP/coord"
+        )
       axs[1,0].set_xlabel("Control time period $t$")
       axs[1,1].set_xlabel("Control time period $t$")
       axs[0,0].set_ylabel("Objective function value")
@@ -728,6 +741,7 @@ if __name__ == "__main__":
   run_centralized_only = args.run_centralized_only
   run_spcoord_only = args.run_spcoord_only
   postprocessing_only = args.postprocessing_only
+  postprocessing_list = args.postprocessing_list
   fix_r = args.fix_r
   sp_parallelism = args.sp_parallelism
   # load configuration file
