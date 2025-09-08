@@ -55,6 +55,11 @@ def parse_arguments() -> argparse.Namespace:
     action = "store_true"
   )
   parser.add_argument(
+    "--postprocessing_list",
+    default = False,
+    action = "store_true"
+  )
+  parser.add_argument(
     "--fix_r",
     default = False,
     action = "store_true"
@@ -763,9 +768,21 @@ if __name__ == "__main__":
       sp_parallelism
     )
   else:
-    solution_folders = {}
-    with open(
-      os.path.join(base_solution_folder, "experiments.json"), "r"
-    ) as ist:
-      solution_folders = json.load(ist)
-    results_postprocessing(solution_folders, base_solution_folder)
+    if not postprocessing_list:
+      solution_folders = {}
+      with open(
+        os.path.join(base_solution_folder, "experiments.json"), "r"
+      ) as ist:
+        solution_folders = json.load(ist)
+      results_postprocessing(solution_folders, base_solution_folder)
+    else:
+      for foldername in os.listdir(base_solution_folder):
+        if not foldername.startswith("."):
+          bsf = os.path.join(base_solution_folder, foldername)
+          print(f"{'-'*80}\n{bsf}")
+          solution_folders = {}
+          with open(
+            os.path.join(bsf, "experiments.json"), "r"
+          ) as ist:
+            solution_folders = json.load(ist)
+          results_postprocessing(solution_folders, bsf)
