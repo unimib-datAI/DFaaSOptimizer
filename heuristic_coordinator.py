@@ -144,11 +144,14 @@ class GreedyCoordinator(HeuristicCoordinator):
         if residual_capacity[n2] > 0 and not i_sends_f[n2,f]:
           # compute the maximum acceptable requests rate
           max_a = int(residual_capacity[n2] / ram[f+1])
-          max_acceptable = (
+          max_acceptable = max(
+            0,
             (
-              instance[None]["r_bar"][(n2+1,f+1)] + max_a
-            ) * instance[None]["max_utilization"][f+1] / demand[(n2+1,f+1)]
-          ) - instance[None]["x_bar"][(n2+1,f+1)] - y[:,n2,f].sum()
+              (
+                instance[None]["r_bar"][(n2+1,f+1)] + max_a
+              ) * instance[None]["max_utilization"][f+1] / demand[(n2+1,f+1)]
+            ) - instance[None]["x_bar"][(n2+1,f+1)] - y[:,n2,f].sum()
+          )
           # determine actual offloading and additional number of replicas
           if omega <= max_acceptable:
             y[n1,n2,f] += omega
