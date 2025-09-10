@@ -1,5 +1,6 @@
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
+from typing import Tuple
 import pandas as pd
 import parse
 import json
@@ -90,14 +91,25 @@ def get_spcoord_runtime(
 
 
 def parse_log_file(
-    complete_path: str, exp: str, logs_df: pd.DataFrame, Nn: int
-  ) -> pd.DataFrame:
+    complete_path: str, 
+    exp: str, 
+    logs_df: pd.DataFrame, 
+    best_sol_df: pd.DataFrame, 
+    Nn: int
+  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
   # open log file
   lines = []
   with open(os.path.join(complete_path, "out.log"), "r") as istream:
     lines = istream.readlines()
   # loop over lines
   row_idx = 0
+  best_solution_df = {
+    "exp": [],
+    "time": [],
+    "best_solution_it": [],
+    "obj": [],
+    "Nn": []
+  }
   while row_idx < len(lines):
     # look for next time step
     if lines[row_idx].startswith("t = "):
@@ -171,6 +183,32 @@ def parse_log_file(
                   lines[it_row_idx]
                 )
               df["sp_runtime"].append(float(runtime) if runtime else None)
+            elif (
+                "check_stopping_criteria" in lines[it_row_idx] and 
+                  "wallclock" in lines[it_row_idx]
+              ):
+              _, trt, wct, _ = parse.parse(
+                "        check_stopping_criteria: DONE (runtime = {}; total runtime = {}; wallclock: {}) --> stop? {}\n",
+                lines[it_row_idx]
+              )
+              if "measured_total_time" not in df:
+                df["measured_total_time"] = []
+              if "wallclock_time" not in df:
+                df["wallclock_time"] = []
+              df["measured_total_time"].append(float(trt))
+              df["wallclock_time"].append(float(wct))
+              n_iterations -= 1
+            elif "best solution updated" in lines[it_row_idx]:
+              best_solution_df["exp"].append(exp)
+              best_solution_df["time"].append(t)
+              best_solution_df["best_solution_it"].append(it)
+              best_solution_df["obj"].append(
+                float(parse.parse(
+                  "        best solution updated; obj = {}\n",
+                  lines[it_row_idx]
+                )[0])
+              )
+              best_solution_df["Nn"].append(Nn)
             it_row_idx += 1
           # save iteration info
           df["iteration"].append(it)
@@ -207,11 +245,16 @@ def parse_log_file(
             lines[t_row_idx].startswith("All solutions saved")
         ):
         row_idx += 1
-  return logs_df
+  best_solution_df = pd.concat(
+    [best_sol_df, pd.DataFrame(best_solution_df)],
+    ignore_index = True
+  )
+  return logs_df, best_solution_df
 
 
 def parse_logs(base_folder: str) -> pd.DataFrame:
   social_welfare = pd.DataFrame()
+  best_solution_df = pd.DataFrame()
   for foldername in os.listdir(base_folder):
     complete_path = os.path.join(base_folder, foldername)
     if os.path.isdir(complete_path) and not foldername.startswith("."):
@@ -222,21 +265,23 @@ def parse_logs(base_folder: str) -> pd.DataFrame:
           ) as istream:
           data = json.load(istream)
           Nn = int(data["None"]["Nn"]["None"])
-        social_welfare = parse_log_file(
-          complete_path, foldername, social_welfare, Nn
+        social_welfare, best_solution_df = parse_log_file(
+          complete_path, foldername, social_welfare, best_solution_df, Nn
         )
-  return social_welfare
+  return social_welfare, best_solution_df
 
 
 if __name__ == "__main__":
   base_folder = "solutions/prova4"
-  social_welfare = parse_logs(base_folder)
+  social_welfare, best_solution_df = parse_logs(base_folder)
   total_runtime = get_spcoord_runtime(social_welfare, base_folder)
+  os.makedirs(os.path.join(base_folder, "postprocessing"), exist_ok = True)
   social_welfare[
     ["exp", "Nn", "time", "measured_total_time", "wallclock_time"]
   ].groupby(["exp", "time"]).mean().reset_index().to_csv(
     os.path.join(base_folder, "postprocessing", "wallclock.csv"), index = False
   )
+  print(best_solution_df)
   # total_runtime.to_csv(os.path.join(base_folder, "spcoord_runtime.csv"))
   # for exp, data in social_welfare.groupby("exp"):
   #   last_it = 0

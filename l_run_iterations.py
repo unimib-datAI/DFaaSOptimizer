@@ -793,6 +793,19 @@ def run(
         best_it_so_far = it
         final_pi = deepcopy(pi)
         final_detailed_pi = deepcopy(detailed_pi)
+        # compute the centralized objective value with the best solution
+        cobj = compute_centralized_objective(
+          sp_data, 
+          best_solution_so_far["sp"]["x"], 
+          best_solution_so_far["sp"]["y"], 
+          best_solution_so_far["sp"]["z"]
+        )
+        if verbose > 0:
+          print(
+            f"        best solution updated; obj = {cobj}",
+            file = log_stream,
+            flush = True
+          )
       # check that the deviation is >= 0 (otherwise, no iterations needed)
       if not (dev < 0).all():
         if social_welfare < lower_bound and (
@@ -837,7 +850,10 @@ def run(
         if verbose > 1:
           print(
             f"        check_stopping_criteria: DONE "
-            f"(runtime = {(e - s).total_seconds()})", 
+            f"(runtime = {(e - s).total_seconds()}; "
+            f"total runtime = {total_runtime}; "
+            f"wallclock: {(datetime.now() - ss).total_seconds()}) "
+            f"--> stop? {stop_searching}", 
             file = log_stream, 
             flush = True
           )
