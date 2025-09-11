@@ -104,11 +104,20 @@ def parse_log_file(
   # loop over lines
   row_idx = 0
   best_solution_df = {
-    "exp": [],
-    "time": [],
-    "best_solution_it": [],
-    "obj": [],
-    "Nn": []
+    "social_welfare": {
+      "exp": [],
+      "time": [],
+      "best_solution_it": [],
+      "obj": [],
+      "Nn": []
+    },
+    "centralized": {
+      "exp": [],
+      "time": [],
+      "best_solution_it": [],
+      "obj": [],
+      "Nn": []
+    }
   }
   while row_idx < len(lines):
     # look for next time step
@@ -199,16 +208,27 @@ def parse_log_file(
               df["wallclock_time"].append(float(wct))
               n_iterations -= 1
             elif "best solution updated" in lines[it_row_idx]:
-              best_solution_df["exp"].append(exp)
-              best_solution_df["time"].append(t)
-              best_solution_df["best_solution_it"].append(it)
-              best_solution_df["obj"].append(
+              best_solution_df["social_welfare"]["exp"].append(exp)
+              best_solution_df["social_welfare"]["time"].append(t)
+              best_solution_df["social_welfare"]["best_solution_it"].append(it)
+              best_solution_df["social_welfare"]["obj"].append(
                 float(parse.parse(
                   "        best solution updated; obj = {}\n",
                   lines[it_row_idx]
                 )[0])
               )
-              best_solution_df["Nn"].append(Nn)
+              best_solution_df["social_welfare"]["Nn"].append(Nn)
+            elif "best centralized solution updated" in lines[it_row_idx]:
+              best_solution_df["centralized"]["exp"].append(exp)
+              best_solution_df["centralized"]["time"].append(t)
+              best_solution_df["centralized"]["best_solution_it"].append(it)
+              best_solution_df["centralized"]["obj"].append(
+                float(parse.parse(
+                  "        best centralized solution updated; obj = {}\n",
+                  lines[it_row_idx]
+                )[0])
+              )
+              best_solution_df["centralized"]["Nn"].append(Nn)
             it_row_idx += 1
           # save iteration info
           df["iteration"].append(it)
@@ -245,8 +265,18 @@ def parse_log_file(
             lines[t_row_idx].startswith("All solutions saved")
         ):
         row_idx += 1
-  best_solution_df = pd.concat(
-    [best_sol_df, pd.DataFrame(best_solution_df)],
+  best_solution_df["social_welfare"] = pd.concat(
+    [
+      best_sol_df["social_welfare"], 
+      pd.DataFrame(best_solution_df["social_welfare"])
+    ],
+    ignore_index = True
+  )
+  best_solution_df["centralized"] = pd.concat(
+    [
+      best_sol_df["centralized"], 
+      pd.DataFrame(best_solution_df["centralized"])
+    ],
     ignore_index = True
   )
   return logs_df, best_solution_df
@@ -254,7 +284,9 @@ def parse_log_file(
 
 def parse_logs(base_folder: str) -> pd.DataFrame:
   social_welfare = pd.DataFrame()
-  best_solution_df = pd.DataFrame()
+  best_solution_df = {
+    "social_welfare": pd.DataFrame(), "centralized": pd.DataFrame()
+  }
   for foldername in os.listdir(base_folder):
     complete_path = os.path.join(base_folder, foldername)
     if os.path.isdir(complete_path) and not foldername.startswith("."):
@@ -272,7 +304,7 @@ def parse_logs(base_folder: str) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
-  base_folder = "solutions/prova4"
+  base_folder = "solutions/manual"
   social_welfare, best_solution_df = parse_logs(base_folder)
   total_runtime = get_spcoord_runtime(social_welfare, base_folder)
   os.makedirs(os.path.join(base_folder, "postprocessing"), exist_ok = True)
@@ -281,7 +313,6 @@ if __name__ == "__main__":
   ].groupby(["exp", "time"]).mean().reset_index().to_csv(
     os.path.join(base_folder, "postprocessing", "wallclock.csv"), index = False
   )
-  print(best_solution_df)
   # total_runtime.to_csv(os.path.join(base_folder, "spcoord_runtime.csv"))
   # for exp, data in social_welfare.groupby("exp"):
   #   last_it = 0

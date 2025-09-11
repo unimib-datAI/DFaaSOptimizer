@@ -12,21 +12,49 @@ def main(experiment_folder: str, Nn: int):
     experiment_folder, 
     exp,
     pd.DataFrame(),
-    pd.DataFrame(),
+    {"social_welfare": pd.DataFrame(), "centralized": pd.DataFrame()},
     Nn
   )
-  best_sol_df.to_csv(os.path.join(experiment_folder, "best_sol_df.csv"), index = False)
+  best_sol_df["social_welfare"].to_csv(
+    os.path.join(experiment_folder, "best_sw_sol_df.csv"), index = False
+  )
+  best_sol_df["centralized"].to_csv(
+    os.path.join(experiment_folder, "best_c_sol_df.csv"), index = False
+  )
   logs_df.to_csv(os.path.join(experiment_folder, "logs_df.csv"), index = False)
-  _, ax = plt.subplots(figsize=(20,6))
+  _, axs = plt.subplots(nrows = 2, ncols = 1, figsize=(20,12), sharex = True)
   last_it = 0
-  for t, data in best_sol_df.groupby("time"):
+  for t, data in best_sol_df["social_welfare"].groupby("time"):
     data["x"] = data["best_solution_it"] + last_it
     data.plot(
       x = "x",
       y = "obj",
-      ax = ax
+      ax = axs[0],
+      grid = True,
+      marker = ".",
+      markersize = 10,
+      linewidth = 2
     )
-    ax.axvline(
+    axs[0].axvline(
+      x = last_it,
+      linestyle = "dotted",
+      linewidth = 1,
+      color = "k"
+    )
+    last_it += data["best_solution_it"].max()
+  last_it = 0
+  for t, data in best_sol_df["centralized"].groupby("time"):
+    data["x"] = data["best_solution_it"] + last_it
+    data.plot(
+      x = "x",
+      y = "obj",
+      ax = axs[1],
+      grid = True,
+      marker = ".",
+      markersize = 10,
+      linewidth = 2
+    )
+    axs[1].axvline(
       x = last_it,
       linestyle = "dotted",
       linewidth = 1,
@@ -43,7 +71,7 @@ def main(experiment_folder: str, Nn: int):
 
 
 if __name__ == "__main__":
-  experiment_folder = "solutions/prova4/2025-09-09_13-27-10.236987"
+  experiment_folder = "solutions/manual/2025-09-11_10-28-33.047502"
   Nn = 100
-
   main(experiment_folder, Nn)
+

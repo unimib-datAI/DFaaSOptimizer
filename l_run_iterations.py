@@ -266,7 +266,7 @@ def compute_social_welfare(
   )
 
 
-def extract_best_solution(
+def combine_solutions(
     Nn: int, Nf: int, sp_data: dict, loadt: dict, 
     sp_x: np.array, spr_r: np.array, sp_rho: np.array, 
     rmp_x: np.array, rmp_y: np.array, rmp_z: np.array, 
@@ -310,6 +310,37 @@ def extract_best_solution(
       "U":    spr_U
     }
   }
+
+
+def decode_solutions(
+    sp_data: dict, solution: dict, sp_complete_solution, rmp_complete_solution
+  ):
+  # -- SP
+  sp_x = solution["sp"]["x"]
+  sp_y = solution["sp"]["y"]
+  sp_z = solution["sp"]["z"]
+  sp_xi = solution["sp"]["xi"]
+  sp_rho = solution["sp"]["rho"]
+  sp_U = solution["sp"]["U"]
+  sp_r = solution["sp"]["r"]
+  sp_complete_solution = decode_solution(
+    sp_x, sp_y, sp_z, sp_r, sp_xi, sp_rho, sp_U, sp_complete_solution
+  )
+  # -- RMP
+  rmp_x = solution["rmp"]["x"]
+  rmp_y = solution["rmp"]["y"]
+  rmp_z = solution["rmp"]["z"]
+  rmp_xi = solution["rmp"]["xi"]
+  rmp_rho = solution["rmp"]["rho"]
+  rmp_U = solution["rmp"]["U"]
+  rmp_r = solution["rmp"]["r"]
+  rmp_complete_solution = decode_solution(
+    rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho, rmp_U, 
+    rmp_complete_solution
+  )
+  # centralized objective
+  obj = compute_centralized_objective(sp_data, sp_x, sp_y, sp_z)
+  return sp_complete_solution, rmp_complete_solution, obj
 
 
 def init_parallel_worker(
@@ -583,8 +614,9 @@ def run(
   final_pi = None
   final_detailed_pi = np.zeros((Nn,Nf))
   sp_complete_solution = init_complete_solution()
-  spr_complete_solution = init_complete_solution()
   rmp_complete_solution = init_complete_solution()
+  spc_complete_solution = init_complete_solution()
+  rmpc_complete_solution = init_complete_solution()
   obj_dict = {
     "LSP": {it: [] for it in range(max_iterations)}, 
     "LSPr": {it: [] for it in range(max_iterations)}, 
@@ -627,8 +659,11 @@ def run(
     odev_queue = deque(maxlen = patience)
     current_sw_queue = deque(maxlen = sw_patience)
     best_solution_so_far = None
+    best_centralized_solution = None
     best_cost_so_far = np.inf
+    best_centralized_cost = 0.0
     best_it_so_far = -1
+    best_centralized_it = -1
     total_runtime = 0
     ss = datetime.now()
     while not stop_searching:
@@ -782,27 +817,35 @@ def run(
           x_cost_n += (sp_x[n,f] * sp_data[None]["alpha"][(n+1,f+1)])
         x_cost += x_cost_n
       odev_queue.append(odev)
+      # merge solutions and compute the centralized objective value
+      csol = combine_solutions(
+        Nn, Nf, sp_data, loadt, 
+        sp_x, spr_sol[2], sp_rho,
+        rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
+      )
+      cobj = compute_centralized_objective(
+        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+      )
       # update best solution so far
       if spr_obj < best_cost_so_far:
         best_cost_so_far = spr_obj
-        best_solution_so_far = extract_best_solution(
-          Nn, Nf, sp_data, loadt, 
-          sp_x, spr_sol[2], sp_rho,
-          rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
-        )
+        best_solution_so_far = csol
         best_it_so_far = it
         final_pi = deepcopy(pi)
         final_detailed_pi = deepcopy(detailed_pi)
-        # compute the centralized objective value with the best solution
-        cobj = compute_centralized_objective(
-          sp_data, 
-          best_solution_so_far["sp"]["x"], 
-          best_solution_so_far["sp"]["y"], 
-          best_solution_so_far["sp"]["z"]
-        )
         if verbose > 0:
           print(
             f"        best solution updated; obj = {cobj}",
+            file = log_stream,
+            flush = True
+          )
+      if cobj > best_centralized_cost:
+        best_centralized_cost = cobj
+        best_centralized_solution = csol
+        best_centralized_it = it
+        if verbose > 0:
+          print(
+            f"        best centralized solution updated; obj = {cobj}",
             file = log_stream,
             flush = True
           )
@@ -865,33 +908,23 @@ def run(
         it += 1
       else:
         # save SP/RMP solutions
-        # -- SP
-        sp_x = best_solution_so_far["sp"]["x"]
-        sp_y = best_solution_so_far["sp"]["y"]
-        sp_z = best_solution_so_far["sp"]["z"]
-        sp_xi = best_solution_so_far["sp"]["xi"]
-        sp_rho = best_solution_so_far["sp"]["rho"]
-        sp_U = best_solution_so_far["sp"]["U"]
-        sp_complete_solution = decode_solution(
-          sp_x, sp_y, sp_z, sp_r, sp_xi, sp_rho, sp_U, sp_complete_solution
-        )
-        # -- RMP
-        rmp_x = best_solution_so_far["rmp"]["x"]
-        rmp_y = best_solution_so_far["rmp"]["y"]
-        rmp_z = best_solution_so_far["rmp"]["z"]
-        rmp_xi = best_solution_so_far["rmp"]["xi"]
-        rmp_rho = best_solution_so_far["rmp"]["rho"]
-        rmp_U = best_solution_so_far["rmp"]["U"]
-        rmp_complete_solution = decode_solution(
-          rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho, rmp_U, 
+        sp_complete_solution, rmp_complete_solution, objf = decode_solutions(
+          sp_data, 
+          best_solution_so_far, 
+          sp_complete_solution, 
           rmp_complete_solution
         )
-        obj_dict["LSPr_final"].append(
-          compute_centralized_objective(sp_data, sp_x, sp_y, sp_z)
+        spc_complete_solution, rmpc_complete_solution, _ = decode_solutions(
+          sp_data, 
+          best_centralized_solution, 
+          spc_complete_solution, 
+          rmpc_complete_solution
         )
+        obj_dict["LSPr_final"].append(objf)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} "
           f"(it: {it}; obj. deviation: {odev}; best it: {best_it_so_far}; "
+          f"best centralized it: {best_centralized_it}; "
           f"total runtime: {total_runtime})"
         )
     ee = datetime.now()
@@ -908,6 +941,12 @@ def run(
   )
   rmp_solution, rmp_offloaded, rmp_detailed_fwd_solution = join_complete_solution(
     rmp_complete_solution
+  )
+  spc_solution, spc_offloaded, spc_detailed_fwd_solution = join_complete_solution(
+    spc_complete_solution
+  )
+  rmpc_solution, rmpc_offloaded, rmpc_detailed_fwd_solution = join_complete_solution(
+    rmpc_complete_solution
   )
   if not disable_plotting and Nf <= 10 and Nn <= 10:
     plot_history(
@@ -951,30 +990,22 @@ def run(
     "LRMP",
     solution_folder
   )
-  # # complete solution
-  # spr_solution, spr_offloaded, spr_detailed_fwd_solution = join_complete_solution(
-  #   spr_complete_solution
-  # )
-  # plot_history(
-  #   input_requests_traces, 
-  #   min_run_time,
-  #   max_run_time,
-  #   run_time_step,
-  #   spr_solution, 
-  #   spr_complete_solution["utilization"], 
-  #   spr_complete_solution["replicas"], 
-  #   spr_offloaded,
-  #   obj_dict["LSPr_final"],
-  #   os.path.join(solution_folder, "spr.png")
-  # )
-  # save_solution(
-  #   spr_solution,
-  #   spr_offloaded,
-  #   spr_complete_solution,
-  #   spr_detailed_fwd_solution,
-  #   "LSPr",
-  #   solution_folder
-  # )
+  save_solution(
+    spc_solution,
+    spc_offloaded,
+    spc_complete_solution,
+    spc_detailed_fwd_solution,
+    "LSPc",
+    solution_folder
+  )
+  save_solution(
+    rmpc_solution,
+    rmpc_offloaded,
+    rmpc_complete_solution,
+    rmpc_detailed_fwd_solution,
+    "LRMPc",
+    solution_folder
+  )
   # save objective function values
   pd.DataFrame(obj_dict["LSPr_final"], columns = ["SP/coord"]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index = False
