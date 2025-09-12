@@ -49,7 +49,7 @@ def parse_arguments() -> argparse.Namespace:
      "-c", "--config",
      help = "Configuration file",
      type = str,
-     default = "config.json"
+     default = "manual_config.json"
    )
    parser.add_argument(
      "-j", "--parallelism",
@@ -454,8 +454,9 @@ def solve_master_problem(
   ) = extract_solution(
     rmp_data, rmp_solution
   )
+  rmp_U = compute_utilization(rmp_data, rmp_solution)
   return (
-    rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj, tc, runtime
+    rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, rmp_U, obj, tc, runtime
   )
 
 
@@ -528,17 +529,13 @@ def update_neighborhood(
     original_neighborhood: dict, sp_rho: np.array, sp_omega: np.array
   ) -> dict:
   Nn, _ = sp_omega.shape
-  neighborhood = {}
-  for n1 in range(Nn - 1):
-    neighborhood[(n1+1,n1+1)] = 0
-    for n2 in range(n1 + 1, Nn):
+  neighborhood = deepcopy(original_neighborhood)
+  for n1 in range(Nn):
+    for n2 in range(Nn):
       # if a node residual capacity is zero, all incoming edges should 
       # be removed
-      if sp_rho[n1] <= 0:
+      if n1 != n2 and sp_rho[n1] <= 0:
         neighborhood[(n2+1, n1+1)] = 0
-      # if a node requires offloading, its outgoing edges should be preserved
-      if (sp_omega[n1,:] > 0).any() and original_neighborhood[(n1+1,n2+1)]:
-        neighborhood[(n1+1,n2+1)] = 1
   return neighborhood
 
 
@@ -748,7 +745,17 @@ def run(
         )
       # solve master problem
       (
-        rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj, tc, runtime
+        rmp_x, 
+        rmp_y, 
+        rmp_z, 
+        rmp_r, 
+        rmp_xi, 
+        rmp_omega, 
+        rmp_rho, 
+        rmp_U, 
+        obj, 
+        tc, 
+        runtime
       ) = solve_master_problem(
         rmp_data, 
         rmp, 

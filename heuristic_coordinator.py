@@ -141,7 +141,7 @@ class GreedyCoordinator(HeuristicCoordinator):
       idx = 0
       while idx < len(data) and omega > 0:
         n2 = int(data.iloc[idx]["n2"])
-        if residual_capacity[n2] > 0 and not i_sends_f[n2,f]:
+        if not i_sends_f[n2,f]:
           # compute the maximum acceptable requests rate
           max_a = int(residual_capacity[n2] / ram[f+1])
           max_acceptable = max(
