@@ -109,6 +109,15 @@ def check_stopping_criteria(
         why_stopping = "SW starts decreasing"
         break
       last_sw = sw
+  if not stop and len(sw_queue) >= sw_queue.maxlen:
+    stop = True
+    why_stopping = "SW deviation < tol"
+    last_sw = None
+    for sw in sw_queue:
+      if last_sw is not None and abs(sw - last_sw) >= tolerance:
+        stop = False
+        break
+      last_sw = sw
   if not stop:
     if len(pi_queue) >= pi_queue.maxlen and len(dev_queue) >= dev_queue.maxlen:
       stop = True
