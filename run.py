@@ -117,12 +117,18 @@ def load_termination_condition(
       deviation = []
       best_it = []
       for s in tc["0"]:
-        c, i, d, b, trt = [None] * 5
+        c, i, d, b, bc, trt = [None] * 6
         if "total runtime" in s:
-          c, i, d, b, trt = parse(
-            "{} (it: {}; obj. deviation: {}; best it: {}; total runtime: {})", 
-            s
-          )
+          if "centralized" in s:
+            c, i, d, b, bc, trt = parse(
+              "{} (it: {}; obj. deviation: {}; best it: {}; best centralized it: {}; total runtime: {})", 
+              s
+            )
+          else:
+            c, i, d, b, trt = parse(
+              "{} (it: {}; obj. deviation: {}; best it: {}; total runtime: {})", 
+              s
+            )
         elif "best it" in s:
           c, i, d, b = parse(
             "{} (it: {}; obj. deviation: {}; best it: {})", 
@@ -341,10 +347,11 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       ):
       c_runtime = pd.read_csv(os.path.join(c_folder, "runtime.csv"))
     if i_folder is not None:
-      logs_df = parse_log_file(
+      logs_df, _ = parse_log_file(
         i_folder, 
         exp_description, 
         pd.DataFrame(), 
+        {}, 
         int(exp_description_tuple[0])
       )
       i_runtime = get_spcoord_runtime(logs_df, exp_plot_folder)
