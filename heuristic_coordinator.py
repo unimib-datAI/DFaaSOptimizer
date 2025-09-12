@@ -155,11 +155,14 @@ class GreedyCoordinator(HeuristicCoordinator):
           # determine actual offloading and additional number of replicas
           if omega <= max_acceptable:
             y[n1,n2,f] += omega
-            used_a = int(np.ceil((
-              (
-                y[:,n2,f].sum() + instance[None]["x_bar"][(n2+1,f+1)]
-              ) * demand[(n2+1,f+1)] / instance[None]["max_utilization"][f+1]
-            ) - instance[None]["r_bar"][(n2+1,f+1)])) - r[n2,f]
+            used_a = min(
+              max_a,
+              int(np.ceil((
+                (
+                  y[:,n2,f].sum() + instance[None]["x_bar"][(n2+1,f+1)]
+                ) * demand[(n2+1,f+1)] / instance[None]["max_utilization"][f+1]
+              ) - instance[None]["r_bar"][(n2+1,f+1)])) - r[n2,f]
+            )
             r[n2,f] += used_a
             residual_capacity[n2] -= (used_a * ram[f+1])
             omega = 0
