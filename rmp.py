@@ -160,7 +160,9 @@ class LRMP(RMPAbstractModel):
   def no_ping_pong2(model, n, f):
     return sum(
       model.y[m,n,f] for m in model.N
-    ) <= model.incoming_load[n,f] * 100 * model.i_receives_f[n,f]
+    ) <= sum(
+      model.incoming_load[m,f] for m in model.F
+    ) * model.i_receives_f[n,f]
   
   @staticmethod
   def no_ping_pong3(model, n, f):
