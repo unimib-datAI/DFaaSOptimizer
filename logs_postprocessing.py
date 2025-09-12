@@ -267,14 +267,14 @@ def parse_log_file(
         row_idx += 1
   best_solution_df["social_welfare"] = pd.concat(
     [
-      best_sol_df["social_welfare"], 
+      best_sol_df.get("social_welfare", pd.DataFrame()), 
       pd.DataFrame(best_solution_df["social_welfare"])
     ],
     ignore_index = True
   )
   best_solution_df["centralized"] = pd.concat(
     [
-      best_sol_df["centralized"], 
+      best_sol_df.get("centralized", pd.DataFrame()), 
       pd.DataFrame(best_solution_df["centralized"])
     ],
     ignore_index = True
