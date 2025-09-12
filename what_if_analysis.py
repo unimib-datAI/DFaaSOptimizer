@@ -149,12 +149,55 @@ def main(base_folder: str):
     bbox_inches = "tight"
   )
   plt.close()
-  # save
-  last_by_sw.reset_index().to_csv(
-    os.path.join(output_folder, "best_sol_obj_by_sw.csv"), index = False
+  # compute deviation
+  last = last_by_sw.join(last_by_cobj,lsuffix="_by_sw",rsuffix="_by_cobj")
+  last["iteration_dev"] = (
+    last_by_cobj["best_solution_it"] - last_by_sw["best_solution_it"]
   )
-  last_by_cobj.reset_index().to_csv(
-    os.path.join(output_folder, "best_sol_obj_by_cobj.csv"), index = False
+  last["obj_dev"] = (
+    last_by_cobj["obj"] - last_by_sw["obj"]
+  ) / last_by_cobj["obj"] * 100
+  # plot
+  _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (10,6))
+  b0 = last.plot.box(
+    column = "obj_dev",
+    grid = True,
+    showmeans = True,
+    patch_artist = True,
+    meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+    return_type = "dict",
+    fontsize = 14,
+    ax = axs[0]
+  )
+  b1 = last.plot.box(
+    column = "iteration_dev",
+    grid = True,
+    showmeans = True,
+    patch_artist = True,
+    meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+    return_type = "dict",
+    fontsize = 14,
+    ax = axs[1]
+  )
+  # -- colors
+  for bplot in [b0, b1]:
+    for patch in bplot["boxes"]:
+      patch.set_facecolor(mcolors.CSS4_COLORS["lightskyblue"])
+    for median in bplot['medians']:
+      median.set_color(mcolors.TABLEAU_COLORS["tab:orange"])
+    for mean in bplot['means']:
+      mean.set_markerfacecolor(mcolors.TABLEAU_COLORS["tab:red"])
+      mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
+  plt.savefig(
+    os.path.join(output_folder, "best_solution_obj_dev.png"),
+    dpi = 300,
+    format = "png",
+    bbox_inches = "tight"
+  )
+  plt.close()
+  # save
+  last.reset_index().to_csv(
+    os.path.join(output_folder, "best_solution_obj.csv"), index = False
   )
 
 
