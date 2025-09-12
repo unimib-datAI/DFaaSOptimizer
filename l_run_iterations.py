@@ -524,6 +524,24 @@ def solve_subproblem(
   return sp_data, sp_x, sp_omega, sp_r, sp_rho, sp_U, obj, tc, runtime
 
 
+def update_neighborhood(
+    original_neighborhood: dict, sp_rho: np.array, sp_omega: np.array
+  ) -> dict:
+  Nn, _ = sp_omega.shape
+  neighborhood = {}
+  for n1 in range(Nn - 1):
+    neighborhood[(n1+1,n1+1)] = 0
+    for n2 in range(n1 + 1, Nn):
+      # if a node residual capacity is zero, all incoming edges should 
+      # be removed
+      if sp_rho[n1] <= 0:
+        neighborhood[(n2+1, n1+1)] = 0
+      # if a node requires offloading, its outgoing edges should be preserved
+      if (sp_omega[n1,:] > 0).any() and original_neighborhood[(n1+1,n2+1)]:
+        neighborhood[(n1+1,n2+1)] = 1
+  return neighborhood
+
+
 def update_prices(
     dev: np.array, 
     detailed_dev: np.array, 
@@ -723,6 +741,11 @@ def run(
           flush = True
         )
       total_runtime += sp_runtime["tot"]
+      # update neighborhood given the nodes availability
+      if solver_options.get("update_neighborhood", False):
+        rmp_data[None]["neighborhood"] = update_neighborhood(
+          data[None]["neighborhood"], sp_rho, sp_omega
+        )
       # solve master problem
       (
         rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj, tc, runtime
