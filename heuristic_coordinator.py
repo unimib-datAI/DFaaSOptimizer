@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
+from typing import Tuple
 import pandas as pd
 import numpy as np
 
@@ -93,7 +94,7 @@ class GreedyCoordinator(HeuristicCoordinator):
   
   def _sort_by_offloading_profit(
       self, instance: dict, rule: str = "beta"
-    ) -> pd.DataFrame:
+    ) -> Tuple[pd.DataFrame, list]:
     Nn = instance[None]["Nn"][None]
     neighbors = instance[None]["neighborhood"]
     profit = {
@@ -104,10 +105,13 @@ class GreedyCoordinator(HeuristicCoordinator):
       "omega": [],
       "product": []
     }
+    isolated_nodes = []
     for (n1,f), omega in instance[None]["omega_bar"].items():
       if omega > 0:
+        one_neighbor_exists = False
         for n2 in range(1,Nn+1):
           if n2 != n1 and neighbors[(n1,n2)]:
+            one_neighbor_exists = True
             beta = instance[None]["beta"][(n1,n2,f)]
             profit["n1"].append(n1 - 1)
             profit["n2"].append(n2 - 1)
@@ -115,12 +119,14 @@ class GreedyCoordinator(HeuristicCoordinator):
             profit["omega"].append(omega)
             profit["beta"].append(beta)
             profit["product"].append(omega * beta)
+        if not one_neighbor_exists:
+          isolated_nodes.append((n1,f,omega))
     profit = pd.DataFrame(profit).sort_values(by = rule, ascending = False)
-    return profit
+    return profit, isolated_nodes
   
   def solve(self, instance: dict, solver_options: dict) -> dict:
     # sort required offloading by profit
-    profit = self._sort_by_offloading_profit(
+    profit, isolated_nodes = self._sort_by_offloading_profit(
       instance, solver_options.get("sorting_rule", "beta")
     )
     # initialize detailed offloading / rejection variables
@@ -179,6 +185,9 @@ class GreedyCoordinator(HeuristicCoordinator):
       # check if all requests have been offloaded
       if idx == len(data) and omega > 0:
         z[n1,f] += omega
+    # -- for isolated nodes, no required offloading can be accepted
+    for (n,f,omega) in isolated_nodes:
+      z[n,f] += omega
     e = datetime.now()
     # check feasibility
     feasible, message = self._check_feasibility(instance, y, z, r)
