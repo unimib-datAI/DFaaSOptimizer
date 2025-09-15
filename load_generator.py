@@ -118,23 +118,23 @@ class LoadGenerator:
     if trace_type in ["clipped", "sinusoidal"]:
       # Ensure the number of requests stays in [min, max]
       for agent, requests in input_requests.items():
-        min = limits[agent]["min"]
-        max = limits[agent]["max"]
+        minr = limits[agent]["min"]
+        maxr = limits[agent]["max"]
         if trace_type == "clipped":
           # Clip the excess values respecting the minimum and maximum values
           # for the input requests observation.
-          np.clip(requests, min, max, out = requests)
+          np.clip(requests, minr, maxr, out = requests)
         elif trace_type == "sinusoidal":
           # Rescale
           in_min = requests.min()
           in_max = requests.max()
           if only_integer_values:
             requests = np.array([
-              int(rescale(r, in_min, in_max, min, max)) for r in requests
+              int(rescale(r, in_min, in_max, minr, maxr)) for r in requests
             ])
           else:
             requests = np.array([
-              round(rescale(r, in_min, in_max, min, max), 3) for r in requests
+              round(rescale(r, in_min, in_max, minr, maxr), 3) for r in requests
             ])
         input_requests[agent] = requests
     elif trace_type == "fixed_sum":
@@ -144,6 +144,13 @@ class LoadGenerator:
       input_requests = self._impose_system_workload(
         total_workload, input_requests
       )
+    else:
+      raise KeyError(f"Trace type `{trace_type}` is not supported")
+    # ensure that everything, anyway, stays above zero
+    for agent in input_requests:
+      input_requests[agent] = np.array([
+        max(0, r) for r in input_requests[agent]
+      ])
     return input_requests
 
   @staticmethod
