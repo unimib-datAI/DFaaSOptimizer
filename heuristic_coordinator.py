@@ -120,7 +120,7 @@ class GreedyCoordinator(HeuristicCoordinator):
             profit["beta"].append(beta)
             profit["product"].append(omega * beta)
         if not one_neighbor_exists:
-          isolated_nodes.append((n1,f,omega))
+          isolated_nodes.append((n1 - 1, f - 1, omega))
     profit = pd.DataFrame(profit).sort_values(by = rule, ascending = False)
     return profit, isolated_nodes
   
