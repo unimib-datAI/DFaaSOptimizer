@@ -232,11 +232,11 @@ def results_postprocessing(
     # local_count, fwd_count, rej_count, replicas, ping_pong
     if c_folder is not None and i_folder is not None:
       # load results
-      c_res = load_models_results(abs_c_folder, ["LoadManagementModel"])
+      c_res = load_models_results(abs_c_folder, ["ScaledOnSumLMM"])
       i_res = load_models_results(abs_i_folder, ["LSP"])
       if len(c_res[0]["by_function"]) > 0 and len(i_res[0]["by_function"]) > 0:
         # check ping-pong problems
-        if len(c_res[-1]["LoadManagementModel"]) > 0:
+        if len(c_res[-1]["ScaledOnSumLMM"]) > 0:
           ping_pong_list.append([exp_description, "centralized", c_folder])
         if len(i_res[-1]["FaaS-MACrO"]) > 0:
           ping_pong_list.append([exp_description, "faas-macro", i_folder])
@@ -292,10 +292,10 @@ def results_postprocessing(
         plt.close()
         # compute deviation
         obj["dev"] = (
-          obj["FaaS-MACrO"] - obj["LoadManagementModel"]
-        ) / obj["LoadManagementModel"] * 100
+          obj["FaaS-MACrO"] - obj["ScaledOnSumLMM"]
+        ) * 100
         all_rej["dev"] = (
-          all_rej["FaaS-MACrO"] - all_rej["LoadManagementModel"]
+          all_rej["FaaS-MACrO"] - all_rej["ScaledOnSumLMM"]
         )
         # plot
         _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
@@ -314,7 +314,7 @@ def results_postprocessing(
         axs[0].set_xlabel("Control time period $t$")
         axs[1].set_xlabel("Control time period $t$")
         axs[0].set_ylabel(
-          "Objective function deviation ((FaaS-MACrO - LMM) / LMM )[%]"
+          "Objective function deviation (FaaS-MACrO - LMM )[%]"
         )
         axs[1].set_ylabel(
           "Percentage rejections deviation (FaaS-MACrO - LMM) [%]"
@@ -398,7 +398,7 @@ def results_postprocessing(
     # plot runtime comparison
     if len(c_runtime) > 0 and len(i_runtime) > 0:
       runtime_comparison = pd.DataFrame({
-        "LoadManagementModel": c_runtime["LoadManagementModel"],
+        "ScaledOnSumLMM": c_runtime["ScaledOnSumLMM"],
         "FaaS-MACrO": i_runtime["tot"],
         "iteration": i_tc["iteration"],
         "best_iteration": i_tc["best_iteration"],
@@ -406,7 +406,7 @@ def results_postprocessing(
       _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (12,8))
       runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
       runtime_comparison["dev"] = (
-        runtime_comparison["FaaS-MACrO"] / runtime_comparison["LoadManagementModel"]
+        runtime_comparison["FaaS-MACrO"] / runtime_comparison["ScaledOnSumLMM"]
       )
       runtime_comparison["dev"].plot(
         grid = True, marker = ".", ax = axs[1]
@@ -520,7 +520,7 @@ def results_postprocessing(
         # centralized
         obj.plot(
           x = "time", 
-          y = "LoadManagementModel", 
+          y = "ScaledOnSumLMM", 
           ax = axs[0,0], 
           color = mcolors.TABLEAU_COLORS["tab:blue"], 
           linewidth = 1,
@@ -529,7 +529,7 @@ def results_postprocessing(
         )
         rej.plot(
           x = "time", 
-          y = "LoadManagementModel", 
+          y = "ScaledOnSumLMM", 
           ax = axs[1,0], 
           color = mcolors.TABLEAU_COLORS["tab:blue"], 
           linewidth = 1,
@@ -538,7 +538,7 @@ def results_postprocessing(
         )
         rtv.plot(
           x = "time", 
-          y = "LoadManagementModel", 
+          y = "ScaledOnSumLMM", 
           ax = axs2[0], 
           color = mcolors.TABLEAU_COLORS["tab:blue"], 
           linewidth = 1,
@@ -614,7 +614,7 @@ def results_postprocessing(
         linewidth = 2,
         marker = ".", 
         grid = True,
-        label = "Average deviation ((FaaS-MACrO - LMM) / LMM) [%]"
+        label = "Average deviation (FaaS-MACrO - LMM) [%]"
       )
       avg_rej.plot(
         y = "dev",
@@ -657,7 +657,7 @@ def results_postprocessing(
       )
       # -- centralized
       avg.plot(
-        y = "LoadManagementModel",
+        y = "ScaledOnSumLMM",
         ax = axs[0,0],
         color = mcolors.TABLEAU_COLORS["tab:blue"],
         linewidth = 2,
@@ -665,7 +665,7 @@ def results_postprocessing(
         label = "Average LMM"
       )
       avg_rej.plot(
-        y = "LoadManagementModel",
+        y = "ScaledOnSumLMM",
         ax = axs[1,0],
         color = mcolors.TABLEAU_COLORS["tab:blue"],
         linewidth = 2,
@@ -673,7 +673,7 @@ def results_postprocessing(
         label = "Average LMM"
       )
       avg_rtv.plot(
-        y = "LoadManagementModel",
+        y = "ScaledOnSumLMM",
         ax = axs2[0],
         color = mcolors.TABLEAU_COLORS["tab:blue"],
         linewidth = 2,

@@ -67,6 +67,7 @@ class HeuristicCoordinator(ABC):
     Nn, _, Nf = y.shape
     plus = 0.0
     minus = 0.0
+    tot_load = 0.0
     for n1 in range(Nn):
       for f in range(Nf):
         v = 0.0
@@ -74,13 +75,14 @@ class HeuristicCoordinator(ABC):
         for n2 in range(Nn):
           v += (beta[(n1+1,n2+1,f+1)] * y[n1,n2,f])
           ni += y[n1,n2,f]
-        plus += (v / incoming_load[(n1+1,f+1)])
+        plus += v
         minus += (
           gamma[(n1+1,f+1)] * max(
             0, omega[(n1+1,f+1)] - ni
-          ) / incoming_load[(n1+1,f+1)]
+          )
         )
-    return plus - minus
+        tot_load += incoming_load[(n1+1,f+1)]
+    return (plus - minus) / tot_load
 
   @abstractmethod
   def solve(self, instance: dict) -> dict:

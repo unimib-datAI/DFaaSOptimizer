@@ -14,8 +14,8 @@ from utilities import load_configuration
 from generate_data import update_data
 from postprocessing import load_solution, plot_history
 
-from rmp import RMPAbstractModel, LRMP
-from sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, LSPr_fixedr
+from rmp import RMPAbstractModel, LRMP, ScaledOnSumLRMP
+from sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, ScaledOnSumLSP, ScaledOnSumLSPr
 from heuristic_coordinator import GreedyCoordinator
 
 import multiprocessing as mpp
@@ -179,14 +179,15 @@ def compute_centralized_objective(
     gamma[n-1,f-1] = g
   # value
   tot = 0.0
+  tot_load = 0.0
   for n1 in range(Nn):
     for f in range(Nf):
-      load = sp_data[None]["incoming_load"][(n1+1,f+1)]
-      tot += alpha[n1,f] * sp_x[n1,f] / load
-      tot -= gamma[n1,f] * sp_z[n1,f] / load
+      tot_load += sp_data[None]["incoming_load"][(n1+1,f+1)]
+      tot += alpha[n1,f] * sp_x[n1,f]
+      tot -= gamma[n1,f] * sp_z[n1,f]
       for n2 in range(Nn):
-        tot += beta[n1,n2,f] * sp_y[n1,n2,f] / load
-  return tot#(alpha * sp_x).sum() + (beta * sp_y).sum() - (gamma * sp_z).sum()
+        tot += beta[n1,n2,f] * sp_y[n1,n2,f]
+  return tot / tot_load#(alpha * sp_x).sum() + (beta * sp_y).sum() - (gamma * sp_z).sum()
 
 
 def compute_deviation(
@@ -228,6 +229,24 @@ def compute_lower_bound(
   return (sp_obj - highest_cost)
 
 
+def compute_n_replicas(agent: int, spr_data: dict) -> np.array:
+  Nf = spr_data[None]["Nf"][None]
+  r = np.zeros(Nf)
+  if "y_bar" in spr_data[None]:
+    Nn = spr_data[None]["Nn"][None]
+    for f in range(Nf):
+      # count received requests
+      y = 0.0
+      for n in range(Nn):
+        y += spr_data[None]["y_bar"][(n+1,agent+1,f+1)]
+      # count required replicas
+      max_utilization = spr_data[None]["max_utilization"][f+1]
+      r[f] = int(np.ceil(
+        y * spr_data[None]["demand"][(agent+1,f+1)] / max_utilization
+      ))
+  return r
+
+
 def compute_social_welfare(
     spr: SPAbstractModel,
     data: dict, 
@@ -266,10 +285,26 @@ def compute_social_welfare(
   else:
     for agent in agents:
       spr_data[None]["whoami"] = {None: agent + 1}
-      spr_instance = spr.generate_instance(spr_data)
-      agents_sol[agent] = spr.solve(
-        spr_instance, solver_options, solver_name
-      )
+      # solve
+      if any(
+        w > 0 for (n, _), w in spr_data[None][
+          "incoming_load"
+        ].items() if n == agent + 1
+      ):
+        spr_instance = spr.generate_instance(spr_data)
+        agents_sol[agent] = spr.solve(
+          spr_instance, solver_options, solver_name
+        )
+      else:
+        agents_sol[agent] = {
+          "x": np.zeros(Nf),
+          "omega": np.zeros(Nf),
+          "r": compute_n_replicas(agent, spr_data),
+          "obj": 0,
+          "termination_condition": "done",
+          "runtime": 0,
+          "had_load_zero": True
+        }
   # merge solutions
   spr_sol = merge_agents_solutions(
     spr_data, agents_sol
@@ -392,6 +427,7 @@ def merge_agents_solutions(
   tc_dict = {}
   runtime_dict = {}
   # loop over all agents
+  n_load_zero_agents = 0
   for agent, agent_solution in agents_sol.items():
     temp_data["indices"] = [agent]
     # -- variables
@@ -413,11 +449,17 @@ def merge_agents_solutions(
     obj_dict[agent] = a_obj
     # -- runtime
     runtime_dict[agent] = agent_solution["runtime"]
+    # -- count agents whose input load is zero
+    if agent_solution.get("had_load_zero", False):
+      n_load_zero_agents += 1
   # "total" objective function value, termination condition and runtime 
-  # (NOTE: the total runtime is the average runtime among agents)
+  # (NOTE: the total runtime is the average runtime among agents...without 
+  # counting those whose input load is zero)
   obj_dict["tot"] = sum(list(obj_dict.values()))
   tc_dict["tot"] = "-".join(tc_dict.values())
-  runtime_dict["tot"] = sum(list(runtime_dict.values())) / len(agents_sol)
+  runtime_dict["tot"] = sum(
+    list(runtime_dict.values())
+  ) / (len(agents_sol) - n_load_zero_agents)
   return x, omega, r, rho, obj_dict, tc_dict, runtime_dict
 
 
@@ -483,8 +525,24 @@ def solve_single_agent(agent: int):
   # Make a local copy of sp_data to modify safely
   local_data = _sp_data.copy()
   local_data[None]["whoami"] = {None: agent + 1}
-  sp_instance = _sp.generate_instance(local_data)
-  result = _sp.solve(sp_instance, _solver_options, _solver_name)
+  result = {}
+  if any(
+    w > 0 for (n, _), w in local_data[None][
+      "incoming_load"
+    ].items() if n == agent + 1
+  ):
+    sp_instance = _sp.generate_instance(local_data)
+    result = _sp.solve(sp_instance, _solver_options, _solver_name)
+  else:
+    result = {
+      "x": np.zeros(local_data[None]["Nf"][None]),
+      "omega": np.zeros(local_data[None]["Nf"][None]),
+      "r": compute_n_replicas(agent, local_data),
+      "obj": 0,
+      "termination_condition": "done",
+      "runtime": 0,
+      "had_load_zero": True
+    }
   return agent, result
 
 
@@ -524,11 +582,26 @@ def solve_subproblem(
       sp_data[None]["whoami"] = {None: agent + 1}
       if detailed_pi is not None:
         sp_data[None]["pi"] = {f+1: detailed_pi[agent,f] for f in range(Nf)}
-      sp_instance = sp.generate_instance(sp_data)
       # solve
-      agents_sol[agent] = sp.solve(
-        sp_instance, solver_options, solver_name
-      )
+      if any(
+        w > 0 for (n, _), w in sp_data[None][
+          "incoming_load"
+        ].items() if n == agent + 1
+      ):
+        sp_instance = sp.generate_instance(sp_data)
+        agents_sol[agent] = sp.solve(
+          sp_instance, solver_options, solver_name
+        )
+      else:
+        agents_sol[agent] = {
+          "x": np.zeros(Nf),
+          "omega": np.zeros(Nf),
+          "r": compute_n_replicas(agent, sp_data),
+          "obj": 0,
+          "termination_condition": "done",
+          "runtime": 0,
+          "had_load_zero": True
+        }
   # merge solutions
   sp_x, sp_omega, sp_r, sp_rho, obj, tc, runtime = merge_agents_solutions(
     sp_data, agents_sol, approx_tol=solver_options.get("FeasibilityTol", 1e-6)
@@ -673,9 +746,12 @@ def run(
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
     # loop over SP/RMP
-    sp = LSP() if opt_solution is None else LSP_fixedr()
-    spr = LSPr()# if opt_solution is None else LSPr_fixedr()
-    rmp = LRMP()
+    # sp = LSP() if opt_solution is None else LSP_fixedr()
+    # spr = LSPr()# if opt_solution is None else LSPr_fixedr()
+    # rmp = LRMP()
+    sp = ScaledOnSumLSP()
+    spr = ScaledOnSumLSPr()
+    rmp = ScaledOnSumLRMP()
     sp_data = deepcopy(data)
     rmp_data = deepcopy(data)
     rmp_y = None

@@ -118,6 +118,33 @@ class LSP(SPAbstractModel):
     )
 
 
+class ScaledOnSumLSP(LSP):
+  def __init__(self):
+    super().__init__()
+    self.name = "ScaledOnSumLSP"
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.model.OBJ = pyo.Objective(
+      rule = self.nn_minimize_processing_cost
+    )
+  
+  @staticmethod
+  def nn_minimize_processing_cost(model):
+    return (
+      - (
+        sum(
+          (
+            model.alpha[model.whoami,f] * model.x[f] + 
+            model.delta[model.whoami,f] * model.omega[f]
+          ) for f in model.F
+        )
+      ) + sum(
+        model.pi[f] * model.omega[f] for f in model.F
+      )
+    ) / sum(model.incoming_load[model.whoami,f] for f in model.F)
+
+
 class LSPr(SPAbstractModel):
   def __init__(self):
     super().__init__()
@@ -194,6 +221,29 @@ class LSPr(SPAbstractModel):
         ) / model.incoming_load[model.whoami,f] for f in model.F
       )
     )
+
+
+class ScaledOnSumLSPr(LSPr):
+  def __init__(self):
+    super().__init__()
+    self.name = "ScaledOnSumLSPr"
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.model.OBJ = pyo.Objective(
+      rule = self.nn_minimize_processing_cost
+    )
+  
+  @staticmethod
+  def nn_minimize_processing_cost(model):
+    return - (
+      sum(
+        (
+          model.alpha[model.whoami,f] * model.x[f] + 
+          model.delta[model.whoami,f] * model.omega_bar[model.whoami,f]
+        ) for f in model.F
+      )
+    ) / sum(model.incoming_load[model.whoami,f] for f in model.F)
 
 
 ##############################################################################

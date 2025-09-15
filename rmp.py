@@ -181,6 +181,34 @@ class LRMP(RMPAbstractModel):
     )
 
 
+class ScaledOnSumLRMP(LRMP):
+  def __init__(self):
+    super().__init__()
+    self.name = "ScaledOnSumLRMP"
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.model.OBJ = pyo.Objective(
+      rule = self.nn_maximize_processing, sense = pyo.maximize
+    )
+  
+  @staticmethod
+  def nn_maximize_processing(model):
+    return (
+      sum(
+        sum(
+          model.beta[n,m,f] * model.y[n,m,f] for m in model.N
+        ) for n in model.N for f in model.F
+      ) - sum(
+        model.gamma[n,f] * (
+          model.omega_bar[n,f] - sum(model.y[n,m,f] for m in model.N)
+        ) for n in model.N for f in model.F
+      )
+    ) / sum(
+      sum(model.incoming_load[n,f] for n in model.N) for f in model.F
+    )
+
+
 class LRMP_freeMemory(RMPAbstractModel):
   def __init__(self):
     super().__init__()

@@ -276,3 +276,32 @@ class LoadManagementModel(BaseCentralizedModel):
         ) / model.incoming_load[n,f] for f in model.F
       ) for n in model.N
     )
+
+
+class ScaledOnSumLMM(LoadManagementModel):
+  """
+  max sum(alpha * x + sum(beta * y) - gamma * z)
+  """
+  def __init__(self):
+    super().__init__()
+    self.name = "ScaledOnSumLMM"
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.model.OBJ = pyo.Objective(
+      rule = self.nn_maximize_processing, sense = pyo.maximize
+    )
+  
+  @staticmethod
+  def nn_maximize_processing(model):
+    return sum(
+      sum(
+        model.alpha[n,f] * model.x[n,f] + sum(
+          model.beta[n,m,f] * model.y[n,m,f] for m in model.N
+        ) - (
+          model.gamma[n,f] * model.z[n,f]
+        ) for f in model.F
+      ) for n in model.N
+    ) / sum(
+      sum(model.incoming_load[n,f] for n in model.N) for f in model.F
+    )

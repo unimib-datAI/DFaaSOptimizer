@@ -3,6 +3,7 @@ from utilities import float_to_int, load_requests_traces
 from generate_data import generate_data, update_data
 from load_generator import LoadGenerator
 from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
+from model import ScaledOnSumLMM
 from postprocessing import plot_history
 
 from networkx import draw_networkx, kamada_kawai_layout
@@ -269,7 +270,12 @@ def generate_load_traces(
   if trace_type == "load_existing":
     input_requests_traces = load_requests_traces(limits["load_existing"])[0]
   else:
-    LG = LoadGenerator(average_requests = 100, amplitude_requests = 50)
+    avgr = 100
+    ampr = 50
+    if trace_type.endswith("_with_zeros"):
+      ampr = 150
+      trace_type = trace_type.replace("_with_zeros", "")
+    LG = LoadGenerator(average_requests = avgr, amplitude_requests = ampr)
     rng = np.random.default_rng(seed = seed)
     # generate trace for all request classes
     input_requests_traces = {}
@@ -567,7 +573,8 @@ def run(
   if log_on_file:
     log_stream = open(os.path.join(solution_folder, "out.log"), "w")
   # initialize models
-  models = [LoadManagementModel()]
+  # models = [LoadManagementModel(), ScaledOnSumLMM()]
+  models = [ScaledOnSumLMM()]
   # generate base instance data and load traces
   base_instance_data, input_requests_traces, agents = init_problem(
     limits, trace_type, max_steps, seed, solution_folder
