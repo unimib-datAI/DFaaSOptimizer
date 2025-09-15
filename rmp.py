@@ -161,7 +161,7 @@ class LRMP(RMPAbstractModel):
     return sum(
       model.y[m,n,f] for m in model.N
     ) <= sum(
-      model.incoming_load[m,f] for m in model.F
+      model.incoming_load[m,f] for m in model.N
     ) * model.i_receives_f[n,f]
   
   @staticmethod
