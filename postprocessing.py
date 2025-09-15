@@ -355,25 +355,38 @@ def process_results(solution_folder: str, models: list) -> str:
 def runtime_obj_boxplot(
     df: pd.DataFrame, colname: str, plot_folder: str, title: str
   ):
-  _, ax = plt.subplots(figsize = (21,6))
-  bplot = df.plot.box(
-    column = colname, 
-    by = ["Nn", "method"], 
-    logy = True,
-    grid = True,
-    showmeans = True,
-    return_type = "dict",
-    patch_artist = True,
-    ax = ax
+  nmethods = len(df["method"].unique())
+  _, axs = plt.subplots(
+    nrows = nmethods,
+    ncols = 1,
+    figsize = (21,6)
   )
-  # colors
-  for patch in bplot[colname]["boxes"]:
-    patch.set_facecolor(mcolors.CSS4_COLORS["lightskyblue"])
-  for median in bplot[colname]['medians']:
-    median.set_color(mcolors.TABLEAU_COLORS["tab:orange"])
-  for mean in bplot[colname]['means']:
-    mean.set_markerfacecolor(mcolors.TABLEAU_COLORS["tab:red"])
-    mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
+  idx = 0
+  for method, mdata in df.groupby("method"):
+    bplot = mdata.plot.box(
+      column = colname, 
+      by = "Nn",
+      logy = True,
+      grid = True,
+      showmeans = True,
+      return_type = "dict",
+      patch_artist = True,
+      ax = axs if nmethods == 1 else axs[idx]
+    )
+    # colors
+    for patch in bplot[colname]["boxes"]:
+      patch.set_facecolor(mcolors.CSS4_COLORS["lightskyblue"])
+    for median in bplot[colname]["medians"]:
+      median.set_color(mcolors.TABLEAU_COLORS["tab:orange"])
+    for mean in bplot[colname]["means"]:
+      mean.set_markerfacecolor(mcolors.TABLEAU_COLORS["tab:red"])
+      mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
+    if nmethods == 1:
+      axs.set_ylabel(method)
+    else:
+      axs[idx].set_ylabel(method)
+    idx += 1
+  plt.grid(True, which = "both")
   plt.title(None)
   plt.savefig(
     os.path.join(plot_folder, f"{title}.png"),
@@ -385,10 +398,10 @@ def runtime_obj_boxplot(
 
 
 if __name__ == "__main__":
-  base_solution_folder = "solutions/heterogeneous_demands/Nf_10-alpha_0.5_1.0-beta_0.75_1.25"
+  base_solution_folder = "solutions/prova3c"
   models = [
     "LoadManagementModel",
-    # "LSP"
+    "LSP"
   ]
   # solution_folder = base_solution_folder
   # process_results(solution_folder, models)
