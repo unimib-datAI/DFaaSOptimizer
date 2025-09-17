@@ -70,6 +70,11 @@ def parse_arguments() -> argparse.Namespace:
     type = int,
     default = -1
   )
+  parser.add_argument(
+    "--enable_plotting",
+    default = False,
+    action = "store_true"
+  )
   # Parse the arguments
   args: argparse.Namespace = parser.parse_known_args()[0]
   return args
@@ -668,11 +673,13 @@ def run(
     run_centralized_only: bool,
     run_spcoord_only: bool,
     fix_r: bool,
-    sp_parallelism: int
+    sp_parallelism: int,
+    enable_plotting: bool
   ):
   seed = base_config["seed"]
   log_on_file = True if base_config["verbose"] > 0 else False
   nodes = base_config["limits"]["Nn"]
+  disable_plotting = not enable_plotting
   # generate list of experiments
   experiments_list = generate_experiments_list(nodes, seed, n_experiments)
   # load list of already-run experiments (if any)
@@ -718,7 +725,11 @@ def run(
       # -- solve centralized model
       c_folder = None
       if run_c:
-        c_folder = run_centralized(config, log_on_file)
+        c_folder = run_centralized(
+          config, 
+          log_on_file = log_on_file, 
+          disable_plotting = disable_plotting
+        )
         solution_folders["centralized"].append(c_folder)
       else:
         if experiment_idx is not None:
@@ -731,7 +742,7 @@ def run(
           config, 
           sp_parallelism,
           log_on_file = log_on_file, 
-          disable_plotting = True
+          disable_plotting = disable_plotting
         )
         solution_folders["sp-coord"].append(i_folder)
       # -- save info
@@ -756,6 +767,7 @@ if __name__ == "__main__":
   postprocessing_list = args.postprocessing_list
   fix_r = args.fix_r
   sp_parallelism = args.sp_parallelism
+  enable_plotting = args.enable_plotting
   # load configuration file
   base_config = load_configuration(config_file)
   base_solution_folder = base_config["base_solution_folder"]
@@ -772,7 +784,8 @@ if __name__ == "__main__":
       run_centralized_only,
       run_spcoord_only,
       fix_r,
-      sp_parallelism
+      sp_parallelism,
+      enable_plotting
     )
   else:
     if not postprocessing_list:
