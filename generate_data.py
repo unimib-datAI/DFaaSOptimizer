@@ -1,4 +1,4 @@
-from utilities import generate_random_float
+from utilities import generate_random_float, generate_random_int
 
 from copy import deepcopy
 from typing import Tuple
@@ -106,11 +106,9 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
       )) for f in range(Nf)
     },
     "memory_capacity": {
-      n+1: int(rng.integers(
-        limits["memory_capacity"]["min"], 
-        limits["memory_capacity"]["max"], 
-        endpoint = True
-      )) for n in range(Nn)
+      n+1: generate_random_int(
+          rng, limits["memory_capacity"]
+        ) for n in range(Nn)
     },
     "neighborhood": {
       (i+1, j+1): int(neighborhood[i,j]) for i in range(Nn) for j in range(Nn)
@@ -164,6 +162,23 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
           ), 3) - 1 for n in range(Nn)
         } for f in range(Nf)
       }
+      # lmax = []
+      # for f in range(Nf):
+      #   l = 0
+      #   for n in range(Nn):
+      #     l += (
+      #       data[None]["memory_capacity"][n+1] * 
+      #         data[None]["max_utilization"][f+1] / (
+      #           data[None]["memory_requirement"][f+1] * 
+      #             data[None]["demand"][(n+1,f+1)]
+      #         )
+      #     )
+      #     lmax.append(l)
+      # load_limits = {
+      #   f: {
+      #     n: round(lmax[f], 3) * Nn / Nf + 1 for n in range(Nn)
+      #   } for f in range(Nf)
+      # }
   else:
     load_limits = {
       f: {

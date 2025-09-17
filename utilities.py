@@ -35,6 +35,19 @@ def generate_random_float(
   return val
 
 
+def generate_random_int(
+    rng: np.random.Generator, limits: dict
+  ) -> int:
+  val = 0
+  if "min" in limits and "max" in limits:
+    val = int(rng.integers(limits["min"], limits["max"], endpoint = True))
+  elif "values_from" in limits:
+    val = rng.choice(limits["values_from"])
+  else:
+    raise ValueError("Missing values to define limits")
+  return val
+
+
 def load_configuration(config_file: str) -> dict:
   """Load configuration file"""
   config = {}
