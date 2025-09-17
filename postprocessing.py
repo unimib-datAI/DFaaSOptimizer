@@ -708,21 +708,14 @@ if __name__ == "__main__":
         "Nn": int(exp_description_tuple[0]),
         "seed": int(exp_description_tuple[-1])
       }
-    # add information to runtime/obj dictionaries
-    all_obj["Nn"] = [
-      exp_description_match[exp]["Nn"] for exp in all_obj["exp"]
-    ]
-    all_obj["seed"] = [
-      exp_description_match[exp]["seed"] for exp in all_obj["exp"]
-    ]
-    all_runtimes["Nn"] = [
-      exp_description_match[exp]["Nn"] for exp in all_runtimes["exp"]
-    ]
-    all_runtimes["seed"] = [
-      exp_description_match[exp]["seed"] for exp in all_runtimes["exp"]
-    ]
-    # plot runtime
+    # plot
     if len(all_runtimes) > 0:
+      all_runtimes["Nn"] = [
+        exp_description_match[exp]["Nn"] for exp in all_runtimes["exp"]
+      ]
+      all_runtimes["seed"] = [
+        exp_description_match[exp]["seed"] for exp in all_runtimes["exp"]
+      ]
       runtime_obj_boxplot(
         all_runtimes, "runtime", base_postprocessing_folder, "runtime_box"
       )
@@ -730,6 +723,12 @@ if __name__ == "__main__":
         os.path.join(base_postprocessing_folder, "runtime.csv"), index = False
       )
     if len(all_obj) > 0:
+      all_obj["Nn"] = [
+        exp_description_match[exp]["Nn"] for exp in all_obj["exp"]
+      ]
+      all_obj["seed"] = [
+        exp_description_match[exp]["seed"] for exp in all_obj["exp"]
+      ]
       runtime_obj_boxplot(
         all_obj, "obj", base_postprocessing_folder, "obj_box"
       )
