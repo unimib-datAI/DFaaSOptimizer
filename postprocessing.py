@@ -328,7 +328,9 @@ def process_results(solution_folder: str, models: list) -> str:
             ax = ax,
             color = mcolors.TABLEAU_COLORS["tab:red"]
           )
-          plt.xticks(range(0,101,10), list(range(0,101,10)))
+          if len(ratio_df) > 50:
+            tt = len(ratio_df)
+            plt.xticks(range(0,tt+1,10), list(range(0,tt+1,10)))
           plt.xlabel("Control time period $t$")
           plt.ylabel("Percentage of local/forwarded/rejected requests")
           plt.grid(axis = "y")
@@ -398,10 +400,10 @@ def runtime_obj_boxplot(
 
 
 if __name__ == "__main__":
-  base_solution_folder = "solutions/prova3c"
+  base_solution_folder = "solutions/homogeneous_demands/heterogeneous_memory/Nf_10-alpha_0.5_1.0-beta_0.3_0.95-p_1.0-centralized_120s-40_60f"
   models = [
-    "LoadManagementModel",
-    "LSP"
+    "LoadManagementModel"
+    # "LSP"
   ]
   # solution_folder = base_solution_folder
   # process_results(solution_folder, models)
