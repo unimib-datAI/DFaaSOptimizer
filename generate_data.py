@@ -403,11 +403,19 @@ def random_instance_data(
       #   } for f in range(Nf)
       # }
   else:
+    edge_exposed_fraction = limits["load"].get("edge_exposed_fraction", 1.0)
+    nonzero = int(np.ceil(Nn * edge_exposed_fraction))
+    zero_load = np.array([1] * nonzero + [0] * (Nn - nonzero))
+    rng.shuffle(zero_load)
     load_limits = {
       f: {
         n: {
-          "min": generate_random_float(rng, limits["load"]["min"]),
-          "max": generate_random_float(rng, limits["load"]["max"])
+          "min": 0.0 if zero_load[n] else generate_random_float(
+            rng, limits["load"]["min"]
+          ),
+          "max": 0.0 if zero_load[n] else generate_random_float(
+            rng, limits["load"]["max"]
+          )
         } for n in range(Nn) 
       } for f in range(Nf)
     }
