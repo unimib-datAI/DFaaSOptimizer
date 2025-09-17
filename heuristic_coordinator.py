@@ -30,11 +30,11 @@ class HeuristicCoordinator(ABC):
       managed_load = x + z[n-1,f-1] + y[n-1,:,f-1].sum()
       if abs(managed_load - load) > 1e-3:
         return False, f"no traffic loss: {abs(managed_load - load)} > 1e-3"
+      # total number of function replicas
+      total_r[n-1,f-1] = r[n-1,f-1] + instance[None]["r_bar"][(n,f)]
       # max utilization
       if utilization[n-1,f-1] - instance[None]["max_utilization"][f] > 1e-5:
         return False, f"max utilization: {utilization[n-1,f-1]}"
-      # total number of function replicas
-      total_r[n-1,f-1] = r[n-1,f-1] + instance[None]["r_bar"][(n,f)]
     # memory capacity
     for n, ram in instance[None]["memory_capacity"].items():
       used_memory = 0
@@ -161,14 +161,14 @@ class GreedyCoordinator(HeuristicCoordinator):
           # determine actual offloading and additional number of replicas
           if omega <= max_acceptable:
             y[n1,n2,f] += omega
-            used_a = min(
-              max_a,
+            req_a = int(
               int(np.ceil((
                 (
                   y[:,n2,f].sum() + instance[None]["x_bar"][(n2+1,f+1)]
                 ) * demand[(n2+1,f+1)] / instance[None]["max_utilization"][f+1]
               ) - instance[None]["r_bar"][(n2+1,f+1)])) - r[n2,f]
             )
+            used_a = min(max_a, req_a)
             r[n2,f] += used_a
             residual_capacity[n2] -= (used_a * ram[f+1])
             omega = 0
