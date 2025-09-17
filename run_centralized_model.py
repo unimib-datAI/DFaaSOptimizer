@@ -10,12 +10,37 @@ from pprint import pprint
 from typing import Tuple
 import pandas as pd
 import numpy as np
+import argparse
 import json
 import sys
 import os
 
 
 VAR_TYPE = int if PYO_VAR_TYPE == pyo.NonNegativeIntegers else float
+
+
+def parse_arguments() -> argparse.Namespace:
+   """
+   Parse input arguments
+   """
+   parser: argparse.ArgumentParser = argparse.ArgumentParser(
+     description = "run", 
+     formatter_class=argparse.ArgumentDefaultsHelpFormatter
+   )
+   parser.add_argument(
+     "-c", "--config",
+     help = "Configuration file",
+     type = str,
+     default = "manual_config.json"
+   )
+   parser.add_argument(
+     "--disable_plotting",
+     default = False,
+     action = "store_true"
+   )
+   # Parse the arguments
+   args: argparse.Namespace = parser.parse_known_args()[0]
+   return args
 
 
 def compute_residual_capacity(data: dict, r: np.array) -> np.array:
@@ -563,7 +588,9 @@ def update_3d_variables(
   return offloading, detailed_offloading
 
 
-def run(config: dict, log_on_file: bool = False):
+def run(
+    config: dict, log_on_file: bool = False, disable_plotting: bool = False
+  ):
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
   limits = config["limits"]
@@ -637,7 +664,7 @@ def run(config: dict, log_on_file: bool = False):
         solution, offloaded, detailed_fwd_solution = join_complete_solution(
           complete_solution
         )
-        if Nf <= 10 and Nn <= 10:
+        if not disable_plotting and Nf <= 10 and Nn <= 10:
           plot_folder = os.path.join(solution_folder, M.name, f"{t}_plot")
           os.makedirs(plot_folder)
           plot_history(
@@ -660,7 +687,7 @@ def run(config: dict, log_on_file: bool = False):
       complete_solution
     )
     # plot and save solution
-    if Nf <= 10 and Nn <= 10:
+    if not disable_plotting and Nf <= 10 and Nn <= 10:
       plot_history(
         input_requests_traces, 
         min_run_time, 
@@ -704,7 +731,10 @@ def run(config: dict, log_on_file: bool = False):
 
 
 if __name__ == "__main__":
+  args = parse_arguments()
+  config_file = args.config
+  disable_plotting = args.disable_plotting
   # load configuration file
   config = load_configuration("config.json")
   # run
-  run(config)
+  run(config, disable_plotting = disable_plotting)
