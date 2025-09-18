@@ -236,12 +236,12 @@ def compare_single_model(
     obj = pd.read_csv(
       os.path.join(postprocessing_folder, "postprocessing", "obj.csv")
     )
-    obj.rename(columns = {"obj": "LoadManagementModel"}, inplace = True)
+    obj.rename(columns = {"obj": "ScaledOnSumLMM"}, inplace = True)
     # -- runtime
     runtime = pd.read_csv(
       os.path.join(postprocessing_folder, "postprocessing", "runtime.csv")
     )
-    runtime.rename(columns= {"runtime": "LoadManagementModel"}, inplace = True)
+    runtime.rename(columns= {"runtime": "ScaledOnSumLMM"}, inplace = True)
     # add info
     key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
     obj[key] = int(key_val)
@@ -262,7 +262,7 @@ def compare_single_model(
     all_obj, 
     all_runtime, 
     None,
-    ["LoadManagementModel"],
+    ["ScaledOnSumLMM"],
     key, 
     key_label, 
     plot_folder
@@ -286,9 +286,9 @@ def compare_single_model(
         )
         df = dev[["Nn", "seed", "time"]].copy(deep = True)
         df["dev"] = (
-          dev["LoadManagementModel"].values - 
-            dev["LoadManagementModel_baseline"].values
-        ) / dev["LoadManagementModel"].values * 100
+          dev["ScaledOnSumLMM"].values - 
+            dev["ScaledOnSumLMM_baseline"].values
+        ) / dev["ScaledOnSumLMM"].values * 100
         df[key] = key_val
         obj_dev = pd.concat([obj_dev, df], ignore_index = True)
         # -- runtime
@@ -300,8 +300,8 @@ def compare_single_model(
         )
         df = rt_dev[["Nn", "seed", "time"]].copy(deep = True)
         df["dev"] = (
-          rt_dev["LoadManagementModel"].values / 
-            rt_dev["LoadManagementModel_baseline"].values
+          rt_dev["ScaledOnSumLMM"].values / 
+            rt_dev["ScaledOnSumLMM_baseline"].values
         )
         df[key] = key_val
         runtime_dev = pd.concat([runtime_dev, df], ignore_index = True)
