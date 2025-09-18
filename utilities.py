@@ -26,6 +26,18 @@ def delete_tuples(_dict: dict):
   return serializable_dict
 
 
+def float_to_int(fval: float) -> int:
+  ival = None
+  if np.floor(fval) > 0 and ((fval / np.floor(fval) - 1) > 1e-6):
+    ival = int(np.ceil(fval))
+  else:
+    if int(np.floor(fval)) == 0 and (fval > 1e-6):
+      ival = int(np.ceil(fval))
+    else:
+      ival = int(fval)
+  return ival
+
+
 def generate_random_float(
     rng: np.random.Generator, low: float, high: float
   ) -> float:

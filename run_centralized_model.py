@@ -1,4 +1,5 @@
 from utilities import delete_tuples, NpEncoder, load_configuration
+from utilities import float_to_int
 from generate_data import generate_data, update_data
 from load_generator import LoadGenerator
 from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
@@ -208,10 +209,14 @@ def extract_solution(
     ).reshape((Nn, Nf))
   # -- number of function replicas
   if "r" in solution:
-    r = np.array(solution["r"], dtype = int).reshape((Nn, Nf))
+    r = np.array(
+      [float_to_int(rval) for rval in np.array(solution["r"]).flatten()], 
+      dtype = int
+    ).reshape((Nn, Nf))
     if "r_bar" in data[None]:
       r_bar = np.array(
-        list(data[None]["r_bar"].values()), dtype = int
+        [float_to_int(rval) for rval in data[None]["r_bar"].values()], 
+        dtype = int
       ).reshape((Nn, Nf))
       r += r_bar
   elif "r_bar" in data[None]:

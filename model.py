@@ -237,7 +237,7 @@ class LoadManagementModel(BaseCentralizedModel):
       model.x[n,f] + sum(
         model.y[m,n,f] for m in model.N
       )
-    ) >= (model.r[n,f] - 1) * model.max_utilization[f]
+    ) >= model.r[n,f] * model.max_utilization[f]
   
   @staticmethod
   def residual_capacity(model, n):
