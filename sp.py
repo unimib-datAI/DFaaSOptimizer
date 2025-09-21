@@ -95,7 +95,7 @@ class LSP(SPAbstractModel):
     return (
       model.demand[model.whoami,f] * (
         model.x[f]
-      ) >= model.r[f] * model.max_utilization[f]
+      ) >= (model.r[f] - 1) * model.max_utilization[f]
     )
   
   @staticmethod
@@ -175,7 +175,7 @@ class LSPr(SPAbstractModel):
     return (
       model.demand[model.whoami,f] * (
         model.x[f] + sum(model.y_bar[m,model.whoami,f] for m in model.N)
-      ) >= model.r[f] * model.max_utilization[f]
+      ) >= (model.r[f] - 1) * model.max_utilization[f]
     )
   
   @staticmethod
