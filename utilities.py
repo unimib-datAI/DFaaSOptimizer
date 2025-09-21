@@ -1,6 +1,8 @@
+from typing import Tuple
 import numpy as np
 import json
 import ast
+import os
 
 
 class NpEncoder(json.JSONEncoder):
@@ -60,12 +62,39 @@ def generate_random_int(
   return val
 
 
+def int_keys_decoder(pairs: dict) -> dict:
+  return {int(k): v for k, v in pairs}
+
+
 def load_configuration(config_file: str) -> dict:
   """Load configuration file"""
   config = {}
   with open(config_file, "r") as istream:
     config = json.load(istream)
   return config
+
+
+def load_requests_traces(folder: str) -> Tuple[dict, int, int, int]:
+  # load requests
+  requests = {}
+  with open(
+      os.path.join(folder, "input_requests_traces.json"), "r"
+    ) as ist:
+    requests = {
+      int(f): {
+        int(a): np.array(r) for a,r in v.items()
+      } for f,v in json.load(ist).items()
+    }
+  # load time info
+  mt = 0
+  Mt = len(requests[0][0])
+  ts = 1
+  if os.path.exists(os.path.join(folder, "config.json")):
+    config = load_configuration(os.path.join(folder, "config.json"))
+    mt = config.get("min_run_time", 0)
+    Mt = config.get("max_run_time", config["max_steps"])
+    ts = config.get("run_time_step", 1)
+  return requests, mt, Mt, ts
 
 
 def restore_types(serialized_dict: dict):
