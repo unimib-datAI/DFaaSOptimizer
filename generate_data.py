@@ -1,5 +1,6 @@
 from utilities import generate_random_float, generate_random_int
 
+from networkx import random_regular_graph, adjacency_matrix
 from copy import deepcopy
 from typing import Tuple
 import numpy as np
@@ -31,10 +32,18 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
   Nf = rng.integers(limits["Nf"]["min"], limits["Nf"]["max"], endpoint = True)
   # neighborhood
   neighborhood = np.zeros((Nn, Nn))
-  for n1 in range(Nn):
-    for n2 in range(n1+1,Nn):
-      neighborhood[n1,n2] = rng.binomial(1, limits["neighborhood"]["p"])
-      neighborhood[n2,n1] = neighborhood[n1,n2]
+  if "p" in limits["neighborhood"]:
+    for n1 in range(Nn):
+      for n2 in range(n1+1,Nn):
+        neighborhood[n1,n2] = rng.binomial(1, limits["neighborhood"]["p"])
+        neighborhood[n2,n1] = neighborhood[n1,n2]
+  elif "k" in limits["neighborhood"]:
+    graph = random_regular_graph(
+      d = limits["neighborhood"]["k"],
+      n = Nn,
+      seed = int(rng.integers(low = 0, high = 4850 * 4850 * 4850))
+    )
+    neighborhood = adjacency_matrix(graph).toarray()
   # weights (different for each function, equal for all nodes)
   alpha = [
     generate_random_float(
@@ -198,4 +207,4 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
         } for n in range(Nn) 
       } for f in range(Nf)
     }
-  return data, load_limits
+  return data, load_limits, neighborhood

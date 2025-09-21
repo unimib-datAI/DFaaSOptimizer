@@ -5,6 +5,7 @@ from load_generator import LoadGenerator
 from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
 from postprocessing import plot_history
 
+from networkx import from_numpy_array, draw_random
 import matplotlib.pyplot as plt
 from datetime import datetime
 import pyomo.environ as pyo
@@ -332,7 +333,7 @@ def init_problem(
   ) -> Tuple[dict, dict, list]:
   # generate base instance data
   rng = np.random.default_rng(seed = seed)
-  base_instance_data, load_limits = generate_data(
+  base_instance_data, load_limits, neighborhood = generate_data(
     "random", rng = rng, limits = limits
   )
   with open(
@@ -351,6 +352,16 @@ def init_problem(
   input_requests_traces = generate_load_traces(
     load_limits, max_steps, seed, trace_type, solution_folder
   )
+  # draw graph
+  graph = from_numpy_array(neighborhood)
+  draw_random(graph)
+  plt.savefig(
+    os.path.join(solution_folder, "graph.png"), 
+    dpi = 300,
+    format = "png",
+    bbox_inches = "tight"
+  )
+  plt.close()
   return base_instance_data, input_requests_traces, load_limits[0].keys()
 
 
