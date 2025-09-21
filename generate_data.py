@@ -99,16 +99,14 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
       ) for n in range(Nn) for f in range(Nf)
     },
     "memory_requirement": {
-      f+1: int(rng.integers(
-        limits["memory_requirement"]["min"], 
-        limits["memory_requirement"]["max"], 
-        endpoint = True
-      )) for f in range(Nf)
+      f+1: generate_random_int(
+        rng, limits["memory_requirement"]
+      ) for f in range(Nf)
     },
     "memory_capacity": {
       n+1: generate_random_int(
-          rng, limits["memory_capacity"]
-        ) for n in range(Nn)
+        rng, limits["memory_capacity"]
+      ) for n in range(Nn)
     },
     "neighborhood": {
       (i+1, j+1): int(neighborhood[i,j]) for i in range(Nn) for j in range(Nn)
