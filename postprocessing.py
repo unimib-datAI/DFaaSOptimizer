@@ -1,3 +1,5 @@
+from utilities import load_requests_traces
+
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 from typing import Tuple
@@ -49,7 +51,7 @@ def invert_count(original_dict: dict) -> pd.DataFrame:
   return df
 
 def load_models_results(
-    solution_folder: str, models: list
+    solution_folder: str, models: list, plot_all_history: bool = False
   ) -> Tuple[dict, dict, dict, dict]:
   all_models_local_count = {"by_node": {}, "by_function": {}}
   all_models_fwd_count = {"by_node": {}, "by_function": {}}
@@ -61,9 +63,27 @@ def load_models_results(
         os.path.join(solution_folder, f"{model_name}_solution.csv")
       ):
       # load solution
-      solution, replicas, detailed_fwd_solution = load_solution(
+      solution, replicas, detailed_fwd_sol, utilization, obj = load_solution(
         solution_folder, model_name
       )
+      if plot_all_history:
+        # load input requests
+        requests, mt, Mt, ts = load_requests_traces(solution_folder)
+        # plot
+        plot_history(
+          requests, 
+          mt, 
+          Mt, 
+          ts, 
+          solution, 
+          utilization, 
+          replicas, 
+          pd.read_csv(
+            os.path.join(solution_folder, f"{model_name}_offloaded.csv")
+          ), 
+          obj, 
+          os.path.join(solution_folder, f"{model_name}.png")
+        )
       # count locally-processed requests per node/class
       local_cols = solution.columns.str.endswith("_loc")
       all_models_local_count = count_subcols(
@@ -93,11 +113,11 @@ def load_models_results(
           for n2 in nodes:
             if n1 != n2:
               times_fwd = np.where(
-                detailed_fwd_solution.loc[:,f"{n1}_{f}_{n2}_tot"] > 0
+                detailed_fwd_sol.loc[:,f"{n1}_{f}_{n2}_tot"] > 0
               )[0]
               if len(times_fwd) > 0:
                 times_bwd = np.where(
-                  detailed_fwd_solution.loc[:,f"{n2}_{f}_{n1}_tot"] > 0
+                  detailed_fwd_sol.loc[:,f"{n2}_{f}_{n1}_tot"] > 0
                 )[0]
                 for t in times_fwd:
                   if t in times_bwd:
@@ -123,11 +143,17 @@ def load_solution(
   detailed_fwd_solution = pd.read_csv(
     os.path.join(solution_folder, f"{model_name}_detailed_fwd_solution.csv")
   )
-  return solution, replicas, detailed_fwd_solution
+  utilization = pd.read_csv(
+    os.path.join(solution_folder, f"{model_name}_utilization.csv")
+  )
+  obj = pd.DataFrame()
+  if os.path.exists(os.path.join(solution_folder, "obj.csv")):
+    obj = pd.read_csv(os.path.join(solution_folder, "obj.csv"))
+  return solution, replicas, detailed_fwd_solution, utilization, obj
 
 
 def plot_count(
-    df: pd.DataFrame, groupby_key: str, plot_all: bool = False
+    df: pd.DataFrame, groupby_key: str, plt_folder: str, plot_all: bool = False
   ) -> pd.DataFrame:
   tot = group_count(df, groupby_key)
   if plot_all:
@@ -136,7 +162,13 @@ def plot_count(
       grid = True,
       fontsize = 14
     )
-    plt.show()
+    plt.savefig(
+      os.path.join(plt_folder, f"{groupby_key}.png"),
+      dpi = 300,
+      format = "png",
+      bbox_inches = "tight"
+    )
+    plt.close()
   else:
     tot.plot.bar(
       y = "tot",
@@ -147,7 +179,13 @@ def plot_count(
       plt.grid(True, axis = "both")
     else:
       plt.grid(True, axis = "y")
-    plt.show()
+    plt.savefig(
+      os.path.join(plt_folder, f"{groupby_key}_tot.png"),
+      dpi = 300,
+      format = "png",
+      bbox_inches = "tight"
+    )
+    plt.close()
   return tot
 
 def plot_global_count(
@@ -197,14 +235,120 @@ def plot_global_count(
       else:
         plt.show()
 
-def process_results(solution_folder: str, models: list) -> str:
+def plot_history(
+    input_requests_traces: dict, 
+    min_run_time: int,
+    max_run_time: int,
+    run_time_step: int,
+    solution: pd.DataFrame, 
+    utilization: pd.DataFrame, 
+    replicas: pd.DataFrame,
+    offloaded: pd.DataFrame,
+    obj_values: list,
+    plot_filename: str = None
+  ):
+  Nf = len(input_requests_traces)
+  Nn = len(input_requests_traces[0])
+  max_workload = {
+    f: max(
+      [max(ll) for ll in input_requests_traces[f].values()]
+    ) for f in range(Nf)
+  }
+  min_workload = {
+    f: 0 for f in range(Nf)
+    # min(
+    #   [min(ll) for ll in input_requests_traces[f].values()]
+    # ) for f in range(Nf)
+  }
+  time = range(min_run_time, max_run_time, run_time_step)
+  if max_run_time == min_run_time:
+    time = range(min_run_time, max_run_time + run_time_step, run_time_step)
+  _, axs = plt.subplots(
+    nrows = Nn, 
+    ncols = 2 * Nf + 3, 
+    sharex = True,
+    figsize = ((2 * Nf + 3) * 8, 6 * Nn)
+  )
+  for function, traces in input_requests_traces.items():
+    for agent, incoming_load in traces.items():
+      # incoming load
+      axs[agent,function].plot(
+        range(len(time)),
+        incoming_load[list(time)],
+        ".-",
+        color = "k"
+      )
+      # requests management
+      solution.loc[
+        :,solution.columns.str.startswith(f"n{agent}_f{function}")
+      ].plot.bar(
+        stacked = True,
+        ax = axs[agent,function],
+        rot = 0
+      )
+      # received offloads
+      if len(offloaded) > 0:
+        offloaded.loc[
+          :,offloaded.columns.str.startswith(f"n{agent}_f{function}")
+        ].plot.bar(
+          stacked = True,
+          ax = axs[agent,Nf+function],
+          rot = 0
+        )
+      # utilization
+      utilization.loc[
+        :,utilization.columns.str.startswith(f"n{agent}_f{function}")
+      ].plot(
+        marker = ".",
+        # color = "r",
+        ax = axs[agent,-3]
+      )
+      # replicas
+      replicas.loc[
+        :,replicas.columns.str.startswith(f"n{agent}_f{function}")
+      ].plot(
+        marker = ".",
+        # color = "b",
+        ax = axs[agent,-2]
+      )
+      # axis properties
+      axs[agent,function].grid(axis = "y")
+      axs[agent,Nf+function].grid(axis = "y")
+      axs[agent,-3].grid(axis = "y")
+      axs[agent,-2].grid(axis = "y")
+      axs[agent,function].set_ylim(
+        min_workload[function], max_workload[function]
+      )
+      axs[agent,Nf+function].set_ylim(
+        min_workload[function], max_workload[function]
+      )
+      axs[agent,function].set_xticks(range(len(time)), time)
+      axs[agent,Nf+function].set_xticks(range(len(time)), time)
+      axs[agent,-3].set_xticks(range(len(time)), time)
+      axs[agent,-2].set_xticks(range(len(time)), time)
+  # objective function value
+  axs[0,-1].plot(
+    range(len(obj_values)), obj_values, ".-", linewidth = 2, color = "r"
+  )
+  axs[0,-1].grid(axis = "y")
+  if plot_filename is not None:
+    plt.savefig(
+      plot_filename, dpi = 300, format = "png", bbox_inches = "tight"
+    )
+    plt.close()
+  else:
+    plt.show()
+
+def process_results(
+    solution_folder: str, models: list, plot_all_history: bool = False
+  ) -> str:
   (
     all_models_local_count, 
     all_models_fwd_count, 
     all_models_rej_count, 
     all_models_replicas,
     all_models_ping_pong
-  ) = load_models_results(solution_folder, models)
+  ) = load_models_results(solution_folder, models, plot_all_history)
   # create folder to store plots
   plot_folder = os.path.join(solution_folder, "postprocessing")
   os.makedirs(plot_folder, exist_ok = True)
@@ -400,11 +544,12 @@ def runtime_obj_boxplot(
 
 
 if __name__ == "__main__":
-  base_solution_folder = "solutions/homogeneous_demands/heterogeneous_memory/Nf_10-alpha_0.5_1.0-beta_0.3_0.95-p_1.0-centralized_120s-40_60f"
+  base_solution_folder = "solutions/prova_RR_centralized2"
   models = [
     "LoadManagementModel"
     # "LSP"
   ]
+  plot_all_history = True
   # solution_folder = base_solution_folder
   # process_results(solution_folder, models)
   # load results
@@ -418,7 +563,7 @@ if __name__ == "__main__":
             foldername != "postprocessing"
       ):
       print(foldername)
-      plot_folder = process_results(solution_folder, models)
+      plot_folder = process_results(solution_folder, models, plot_all_history)
       # models runtime and termination condition
       if os.path.exists(os.path.join(solution_folder, "runtime.csv")):
         runtime = pd.read_csv(

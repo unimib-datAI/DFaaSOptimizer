@@ -20,7 +20,7 @@ def count_requests(
     Nn = int(data["None"]["Nn"]["None"])
     Nf = int(data["None"]["Nf"]["None"])
   # load solution
-  solution, replicas, detailed_fwd_solution = load_solution(
+  solution, replicas, detailed_fwd_solution, _, _ = load_solution(
     solution_folder, model_name
   )
   # count local/fwd/rejected requests
@@ -80,8 +80,8 @@ def count_requests(
 if __name__ == "__main__":
   # solution_folder = "solutions/ping_pong/yes/2025-09-11_12-05-46.869888"
   # solution_folder = "solutions/ping_pong/no/2025-09-12_09-12-30.151586"
-  solution_folder = "solutions/ping_pong/no_equalmemory/2025-09-12_12-26-49.301512"
-  model_name = "LoadManagementModel"
+  solution_folder = "solutions/manual_greedyprod/2025-09-12_12-30-58.367556"
+  model_name = "LSP"
   all_local, all_sentrecv, all_rej = count_requests(
     solution_folder, model_name
   )

@@ -3,6 +3,7 @@ from utilities import float_to_int
 from generate_data import generate_data, update_data
 from load_generator import LoadGenerator
 from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
+from postprocessing import plot_history
 
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -397,111 +398,6 @@ def solve_instance(
     x, y, z, r, xi, omega, rho, obj = extract_solution(data, solution)
     U = compute_utilization(data, solution)
   return x, y, z, r, xi, omega, rho, U, obj, solution["runtime"], tc
-
-
-def plot_history(
-    input_requests_traces: dict, 
-    min_run_time: int,
-    max_run_time: int,
-    run_time_step: int,
-    solution: pd.DataFrame, 
-    utilization: pd.DataFrame, 
-    replicas: pd.DataFrame,
-    offloaded: pd.DataFrame,
-    obj_values: list,
-    plot_filename: str = None
-  ):
-  Nf = len(input_requests_traces)
-  Nn = len(input_requests_traces[0])
-  max_workload = {
-    f: max(
-      [max(ll) for ll in input_requests_traces[f].values()]
-    ) for f in range(Nf)
-  }
-  min_workload = {
-    f: 0 for f in range(Nf)
-    # min(
-    #   [min(ll) for ll in input_requests_traces[f].values()]
-    # ) for f in range(Nf)
-  }
-  time = range(min_run_time, max_run_time, run_time_step)
-  if max_run_time == min_run_time:
-    time = range(min_run_time, max_run_time + run_time_step, run_time_step)
-  _, axs = plt.subplots(
-    nrows = Nn, 
-    ncols = 2 * Nf + 3, 
-    sharex = True,
-    figsize = ((2 * Nf + 3) * 8, 6 * Nn)
-  )
-  for function, traces in input_requests_traces.items():
-    for agent, incoming_load in traces.items():
-      # incoming load
-      axs[agent,function].plot(
-        range(len(time)),
-        incoming_load[list(time)],
-        ".-",
-        color = "k"
-      )
-      # requests management
-      solution.loc[
-        :,solution.columns.str.startswith(f"n{agent}_f{function}")
-      ].plot.bar(
-        stacked = True,
-        ax = axs[agent,function],
-        rot = 0
-      )
-      # received offloads
-      if len(offloaded) > 0:
-        offloaded.loc[
-          :,offloaded.columns.str.startswith(f"n{agent}_f{function}")
-        ].plot.bar(
-          stacked = True,
-          ax = axs[agent,Nf+function],
-          rot = 0
-        )
-      # utilization
-      utilization.loc[
-        :,utilization.columns.str.startswith(f"n{agent}_f{function}")
-      ].plot(
-        marker = ".",
-        # color = "r",
-        ax = axs[agent,-3]
-      )
-      # replicas
-      replicas.loc[
-        :,replicas.columns.str.startswith(f"n{agent}_f{function}")
-      ].plot(
-        marker = ".",
-        # color = "b",
-        ax = axs[agent,-2]
-      )
-      # axis properties
-      axs[agent,function].grid(axis = "y")
-      axs[agent,Nf+function].grid(axis = "y")
-      axs[agent,-3].grid(axis = "y")
-      axs[agent,-2].grid(axis = "y")
-      axs[agent,function].set_ylim(
-        min_workload[function], max_workload[function]
-      )
-      axs[agent,Nf+function].set_ylim(
-        min_workload[function], max_workload[function]
-      )
-      axs[agent,function].set_xticks(range(len(time)), time)
-      axs[agent,Nf+function].set_xticks(range(len(time)), time)
-      axs[agent,-3].set_xticks(range(len(time)), time)
-      axs[agent,-2].set_xticks(range(len(time)), time)
-  # objective function value
-  axs[0,-1].plot(
-    range(len(obj_values)), obj_values, ".-", linewidth = 2, color = "r"
-  )
-  axs[0,-1].grid(axis = "y")
-  if plot_filename is not None:
-    plt.savefig(
-      plot_filename, dpi = 300, format = "png", bbox_inches = "tight"
-    )
-    plt.close()
-  else:
-    plt.show()
 
 
 def save_checkpoint(complete_solution: dict, solution_folder: str, t: int):

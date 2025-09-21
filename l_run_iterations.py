@@ -7,12 +7,11 @@ from run_centralized_model import (
   extract_solution, 
   get_current_load, 
   join_complete_solution,
-  plot_history,
   save_solution
 )
 from utilities import load_configuration
 from generate_data import update_data
-from postprocessing import load_solution
+from postprocessing import load_solution, plot_history
 
 from rmp import RMPAbstractModel, LRMP
 from sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, LSPr_fixedr
@@ -631,7 +630,7 @@ def run(
   # load globally-optimal solution (if provided)
   opt_solution, opt_replicas, opt_detailed_fwd = None, None, None
   if "opt_solution_folder" in config:
-    opt_solution, opt_replicas, opt_detailed_fwd = load_solution(
+    opt_solution, opt_replicas, opt_detailed_fwd, _, _ = load_solution(
       config["opt_solution_folder"], "LoadManagementModel"
     )
   # loop over time
