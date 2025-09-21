@@ -87,12 +87,14 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
       ) for _ in range(Nf)
     ]
   # data
+  demand_type = limits["demand"].get("type", "homogeneous")
   data = {None: {
     "Nn": {None: int(Nn)},
     "Nf": {None: int(Nf)},
     "demand": {
-      # (n+1, f+1): float(demand[f]) for n in range(Nn) for f in range(Nf)
-      (n+1, f+1): generate_random_float(
+      (n+1, f+1): float(
+        demand[f]
+      ) if demand_type == "homogeneous" else generate_random_float(
         rng,
         limits["demand"]["min"], 
         limits["demand"]["max"], 
