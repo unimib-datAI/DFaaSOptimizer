@@ -1,3 +1,4 @@
+from scipy.stats import truncnorm
 from typing import Tuple
 import numpy as np
 import json
@@ -60,6 +61,22 @@ def generate_random_int(
   else:
     raise ValueError("Missing values to define limits")
   return val
+
+
+def generate_truncated_normal(
+    rng: np.random.Generator, 
+    mean: float = 0.0, 
+    sd: float = 1.0, 
+    low: float = 0.0, 
+    upp: float = 10.0
+  ) -> float:
+  gen = truncnorm(
+    (low - mean) / sd, 
+    (upp - mean) / sd, 
+    loc = mean, 
+    scale = sd
+  )
+  return gen.rvs(random_state = rng)
 
 
 def int_keys_decoder(pairs: dict) -> dict:
