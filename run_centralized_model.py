@@ -5,7 +5,8 @@ from load_generator import LoadGenerator
 from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
 from postprocessing import plot_history
 
-from networkx import from_numpy_array, draw_random
+from networkx import from_numpy_array, draw_networkx, kamada_kawai_layout
+from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 from datetime import datetime
 import pyomo.environ as pyo
@@ -354,7 +355,11 @@ def init_problem(
   )
   # draw graph
   graph = from_numpy_array(neighborhood)
-  draw_random(graph)
+  draw_networkx(
+    graph, 
+    pos = kamada_kawai_layout(graph, weight = "network_latency"),
+    node_color = mcolors.CSS4_COLORS["lightskyblue"]
+  )
   plt.savefig(
     os.path.join(solution_folder, "graph.png"), 
     dpi = 300,

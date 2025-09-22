@@ -43,6 +43,17 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
       n = Nn,
       seed = int(rng.integers(low = 0, high = 4850 * 4850 * 4850))
     )
+    # -- add network latency (if available)
+    if "network_latency" in limits["neighborhood"]:
+      for (u, v) in graph.edges():
+        graph.edges[u,v]["network_latency"] = generate_random_float(
+          rng, 
+          limits["neighborhood"]["network_latency"]["min"],
+          limits["neighborhood"]["network_latency"]["max"]
+        )
+    else:
+      for (u, v) in graph.edges():
+        graph.edges[u,v]["network_latency"] = 1.0
     neighborhood = adjacency_matrix(graph).toarray()
   # weights (different for each function, equal for all nodes)
   alpha = [
