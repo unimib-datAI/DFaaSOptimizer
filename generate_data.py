@@ -1,4 +1,5 @@
 from utilities import generate_random_float, generate_random_int
+from utilities import load_base_instance
 
 from networkx import random_regular_graph, adjacency_matrix
 from copy import deepcopy
@@ -14,23 +15,49 @@ def generate_data(
   data = {}
   if scenario == "random":
     data = random_instance_data(limits, rng)
+  elif scenario == "from_existing":
+    data = from_existing_instance(limits, rng)
   else:
     raise KeyError(f"Undefined scenario: {scenario}")
   return data
 
 
-def update_data(data: dict, fixed_values: dict) -> dict:
-  updated_data = deepcopy(data)
-  for k, v in fixed_values.items():
-    updated_data[None][k] = v
-  return updated_data
+def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
+  # load data
+  base_instance_data = load_base_instance(limits["load_existing"])
+  # number of nodes and function classes (cannot be changed!)
+  Nn = base_instance_data[None]["Nn"][None]
+  Nf = base_instance_data[None]["Nf"][None]
 
 
-def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
-  # number of nodes and function classes
-  Nn = rng.integers(limits["Nn"]["min"], limits["Nn"]["max"], endpoint = True)
-  Nf = rng.integers(limits["Nf"]["min"], limits["Nf"]["max"], endpoint = True)
-  # neighborhood
+def generate_demand(
+    Nn: int, Nf: int, limits: dict, rng: np.random.Generator
+  ) -> np.array:
+  demand = []
+  if "values" in limits["demand"] and len(limits["demand"]["values"]) == Nf:
+    demand = np.array(limits["demand"]["values"])
+  elif limits["demand"]["type"] == "homogeneous":
+    demand = np.array([
+      generate_random_float(
+        rng,
+        limits["demand"]["min"], 
+        limits["demand"]["max"]
+      ) for _ in range(Nf)
+    ])
+  else:
+    demand = np.array([
+      generate_random_float(
+        rng,
+        limits["demand"]["min"], 
+        limits["demand"]["max"], 
+      ) for _ in range(Nn) for _ in range(Nf)
+    ]).reshape((Nn,Nf))
+  return demand
+
+
+def generate_neighborhood(
+    Nn: int, limits: dict, rng: np.random.Generator
+  ) -> np.array:
   neighborhood = np.zeros((Nn, Nn))
   if "p" in limits["neighborhood"]:
     for n1 in range(Nn):
@@ -55,7 +82,12 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
       for (u, v) in graph.edges():
         graph.edges[u,v]["network_latency"] = 1.0
     neighborhood = adjacency_matrix(graph).toarray()
-  # weights (different for each function, equal for all nodes)
+  return neighborhood
+
+
+def generate_weights(
+    Nf: int, limits: dict, rng: np.random.Generator
+  ) -> Tuple[list, list, list, list]:
   alpha = [
     generate_random_float(
       rng,
@@ -84,18 +116,26 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
       limits.get("weights", {}).get("delta", {}).get("max", 1.0)
     ) for f in range(Nf)
   ]
+  return alpha, beta, gamma, delta
+
+
+def update_data(data: dict, fixed_values: dict) -> dict:
+  updated_data = deepcopy(data)
+  for k, v in fixed_values.items():
+    updated_data[None][k] = v
+  return updated_data
+
+
+def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
+  # number of nodes and function classes
+  Nn = rng.integers(limits["Nn"]["min"], limits["Nn"]["max"], endpoint = True)
+  Nf = rng.integers(limits["Nf"]["min"], limits["Nf"]["max"], endpoint = True)
+  # neighborhood
+  neighborhood = generate_neighborhood(Nn, Nf, limits, rng)
+  # weights (different for each function, equal for all nodes)
+  alpha, beta, gamma, delta = generate_weights(Nf, limits, rng)
   # demand
-  demand = []
-  if "values" in limits["demand"] and len(limits["demand"]["values"]) == Nf:
-    demand = limits["demand"]["values"]
-  else:
-    demand = [
-      generate_random_float(
-        rng,
-        limits["demand"]["min"], 
-        limits["demand"]["max"]
-      ) for _ in range(Nf)
-    ]
+  demand = generate_demand(Nn, Nf, limits, rng)
   # data
   demand_type = limits["demand"].get("type", "homogeneous")
   data = {None: {
@@ -104,11 +144,9 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
     "demand": {
       (n+1, f+1): float(
         demand[f]
-      ) if demand_type == "homogeneous" else generate_random_float(
-        rng,
-        limits["demand"]["min"], 
-        limits["demand"]["max"], 
-      ) for n in range(Nn) for f in range(Nf)
+      ) if demand_type == "homogeneous" else demand[
+        n,f
+      ] for n in range(Nn) for f in range(Nf)
     },
     "memory_requirement": {
       f+1: generate_random_int(
@@ -153,7 +191,10 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
   }}
   # load limits
   load_limits = {}
-  if "values" in limits["load"]:
+  if limits["load"]["trace_type"] == "load_existing":
+    load_limits[0] = {n: None for n in range(Nn)}
+    load_limits["load_existing"] = limits["load"]["path"]
+  elif "values" in limits["load"]:
     if len(limits["load"]["values"]) == Nf and (
         limits["load"]["values"][0] != "auto"
       ):

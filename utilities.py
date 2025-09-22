@@ -83,6 +83,16 @@ def int_keys_decoder(pairs: dict) -> dict:
   return {int(k): v for k, v in pairs}
 
 
+def load_base_instance(folder: str) -> dict:
+  base_instance = {}
+  with open(
+    os.path.join(folder, "base_instance_data.json"), "r"
+  ) as istream:
+    data = json.load(istream)
+    base_instance = restore_types(data)
+  return base_instance
+
+
 def load_configuration(config_file: str) -> dict:
   """Load configuration file"""
   config = {}
