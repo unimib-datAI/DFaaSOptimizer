@@ -59,16 +59,6 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
       limits.get("weights", {}).get("beta_multiplier", {}).get("max", 0.9)
     ) for f in range(Nf)
   ]
-  # alpha = [
-  #   [generate_random_float(
-  #     rng,
-  #     limits.get("weights", {}).get("alpha", {}).get("min", 1.0),
-  #     limits.get("weights", {}).get("alpha", {}).get("max", 1.0)
-  #   ) for _ in range(Nf)]  for _ in range(Nn)
-  # ]
-  # beta = [
-  #   0.5 for f in range(Nf)
-  # ]
   gamma = [
     generate_random_float(
       rng,
@@ -112,12 +102,16 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
     "memory_requirement": {
       f+1: generate_random_int(
         rng, limits["memory_requirement"]
-      ) for f in range(Nf)
+      ) if "values" not in limits["memory_requirement"] else limits[
+        "memory_requirement"
+      ]["values"][f] for f in range(Nf)
     },
     "memory_capacity": {
       n+1: generate_random_int(
         rng, limits["memory_capacity"]
-      ) for n in range(Nn)
+      ) if "values" not in limits["memory_capacity"] else limits[
+        "memory_capacity"
+      ]["values"][n] for n in range(Nn)
     },
     "neighborhood": {
       (i+1, j+1): int(neighborhood[i,j]) for i in range(Nn) for j in range(Nn)
