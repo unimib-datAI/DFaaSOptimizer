@@ -1,5 +1,5 @@
 from utilities import delete_tuples, NpEncoder, load_configuration
-from utilities import float_to_int
+from utilities import float_to_int, load_requests_traces
 from generate_data import generate_data, update_data
 from load_generator import LoadGenerator
 from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
@@ -35,7 +35,7 @@ def parse_arguments() -> argparse.Namespace:
      "-c", "--config",
      help = "Configuration file",
      type = str,
-     default = "manual_config.json"
+     default = "config.json"
    )
    parser.add_argument(
      "--disable_plotting",
@@ -256,27 +256,31 @@ def generate_load_traces(
     trace_type: str = "clipped",
     solution_folder: str = None
   ) -> dict:
-  LG = LoadGenerator(average_requests = 100, amplitude_requests = 50)
-  rng = np.random.default_rng(seed = seed)
-  # generate trace for all request classes
   input_requests_traces = {}
-  for function, function_limits in limits.items():
-    input_requests_traces[function] = LG.generate_traces(
-      max_steps = max_steps, 
-      limits = function_limits,
-      rng = rng,
-      trace_type = trace_type #f"manual{function}"#
-    )
-    # plot trace (if required)
-    if len(limits) <= 10 and len(function_limits) <= 10:
-      plot_filename = None
-      if solution_folder is not None:
-        plot_filename = os.path.join(solution_folder, "load")
-        os.makedirs(plot_filename, exist_ok = True)
-        plot_filename = os.path.join(plot_filename, f"f{function}.png")
-      LG.plot_input_load(
-        input_requests_traces[function], plot_filename = plot_filename
+  if trace_type == "load_existing":
+    input_requests_traces = load_requests_traces(limits["load_existing"])[0]
+  else:
+    LG = LoadGenerator(average_requests = 100, amplitude_requests = 50)
+    rng = np.random.default_rng(seed = seed)
+    # generate trace for all request classes
+    input_requests_traces = {}
+    for function, function_limits in limits.items():
+      input_requests_traces[function] = LG.generate_traces(
+        max_steps = max_steps, 
+        limits = function_limits,
+        rng = rng,
+        trace_type = trace_type #f"manual{function}"#
       )
+      # plot trace (if required)
+      if len(limits) <= 10 and len(function_limits) <= 10:
+        plot_filename = None
+        if solution_folder is not None:
+          plot_filename = os.path.join(solution_folder, "load")
+          os.makedirs(plot_filename, exist_ok = True)
+          plot_filename = os.path.join(plot_filename, f"f{function}.png")
+        LG.plot_input_load(
+          input_requests_traces[function], plot_filename = plot_filename
+        )
   # save traces (if required)
   if solution_folder is not None:
     with open(
