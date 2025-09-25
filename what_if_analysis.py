@@ -51,7 +51,9 @@ def find_best_iterations(
       marker = ".",
       markersize = 10,
       linewidth = 2,
-      label = f"t = {t}"
+      # label = f"t = {t}"
+      label = None,
+      legend = False
     )
     axs[0].axvline(
       x = last_it[-1],
@@ -71,7 +73,9 @@ def find_best_iterations(
       marker = ".",
       markersize = 10,
       linewidth = 2,
-      label = f"t = {t}"
+      # label = f"t = {t}"
+      label = None,
+      legend = False
     )
     axs[1].axvline(
       x = last_it[idx],
@@ -121,7 +125,9 @@ def main(base_folder: str):
     return_type = "dict",
     fontsize = 14,
     ax = axs[0],
-    label = "by social welfare"
+    # label = "by social welfare"
+    label = None,
+    legend = False
   )
   b1 = last_by_cobj.plot.box(
     grid = True,
@@ -131,7 +137,9 @@ def main(base_folder: str):
     return_type = "dict",
     fontsize = 14,
     ax = axs[1],
-    label = "by centralized objective"
+    # label = "by centralized objective"
+    label = None,
+    legend = False
   )
   # -- colors
   for bplot in [b0, b1]:
@@ -159,7 +167,7 @@ def main(base_folder: str):
   ) / last_by_cobj["obj"] * 100
   # plot
   _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (10,6))
-  b0 = last.plot.box(
+  b2 = last.plot.box(
     column = "obj_dev",
     grid = True,
     showmeans = True,
@@ -167,9 +175,11 @@ def main(base_folder: str):
     meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
     return_type = "dict",
     fontsize = 14,
-    ax = axs[0]
+    ax = axs[0],
+    label = None,
+    legend = False
   )
-  b1 = last.plot.box(
+  b3 = last.plot.box(
     column = "iteration_dev",
     grid = True,
     showmeans = True,
@@ -177,10 +187,12 @@ def main(base_folder: str):
     meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
     return_type = "dict",
     fontsize = 14,
-    ax = axs[1]
+    ax = axs[1],
+    label = None,
+    legend = False
   )
   # -- colors
-  for bplot in [b0, b1]:
+  for bplot in [b2, b3]:
     for patch in bplot["boxes"]:
       patch.set_facecolor(mcolors.CSS4_COLORS["lightskyblue"])
     for median in bplot['medians']:
@@ -202,6 +214,6 @@ def main(base_folder: str):
 
 
 if __name__ == "__main__":
-  base_folder = "solutions/homogeneous_demands/Nf_10-alpha_0.5_1.0-beta_0.3_0.95-p_1.0-greedy_product-false_false_false-patience_10"
+  base_folder = "solutions/2024_RussoRusso_spcoord2"
   main(base_folder)
 
