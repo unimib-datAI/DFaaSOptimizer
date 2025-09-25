@@ -8,12 +8,94 @@ from typing import Tuple
 import numpy as np
 
 
+def add_network_latency(
+    graph: Graph, limits: dict, rng: np.random.Generator
+  ) -> Graph:
+  if "weights" in limits and "edge_network_latency" in limits["weights"]:
+    for (u, v) in graph.edges():
+      graph.edges[u,v]["network_latency"] = generate_random_float(
+        rng, limits["weights"]["edge_network_latency"]
+      )
+      graph.edges[u,v]["edge_bandwidth"] = generate_random_int(
+        rng, limits["weights"]["edge_bandwidth"]
+      )
+  else:
+    for (u, v) in graph.edges():
+      graph.edges[u,v]["network_latency"] = 1.0
+  return graph
+
+
 def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
   # load data
-  base_instance_data = load_base_instance(limits["load_existing"])
+  base_instance_data, load_limits = load_base_instance(limits["path"])
   # number of nodes and function classes (cannot be changed!)
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
+  # neighborhood
+  graph = None
+  if "neighborhood" in limits:
+    neighborhood, graph = generate_neighborhood(Nn, limits, rng)
+    base_instance_data[None]["neighborhood"] = {
+      (i+1, j+1): int(neighborhood[i,j]) for i in range(Nn) for j in range(Nn)
+    }
+  else:
+    neighborhood = np.zeros((Nn,Nn))
+    for (n1, n2), p in base_instance_data[None]["neighborhood"].items():
+      neighborhood[n1,n2] = p
+    graph = add_network_latency(from_numpy_array(neighborhood), limits, rng)
+  # weights
+  if "weights" in limits:
+    alpha, beta, gamma, delta = generate_weights(Nn, Nf, limits, rng, graph)
+    base_instance_data[None]["alpha"] = {
+      (n+1, f+1): float(alpha[f]) for n in range(Nn) for f in range(Nf) 
+      # (n+1, f+1): float(alpha[n][f]) for n in range(Nn) for f in range(Nf) 
+    }
+    base_instance_data[None]["beta"] = {
+      (n1+1, n2+1, f+1): float(beta[n1,n2,f]) \
+        for n1 in range(Nn) \
+          for n2 in range(Nn) \
+            for f in range(Nf) 
+    }
+    base_instance_data[None]["gamma"] = {
+      (n+1, f+1): float(gamma[n,f]) for n in range(Nn) for f in range(Nf) 
+    }
+    base_instance_data[None]["delta"] = {
+      (n+1, f+1): float(delta[n,f]) for n in range(Nn) for f in range(Nf) 
+    }
+  # demand
+  if "demand" in limits:
+    demand = generate_demand(Nn, Nf, limits, rng)
+    demand_type = limits["demand"].get("type", "homogeneous")
+    base_instance_data[None]["demand"] = {
+      (n+1, f+1): float(
+        demand[f]
+      ) if demand_type == "homogeneous" else demand[
+        n,f
+      ] for n in range(Nn) for f in range(Nf)
+    }
+  # memory requirement
+  if "memory_requirement" in limits:
+    base_instance_data[None]["memory_requirement"] = {
+      f+1: generate_random_int(
+        rng, limits["memory_requirement"]
+      ) if "values" not in limits["memory_requirement"] else limits[
+        "memory_requirement"
+      ]["values"][f] for f in range(Nf)
+    }
+  # memory capacity
+  if "memory_capacity" in limits:
+    base_instance_data[None]["memory_capacity"] = {
+      n+1: generate_random_int(
+        rng, limits["memory_capacity"]
+      ) if "values" not in limits["memory_capacity"] else limits[
+        "memory_capacity"
+      ]["values"][n] for n in range(Nn)
+    }
+  # load limits
+  if "load" in limits and limits["load"]["trace_type"] == "load_existing":
+    load_limits[0] = {n: None for n in range(Nn)}
+    load_limits["load_existing"] = limits["load"]["path"]
+  return base_instance_data, load_limits, graph
 
 
 def generate_data(
@@ -24,7 +106,7 @@ def generate_data(
   data = {}
   if scenario == "random":
     data = random_instance_data(limits, rng)
-  elif scenario == "from_existing":
+  elif scenario == "load_existing":
     data = from_existing_instance(limits, rng)
   else:
     raise KeyError(f"Undefined scenario: {scenario}")
@@ -69,17 +151,7 @@ def generate_neighborhood(
     )
     neighborhood = adjacency_matrix(graph).toarray()
   # -- add network latency (if available)
-  if "edge_network_latency" in limits["weights"]:
-    for (u, v) in graph.edges():
-      graph.edges[u,v]["network_latency"] = generate_random_float(
-        rng, limits["weights"]["edge_network_latency"]
-      )
-      graph.edges[u,v]["edge_bandwidth"] = generate_random_int(
-        rng, limits["weights"]["edge_bandwidth"]
-      )
-  else:
-    for (u, v) in graph.edges():
-      graph.edges[u,v]["network_latency"] = 1.0
+  graph = add_network_latency(graph, limits, rng)
   return neighborhood, graph
 
 
@@ -186,7 +258,7 @@ def random_instance_data(
   Nn = rng.integers(limits["Nn"]["min"], limits["Nn"]["max"], endpoint = True)
   Nf = rng.integers(limits["Nf"]["min"], limits["Nf"]["max"], endpoint = True)
   # neighborhood
-  neighborhood, graph = generate_neighborhood(Nn, Nf, limits, rng)
+  neighborhood, graph = generate_neighborhood(Nn, limits, rng)
   # weights (different for each function, equal for all nodes)
   alpha, beta, gamma, delta = generate_weights(Nn, Nf, limits, rng, graph)
   # demand
