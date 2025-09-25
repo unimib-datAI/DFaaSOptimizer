@@ -339,7 +339,7 @@ def init_problem(
   # generate base instance data
   rng = np.random.default_rng(seed = seed)
   base_instance_data, load_limits, graph = generate_data(
-    "random", rng = rng, limits = limits
+    limits.get("instance_type", "random"), rng = rng, limits = limits
   )
   with open(
     os.path.join(solution_folder, "base_instance_data.json"), "w"
@@ -655,6 +655,6 @@ if __name__ == "__main__":
   config_file = args.config
   disable_plotting = args.disable_plotting
   # load configuration file
-  config = load_configuration("config.json")
+  config = load_configuration(config_file)
   # run
   run(config, disable_plotting = disable_plotting)
