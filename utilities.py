@@ -95,14 +95,22 @@ def int_keys_decoder(pairs: dict) -> dict:
   return {int(k): v for k, v in pairs}
 
 
-def load_base_instance(folder: str) -> dict:
+def load_base_instance(folder: str) -> Tuple[dict, dict]:
+  # base instance
   base_instance = {}
   with open(
     os.path.join(folder, "base_instance_data.json"), "r"
   ) as istream:
     data = json.load(istream)
     base_instance = restore_types(data)
-  return base_instance
+  # load limits
+  load_limits = {}
+  with open(
+    os.path.join(folder, "load_limits.json"), "r"
+  ) as istream:
+    data = json.load(istream)
+    load_limits = restore_types(data)
+  return base_instance, load_limits
 
 
 def load_configuration(config_file: str) -> dict:
@@ -140,7 +148,11 @@ def restore_types(serialized_dict: dict):
   """Restore the original types"""
   _dict = {}
   for key, value in serialized_dict.items():
-    new_key = ast.literal_eval(key)
+    new_key = key
+    try:
+      new_key = ast.literal_eval(key)
+    except ValueError:
+      pass
     if isinstance(value, dict):
       _dict[new_key] = restore_types(value)
     else:
