@@ -5,7 +5,7 @@ from load_generator import LoadGenerator
 from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
 from postprocessing import plot_history
 
-from networkx import from_numpy_array, draw_networkx, kamada_kawai_layout
+from networkx import draw_networkx, kamada_kawai_layout
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -334,7 +334,7 @@ def init_problem(
   ) -> Tuple[dict, dict, list]:
   # generate base instance data
   rng = np.random.default_rng(seed = seed)
-  base_instance_data, load_limits, neighborhood = generate_data(
+  base_instance_data, load_limits, graph = generate_data(
     "random", rng = rng, limits = limits
   )
   with open(
@@ -354,7 +354,6 @@ def init_problem(
     load_limits, max_steps, seed, trace_type, solution_folder
   )
   # draw graph
-  graph = from_numpy_array(neighborhood)
   draw_networkx(
     graph, 
     pos = kamada_kawai_layout(graph, weight = "network_latency"),
