@@ -100,14 +100,14 @@ def check_stopping_criteria(
       if odev >= tolerance:
         stop = False
         break
-  if not stop and len(current_sw_queue) >= current_sw_queue.maxlen:
-    last_sw = None
-    for sw in current_sw_queue:
-      if last_sw is not None and sw < last_sw:
-        stop = True
-        why_stopping = "SW starts decreasing"
-        break
-      last_sw = sw
+  #if not stop and len(current_sw_queue) >= current_sw_queue.maxlen:
+  #  last_sw = None
+  #  for sw in current_sw_queue:
+  #    if last_sw is not None and sw < last_sw:
+  #      stop = True
+  #      why_stopping = "SW starts decreasing"
+  #      break
+  #    last_sw = sw
   if not stop and len(sw_queue) >= sw_queue.maxlen:
     stop = True
     why_stopping = "SW deviation < tol"
@@ -139,10 +139,10 @@ def check_stopping_criteria(
         why_stopping = "no pi/dev improvements in the last iterations"
   # update psi if it is not time for stopping
   new_psi = psi
-  if not stop and len(sw_queue) == sw_queue.maxlen:
+  if not stop and len(current_sw_queue) == current_sw_queue.maxlen:
     last_sw = None
     discount_factor = 0.5
-    for sw in sw_queue:
+    for sw in current_sw_queue:
       if last_sw is not None:
         if sw < last_sw:
           discount_factor = 1
@@ -150,7 +150,7 @@ def check_stopping_criteria(
       last_sw = sw
     new_psi = psi * discount_factor
     if new_psi < psi:
-      sw_queue.clear()
+      current_sw_queue.clear()
   return stop, why_stopping, new_psi
 
 
@@ -680,7 +680,7 @@ def run(
     dev_queue = deque(maxlen = patience)
     sw_queue = deque(maxlen = patience)
     odev_queue = deque(maxlen = patience)
-    current_sw_queue = deque(maxlen = sw_patience)
+    current_sw_queue = deque(maxlen = patience)
     best_solution_so_far = None
     best_centralized_solution = None
     best_cost_so_far = np.inf
@@ -692,7 +692,7 @@ def run(
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it} (psi = {psi})", file = log_stream, flush = True)
-      # if t == 6:
+      # if it == 10:
       #   print("here")
       # extract optimal solution (if provided)
       if opt_solution is not None:
@@ -836,8 +836,7 @@ def run(
       spr_obj += rej_cost
       # update social welfare
       social_welfare = min(social_welfare, spr_obj)
-      sw_queue.append(social_welfare)
-      current_sw_queue.append(spr_obj)
+      current_sw_queue.append(social_welfare)
       obj_dict["LSPr"][it].append(spr_obj)
       if verbose > 1:
         print(
@@ -858,7 +857,7 @@ def run(
       # merge solutions and compute the centralized objective value
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt, 
-        sp_x, spr_sol[2], sp_rho,
+        spr_sol[0], spr_sol[2], spr_sol[3],
         rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
       )
       cobj = compute_centralized_objective(
@@ -866,6 +865,7 @@ def run(
       )
       # update best solution so far
       if spr_obj < best_cost_so_far:
+        sw_queue.append(social_welfare)
         best_cost_so_far = spr_obj
         best_solution_so_far = csol
         best_it_so_far = it
