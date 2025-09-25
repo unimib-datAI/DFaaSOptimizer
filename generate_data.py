@@ -1,7 +1,8 @@
 from utilities import generate_random_float, generate_random_int
 from utilities import load_base_instance
 
-from networkx import random_regular_graph, adjacency_matrix, from_numpy_array
+from networkx import random_regular_graph, adjacency_matrix
+from networkx import from_numpy_array, Graph
 from copy import deepcopy
 from typing import Tuple
 import numpy as np
@@ -51,7 +52,7 @@ def generate_demand(
 
 def generate_neighborhood(
     Nn: int, limits: dict, rng: np.random.Generator
-  ) -> Tuple:
+  ) -> Tuple[np.array, Graph]:
   neighborhood = np.zeros((Nn, Nn))
   graph = None
   if "p" in limits["neighborhood"]:
@@ -83,8 +84,8 @@ def generate_neighborhood(
 
 
 def generate_weights(
-    Nf: int, limits: dict, rng: np.random.Generator
-  ) -> Tuple[list, list, list, list]:
+    Nn: int, Nf: int, limits: dict, rng: np.random.Generator, graph: Graph
+  ) -> Tuple[list, np.array, np.array, np.array]:
   # weights (different for each function, equal for all nodes)
   alpha, beta, gamma, delta = [None] * 4
   if "initialization_time" not in limits["weights"]:
@@ -111,11 +112,11 @@ def generate_weights(
     delta = np.zeros((Nn,Nf))
     for n1 in range(Nn - 1):
       gamma[n1,:] = g
-      delta[n1,:] = g
+      delta[n1,:] = d
       for n2 in range(n1, Nn):
         beta[n1,n2,:] = b
     gamma[Nn-1,:] = g
-    delta[Nn-1,:] = g
+    delta[Nn-1,:] = d
   else:
     # -- local execution
     alpha = [
@@ -178,14 +179,16 @@ def update_data(data: dict, fixed_values: dict) -> dict:
   return updated_data
 
 
-def random_instance_data(limits: dict, rng: np.random.Generator) -> Tuple:
+def random_instance_data(
+    limits: dict, rng: np.random.Generator
+  ) -> Tuple[dict, dict, Graph]:
   # number of nodes and function classes
   Nn = rng.integers(limits["Nn"]["min"], limits["Nn"]["max"], endpoint = True)
   Nf = rng.integers(limits["Nf"]["min"], limits["Nf"]["max"], endpoint = True)
   # neighborhood
-  neighborhood = generate_neighborhood(Nn, Nf, limits, rng)
+  neighborhood, graph = generate_neighborhood(Nn, Nf, limits, rng)
   # weights (different for each function, equal for all nodes)
-  alpha, beta, gamma, delta = generate_weights(Nf, limits, rng)
+  alpha, beta, gamma, delta = generate_weights(Nn, Nf, limits, rng, graph)
   # demand
   demand = generate_demand(Nn, Nf, limits, rng)
   # data
