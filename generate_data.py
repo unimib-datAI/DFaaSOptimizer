@@ -1,10 +1,18 @@
 from utilities import generate_random_float, generate_random_int
 from utilities import load_base_instance
 
-from networkx import random_regular_graph, adjacency_matrix
+from networkx import random_regular_graph, adjacency_matrix, from_numpy_array
 from copy import deepcopy
 from typing import Tuple
 import numpy as np
+
+
+def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
+  # load data
+  base_instance_data = load_base_instance(limits["load_existing"])
+  # number of nodes and function classes (cannot be changed!)
+  Nn = base_instance_data[None]["Nn"][None]
+  Nf = base_instance_data[None]["Nf"][None]
 
 
 def generate_data(
@@ -22,34 +30,20 @@ def generate_data(
   return data
 
 
-def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
-  # load data
-  base_instance_data = load_base_instance(limits["load_existing"])
-  # number of nodes and function classes (cannot be changed!)
-  Nn = base_instance_data[None]["Nn"][None]
-  Nf = base_instance_data[None]["Nf"][None]
-
-
 def generate_demand(
     Nn: int, Nf: int, limits: dict, rng: np.random.Generator
   ) -> np.array:
   demand = []
   if "values" in limits["demand"] and len(limits["demand"]["values"]) == Nf:
     demand = np.array(limits["demand"]["values"])
-  elif limits["demand"]["type"] == "homogeneous":
+  elif limits["demand"].get("type", "homogeneous") == "homogeneous":
     demand = np.array([
-      generate_random_float(
-        rng,
-        limits["demand"]["min"], 
-        limits["demand"]["max"]
-      ) for _ in range(Nf)
+      generate_random_float(rng, limits["demand"]) for _ in range(Nf)
     ])
   else:
     demand = np.array([
       generate_random_float(
-        rng,
-        limits["demand"]["min"], 
-        limits["demand"]["max"], 
+        rng, limits["demand"] 
       ) for _ in range(Nn) for _ in range(Nf)
     ]).reshape((Nn,Nf))
   return demand
@@ -57,65 +51,123 @@ def generate_demand(
 
 def generate_neighborhood(
     Nn: int, limits: dict, rng: np.random.Generator
-  ) -> np.array:
+  ) -> Tuple:
   neighborhood = np.zeros((Nn, Nn))
+  graph = None
   if "p" in limits["neighborhood"]:
     for n1 in range(Nn):
       for n2 in range(n1+1,Nn):
         neighborhood[n1,n2] = rng.binomial(1, limits["neighborhood"]["p"])
         neighborhood[n2,n1] = neighborhood[n1,n2]
+    graph = from_numpy_array(neighborhood)
   elif "k" in limits["neighborhood"]:
     graph = random_regular_graph(
       d = limits["neighborhood"]["k"],
       n = Nn,
       seed = int(rng.integers(low = 0, high = 4850 * 4850 * 4850))
     )
-    # -- add network latency (if available)
-    if "network_latency" in limits["neighborhood"]:
-      for (u, v) in graph.edges():
-        graph.edges[u,v]["network_latency"] = generate_random_float(
-          rng, 
-          limits["neighborhood"]["network_latency"]["min"],
-          limits["neighborhood"]["network_latency"]["max"]
-        )
-    else:
-      for (u, v) in graph.edges():
-        graph.edges[u,v]["network_latency"] = 1.0
     neighborhood = adjacency_matrix(graph).toarray()
-  return neighborhood
+  # -- add network latency (if available)
+  if "edge_network_latency" in limits["weights"]:
+    for (u, v) in graph.edges():
+      graph.edges[u,v]["network_latency"] = generate_random_float(
+        rng, limits["weights"]["edge_network_latency"]
+      )
+      graph.edges[u,v]["edge_bandwidth"] = generate_random_int(
+        rng, limits["weights"]["edge_bandwidth"]
+      )
+  else:
+    for (u, v) in graph.edges():
+      graph.edges[u,v]["network_latency"] = 1.0
+  return neighborhood, graph
 
 
 def generate_weights(
     Nf: int, limits: dict, rng: np.random.Generator
   ) -> Tuple[list, list, list, list]:
-  alpha = [
-    generate_random_float(
-      rng,
-      limits.get("weights", {}).get("alpha", {}).get("min", 1.0),
-      limits.get("weights", {}).get("alpha", {}).get("max", 1.0)
-    ) for _ in range(Nf)
-  ]
-  beta = [
-    alpha[f] * generate_random_float(
-      rng,
-      limits.get("weights", {}).get("beta_multiplier", {}).get("min", 0.9),
-      limits.get("weights", {}).get("beta_multiplier", {}).get("max", 0.9)
-    ) for f in range(Nf)
-  ]
-  gamma = [
-    generate_random_float(
-      rng,
-      limits.get("weights", {}).get("gamma", {}).get("min", 0.4),
-      limits.get("weights", {}).get("gamma", {}).get("max", 0.4)
-    ) for _ in range(Nf)
-  ]
-  delta = [
-    beta[f] * generate_random_float(
-      rng,
-      limits.get("weights", {}).get("delta", {}).get("min", 1.0),
-      limits.get("weights", {}).get("delta", {}).get("max", 1.0)
-    ) for f in range(Nf)
-  ]
+  # weights (different for each function, equal for all nodes)
+  alpha, beta, gamma, delta = [None] * 4
+  if "initialization_time" not in limits["weights"]:
+    alpha = [
+      generate_random_float(rng, limits["weights"]["alpha"]) for _ in range(Nf)
+    ]
+    b = [
+      alpha[f] * generate_random_float(
+        rng, limits["weights"]["beta_multiplier"]
+      ) for f in range(Nf)
+    ]
+    g = [
+      generate_random_float(
+        rng, limits["weights"]["gamma"]
+      ) for _ in range(Nf)
+    ]
+    d = [
+      b[f] * generate_random_float(
+        rng, limits["weights"]["delta_multiplier"]
+      ) for f in range(Nf)
+    ]
+    beta = np.zeros((Nn,Nn,Nf))
+    gamma = np.zeros((Nn,Nf))
+    delta = np.zeros((Nn,Nf))
+    for n1 in range(Nn - 1):
+      gamma[n1,:] = g
+      delta[n1,:] = g
+      for n2 in range(n1, Nn):
+        beta[n1,n2,:] = b
+    gamma[Nn-1,:] = g
+    delta[Nn-1,:] = g
+  else:
+    # -- local execution
+    alpha = [
+      generate_random_float(
+        rng, limits["weights"]["initialization_time"]
+      ) for _ in range(Nf)
+    ]
+    min_price = min(alpha)
+    max_price = min_price
+    # -- network transfer time
+    data_size = [
+      generate_random_float(
+        rng, limits["weights"]["input_data"]
+      ) for _ in range(Nf)
+    ]
+    cloud_bandwidth = generate_random_int(
+      rng, limits["weights"]["cloud_bandwidth"]
+    )
+    beta = np.zeros((Nn,Nn,Nf))
+    gamma = np.zeros((Nn,Nf))
+    for n1 in range(Nn - 1):
+      for f in range(Nf):
+        gamma[n1,f] = generate_random_float(
+          rng, limits["weights"]["cloud_network_latency"]
+        ) + (
+          data_size[f] / cloud_bandwidth
+        )
+        for n2 in range(n1 + 1, Nn):
+          beta[n1,n2,f] = alpha[f] + graph.edges[n1,n2]["network_latency"] + (
+            data_size[f] / graph.edges[n1,n2]["edge_bandwidth"]
+          )
+          beta[n2,n1,f] = beta[n1,n2,f]
+          max_price = max(max_price, beta[n2,n1,f])
+    gamma[Nn - 1,f] = generate_random_float(
+      rng, limits["weights"]["cloud_network_latency"]
+    ) + (
+      data_size[f] / cloud_bandwidth
+    )
+    min_g = gamma.min()
+    max_g = gamma.max()
+    # -- normalize
+    alpha = [1 - ((a - min_price) / (max_price - min_price)) for a in alpha]
+    for n1 in range(Nn - 1):
+      for f in range(Nf):
+        gamma[n1,f] = (gamma[n1,f] - min_g) / (max_g - min_g)
+        for n2 in range(n1 + 1, Nn):
+          beta[n1,n2,f] = 1 - (
+            (beta[n1,n2,f] - min_price) / (max_price - min_price)
+          )
+          beta[n2,n1,f] = beta[n1,n2,f]
+    gamma[Nn - 1,f] = (gamma[Nn - 1,f] - min_g) / (max_g - min_g)
+    delta = beta.mean(axis = 1)
   return alpha, beta, gamma, delta
 
 
@@ -126,7 +178,7 @@ def update_data(data: dict, fixed_values: dict) -> dict:
   return updated_data
 
 
-def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
+def random_instance_data(limits: dict, rng: np.random.Generator) -> Tuple:
   # number of nodes and function classes
   Nn = rng.integers(limits["Nn"]["min"], limits["Nn"]["max"], endpoint = True)
   Nf = rng.integers(limits["Nf"]["min"], limits["Nf"]["max"], endpoint = True)
@@ -167,9 +219,7 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
     },
     "max_utilization": {
       f+1: generate_random_float(
-        rng,
-        limits["max_utilization"]["min"],
-        limits["max_utilization"]["max"]
+        rng, limits["max_utilization"]
       ) for f in range(Nf)
     },
     "alpha": {
@@ -177,16 +227,16 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
       # (n+1, f+1): float(alpha[n][f]) for n in range(Nn) for f in range(Nf) 
     },
     "beta": {
-      (n1+1, n2+1, f+1): float(beta[f]) \
+      (n1+1, n2+1, f+1): float(beta[n1,n2,f]) \
         for n1 in range(Nn) \
           for n2 in range(Nn) \
             for f in range(Nf) 
     },
     "gamma": {
-      (n+1, f+1): float(gamma[f]) for n in range(Nn) for f in range(Nf) 
+      (n+1, f+1): float(gamma[n,f]) for n in range(Nn) for f in range(Nf) 
     },
     "delta": {
-      (n+1, f+1): float(delta[f]) for n in range(Nn) for f in range(Nf) 
+      (n+1, f+1): float(delta[n,f]) for n in range(Nn) for f in range(Nf) 
     }
   }}
   # load limits
@@ -238,19 +288,9 @@ def random_instance_data(limits: dict, rng: np.random.Generator) -> dict:
     load_limits = {
       f: {
         n: {
-          "min": generate_random_float(
-            rng,
-            limits["load"]["min"]["min"], 
-            # (limits["load"]["min"] + limits["load"]["max"]) / 2, 
-            limits["load"]["min"]["max"]
-          ),
-          "max": generate_random_float(
-            rng,
-            limits["load"]["max"]["min"],
-            # (limits["load"]["min"] + limits["load"]["max"]) / 2 + 1, 
-            limits["load"]["max"]["max"]
-          )
+          "min": generate_random_float(rng, limits["load"]["min"]),
+          "max": generate_random_float(rng, limits["load"]["max"])
         } for n in range(Nn) 
       } for f in range(Nf)
     }
-  return data, load_limits, neighborhood
+  return data, load_limits, graph

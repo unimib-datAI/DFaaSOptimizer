@@ -42,11 +42,23 @@ def float_to_int(fval: float) -> int:
 
 
 def generate_random_float(
-    rng: np.random.Generator, low: float, high: float
+    rng: np.random.Generator, limits: dict
   ) -> float:
-  val = low
-  if high > low:
-    val = round(rng.uniform(low, high), 3)
+  val = 0
+  if "avg" in limits:
+    val = generate_truncated_normal(
+      rng, limits["avg"], limits["std"], limits["min"], limits["max"]
+    )
+  else:
+    if "min" in limits and "max" in limits:
+      if limits["max"] > limits["min"]:
+        val = round(rng.uniform(limits["min"], limits["max"]), 3)
+      else:
+        val = limits["min"]
+    elif "values_from" in limits:
+      val = rng.choice(limits["values_from"])
+    else:
+      raise ValueError("Missing values to define limits")
   return val
 
 
