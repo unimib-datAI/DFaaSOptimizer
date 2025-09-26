@@ -680,6 +680,7 @@ def run(
   log_on_file = True if base_config["verbose"] > 0 else False
   nodes = base_config["limits"]["Nn"]
   disable_plotting = not enable_plotting
+  from_instances = base_config["limits"].get("path", None)
   # generate list of experiments
   experiments_list = generate_experiments_list(nodes, seed, n_experiments)
   # load list of already-run experiments (if any)
@@ -691,6 +692,11 @@ def run(
         os.path.join(base_solution_folder, "experiments.json"), "r"
       ) as ist:
       solution_folders = json.load(ist)
+  # load list of previous instances (if required)
+  old_instance_paths = {}
+  if from_instances is not None:
+    with open(os.path.join(from_instances, "experiments.json"), "r") as ist:
+      old_instance_paths = json.load(ist)
   # loop over the experiments list
   for Nn, seed in tqdm(experiments_list):
     # check if the experiment is still to run
@@ -722,6 +728,26 @@ def run(
       config["limits"]["Nn"]["min"] = Nn
       config["limits"]["Nn"]["max"] = Nn
       config["seed"] = seed
+      # -- look for old instance path (if required)
+      if "experiments_list" in old_instance_paths:
+        try:
+          old_exp_idx = old_instance_paths["experiments_list"].index(
+            [Nn, seed]
+          )
+          old_exp_path = None
+          if "centralized" in old_instance_paths:
+            old_exp_path = old_instance_paths["centralized"][
+              old_exp_idx
+            ]
+          elif "sp-coord" in old_instance_paths:
+            old_exp_path = old_instance_paths["sp-coord"][
+              old_exp_idx
+            ]
+          config["limits"]["path"] = old_exp_path
+          if config["limits"]["load"]["trace_type"] == "load_existing":
+            config["limits"]["load"]["path"] = old_exp_path
+        except Exception:
+          pass
       # -- solve centralized model
       c_folder = None
       if run_c:
