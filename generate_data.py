@@ -75,22 +75,21 @@ def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
     }
   # memory requirement
   if "memory_requirement" in limits:
+    memory_requirement = generate_memory_requirement(Nf, limits, rng)
     base_instance_data[None]["memory_requirement"] = {
-      f+1: generate_random_int(
-        rng, limits["memory_requirement"]
-      ) if "values" not in limits["memory_requirement"] else limits[
-        "memory_requirement"
-      ]["values"][f] for f in range(Nf)
+      f+1: memory_requirement[f] for f in range(Nf)
     }
   # memory capacity
   if "memory_capacity" in limits:
-    base_instance_data[None]["memory_capacity"] = {
-      n+1: generate_random_int(
-        rng, limits["memory_capacity"]
-      ) if "values" not in limits["memory_capacity"] else limits[
-        "memory_capacity"
-      ]["values"][n] for n in range(Nn)
-    }
+    memory_capacity, speedup_factors = generate_memory_capacity(
+      Nn, limits, rng
+    )
+    base_instance_data[None]["memory_capacity"] = {}
+    for n in range(Nn):
+      base_instance_data[None]["memory_capacity"][n+1] = memory_capacity[n]
+      # -- correct demand according to the speedup factor
+      for f in range(Nf):
+        base_instance_data[None]["demand"][(n+1,f+1)] /= speedup_factors[n]
   # load limits
   if "load" in limits and limits["load"]["trace_type"] == "load_existing":
     load_limits[0] = {n: None for n in range(Nn)}
@@ -130,6 +129,46 @@ def generate_demand(
       ) for _ in range(Nn) for _ in range(Nf)
     ]).reshape((Nn,Nf))
   return demand
+
+
+def generate_memory_capacity(
+    Nn: int, limits: dict, rng: np.random.Generator
+  ) -> Tuple[list, list]:
+  memory_capacity = []
+  speedup_factors = []
+  if "repeated_values" in limits["memory_capacity"]:
+    for (nnodes, memory) in limits["memory_capacity"]["repeated_values"]:
+      memory_capacity += ([memory] * nnodes)
+      # -- check whether speedup factors are provided
+      if "speedup_factors" in limits["demand"]:
+        speedup_factors += (
+          [limits["demand"]["speedup_factors"][str(memory)]] * nnodes
+        )
+      else:
+        speedup_factors += ([1.0] * nnodes)
+  else:
+    memory_capacity = [
+      generate_random_int(
+        rng, limits["memory_capacity"]
+      ) if "values" not in limits["memory_capacity"] else limits[
+        "memory_capacity"
+      ]["values"][n] for n in range(Nn)
+    ]
+    speedup_factors = [1.0] * Nn
+  return memory_capacity, speedup_factors
+
+
+def generate_memory_requirement(
+    Nf: int, limits: dict, rng: np.random.Generator
+  ) -> list:
+  memory_requirement = [
+      generate_random_int(
+      rng, limits["memory_requirement"]
+    ) if "values" not in limits["memory_requirement"] else limits[
+      "memory_requirement"
+    ]["values"][f] for f in range(Nf)
+  ]
+  return memory_requirement
 
 
 def generate_neighborhood(
@@ -265,29 +304,26 @@ def random_instance_data(
   demand = generate_demand(Nn, Nf, limits, rng)
   # data
   demand_type = limits["demand"].get("type", "homogeneous")
+  # memory requirement
+  memory_requirement = generate_memory_requirement(Nf, limits, rng)
+  # memory capacity
+  memory_capacity, speedup_factors = generate_memory_capacity(Nn, limits, rng)
+  # build dictionary
   data = {None: {
     "Nn": {None: int(Nn)},
     "Nf": {None: int(Nf)},
     "demand": {
       (n+1, f+1): float(
-        demand[f]
+        demand[f] / speedup_factors[n]
       ) if demand_type == "homogeneous" else demand[
         n,f
-      ] for n in range(Nn) for f in range(Nf)
+      ] / speedup_factors[n] for n in range(Nn) for f in range(Nf)
     },
     "memory_requirement": {
-      f+1: generate_random_int(
-        rng, limits["memory_requirement"]
-      ) if "values" not in limits["memory_requirement"] else limits[
-        "memory_requirement"
-      ]["values"][f] for f in range(Nf)
+      f+1: memory_requirement[f] for f in range(Nf)
     },
     "memory_capacity": {
-      n+1: generate_random_int(
-        rng, limits["memory_capacity"]
-      ) if "values" not in limits["memory_capacity"] else limits[
-        "memory_capacity"
-      ]["values"][n] for n in range(Nn)
+      n+1: memory_capacity[n] for n in range(Nn)
     },
     "neighborhood": {
       (i+1, j+1): int(neighborhood[i,j]) for i in range(Nn) for j in range(Nn)
