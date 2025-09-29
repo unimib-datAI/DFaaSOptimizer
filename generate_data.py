@@ -137,7 +137,11 @@ def generate_memory_capacity(
   memory_capacity = []
   speedup_factors = []
   if "repeated_values" in limits["memory_capacity"]:
-    for (nnodes, memory) in limits["memory_capacity"]["repeated_values"]:
+    idx = 0
+    for (perc, memory) in limits["memory_capacity"]["repeated_values"]:
+      nnodes = int(perc * Nn)
+      if idx == len(limits["memory_capacity"]["repeated_values"] - 1):
+        nnodes = max(nnodes, Nn - len(memory_capacity))
       memory_capacity += ([memory] * nnodes)
       # -- check whether speedup factors are provided
       if "speedup_factors" in limits["demand"]:
@@ -146,6 +150,7 @@ def generate_memory_capacity(
         )
       else:
         speedup_factors += ([1.0] * nnodes)
+      idx += 1
   else:
     memory_capacity = [
       generate_random_int(
