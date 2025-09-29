@@ -41,7 +41,7 @@ def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
   else:
     neighborhood = np.zeros((Nn,Nn))
     for (n1, n2), p in base_instance_data[None]["neighborhood"].items():
-      neighborhood[n1,n2] = p
+      neighborhood[n1-1,n2-1] = p
     graph = add_network_latency(from_numpy_array(neighborhood), limits, rng)
   # weights
   if "weights" in limits:
