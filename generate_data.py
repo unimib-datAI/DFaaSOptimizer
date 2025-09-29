@@ -92,8 +92,18 @@ def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
         base_instance_data[None]["demand"][(n+1,f+1)] /= speedup_factors[n]
   # load limits
   if "load" in limits and limits["load"]["trace_type"] == "load_existing":
-    load_limits[0] = {n: None for n in range(Nn)}
+    load_limits = {f: {n: None for n in range(Nn)} for f in range(Nf)}
     load_limits["load_existing"] = limits["load"]["path"]
+    # -- add zeros if required
+    if "edge_exposed_fraction" in limits["load"]:
+      edge_exposed_fraction = limits["load"]["edge_exposed_fraction"]
+      nonzero = int(np.ceil(Nn * edge_exposed_fraction))
+      zero_load = np.array([1] * nonzero + [0] * (Nn - nonzero))
+      rng.shuffle(zero_load)
+      for f in range(Nf):
+        for n in range(Nn):
+          if zero_load[n]:
+            load_limits[f][n] = {"min": 0.0, "max": 0.0}
   return base_instance_data, load_limits, graph
 
 

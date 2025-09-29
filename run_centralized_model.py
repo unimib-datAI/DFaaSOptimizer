@@ -269,6 +269,12 @@ def generate_load_traces(
   input_requests_traces = {}
   if trace_type == "load_existing":
     input_requests_traces = load_requests_traces(limits["load_existing"])[0]
+    # impose zeros if required
+    for f in limits:
+      if f != "load_existing":
+        for n in limits[f]:
+          if limits[f][n] is not None:
+            input_requests_traces[f][n] = np.zeros((max_steps,))
   else:
     avgr = 100
     ampr = 50
