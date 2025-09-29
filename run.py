@@ -55,6 +55,11 @@ def parse_arguments() -> argparse.Namespace:
     action = "store_true"
   )
   parser.add_argument(
+    "--generate_only",
+    default = False,
+    action = "store_true"
+  )
+  parser.add_argument(
     "--postprocessing_list",
     default = False,
     action = "store_true"
@@ -672,6 +677,7 @@ def run(
     n_experiments: int, 
     run_centralized_only: bool,
     run_spcoord_only: bool,
+    generate_only: bool,
     fix_r: bool,
     sp_parallelism: int,
     enable_plotting: bool
@@ -705,23 +711,23 @@ def run(
     experiment_idx = None
     try:
       experiment_idx = solution_folders["experiments_list"].index([Nn, seed])
-      if not run_spcoord_only and ((
+      if not (run_spcoord_only or generate_only) and ((
           len(solution_folders["centralized"]) <= experiment_idx
         ) or (
           solution_folders["centralized"][experiment_idx] is None
         )):
         run_c = True
-      if not run_centralized_only and ((
+      if not (run_centralized_only or generate_only) and ((
           len(solution_folders["sp-coord"]) <= experiment_idx
         ) or (
           solution_folders["sp-coord"][experiment_idx] is None
         )):
         run_i = True
     except ValueError:
-      run_c = True if not run_spcoord_only else False
-      run_i = True if not run_centralized_only else False
+      run_c = True if not (run_spcoord_only or generate_only) else False
+      run_i = True if not (run_centralized_only or generate_only) else False
     # if the experiment is still to run...
-    if run_c or run_i:
+    if run_c or run_i or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       config["limits"]["Nn"].pop("values", None)
@@ -750,11 +756,12 @@ def run(
           pass
       # -- solve centralized model
       c_folder = None
-      if run_c:
+      if run_c or generate_only:
         c_folder = run_centralized(
           config, 
           log_on_file = log_on_file, 
-          disable_plotting = disable_plotting
+          disable_plotting = disable_plotting,
+          generate_only = generate_only
         )
         solution_folders["centralized"].append(c_folder)
       else:
@@ -790,6 +797,7 @@ if __name__ == "__main__":
   run_centralized_only = args.run_centralized_only
   run_spcoord_only = args.run_spcoord_only
   postprocessing_only = args.postprocessing_only
+  generate_only = args.generate_only
   postprocessing_list = args.postprocessing_list
   fix_r = args.fix_r
   sp_parallelism = args.sp_parallelism
@@ -809,6 +817,7 @@ if __name__ == "__main__":
       n_experiments, 
       run_centralized_only,
       run_spcoord_only,
+      generate_only,
       fix_r,
       sp_parallelism,
       enable_plotting

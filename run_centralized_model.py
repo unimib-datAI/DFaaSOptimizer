@@ -509,7 +509,10 @@ def update_3d_variables(
 
 
 def run(
-    config: dict, log_on_file: bool = False, disable_plotting: bool = False
+    config: dict, 
+    log_on_file: bool = False, 
+    disable_plotting: bool = False, 
+    generate_only: bool = False
   ):
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
@@ -543,110 +546,111 @@ def run(
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
   # run models
-  obj_dict = {}
-  tc_dict = {}
-  runtime_dict = {}
-  for M in models:
-    if verbose > 0:
-      print(f"### solving model {M.name}", file = log_stream, flush = True)
-    complete_solution = init_complete_solution()
-    obj_values = []
-    termination_conditions = []
-    runtimes = []
-    r = None
-    ub = (
-      max_run_time + run_time_step
-    ) if max_run_time == min_run_time else max_run_time
-    for t in range(min_run_time, ub, run_time_step):
+  if not generate_only:
+    obj_dict = {}
+    tc_dict = {}
+    runtime_dict = {}
+    for M in models:
       if verbose > 0:
-        print(f"  t = {t}", file = log_stream, flush = True)
-      # get current load
-      incoming_load = get_current_load(input_requests_traces, agents, t)
-      # update data
-      data = update_data(base_instance_data, {"incoming_load": incoming_load})
-      # solve
-      x, y, z, r, xi, omega, rho, U, obj, runtime, tc = solve_instance(
-        M, data, solver_name, solver_options
-      )
-      complete_solution = decode_solution(
-        x, y, z, r, xi, rho, U, complete_solution
-      )
-      obj_values.append(obj)
-      termination_conditions.append(tc)
-      runtimes.append(runtime)
-      # save checkpoint
-      if t % checkpoint_interval == 0 or t == max_steps - 1:
-        save_checkpoint(
-          complete_solution, os.path.join(solution_folder, M.name), t
+        print(f"### solving model {M.name}", file = log_stream, flush = True)
+      complete_solution = init_complete_solution()
+      obj_values = []
+      termination_conditions = []
+      runtimes = []
+      r = None
+      ub = (
+        max_run_time + run_time_step
+      ) if max_run_time == min_run_time else max_run_time
+      for t in range(min_run_time, ub, run_time_step):
+        if verbose > 0:
+          print(f"  t = {t}", file = log_stream, flush = True)
+        # get current load
+        incoming_load = get_current_load(input_requests_traces, agents, t)
+        # update data
+        data = update_data(base_instance_data, {"incoming_load": incoming_load})
+        # solve
+        x, y, z, r, xi, omega, rho, U, obj, runtime, tc = solve_instance(
+          M, data, solver_name, solver_options
         )
-      # plot (if needed)
-      if 0 < t < ub - 1 and t % plot_interval == 0:
-        solution, offloaded, detailed_fwd_solution = join_complete_solution(
-          complete_solution
+        complete_solution = decode_solution(
+          x, y, z, r, xi, rho, U, complete_solution
         )
-        if not disable_plotting and Nf <= 10 and Nn <= 10:
-          plot_folder = os.path.join(solution_folder, M.name, f"{t}_plot")
-          os.makedirs(plot_folder)
-          plot_history(
-            input_requests_traces, 
-            min_run_time, 
-            t, 
-            run_time_step, 
-            solution, 
-            complete_solution["utilization"], 
-            complete_solution["replicas"], 
-            offloaded,
-            obj_values,
-            os.path.join(plot_folder, f"{M.name}.png")
+        obj_values.append(obj)
+        termination_conditions.append(tc)
+        runtimes.append(runtime)
+        # save checkpoint
+        if t % checkpoint_interval == 0 or t == max_steps - 1:
+          save_checkpoint(
+            complete_solution, os.path.join(solution_folder, M.name), t
           )
-    obj_dict[M.name] = obj_values
-    tc_dict[M.name] = termination_conditions
-    runtime_dict[M.name] = runtimes
-    # join
-    solution, offloaded, detailed_fwd_solution = join_complete_solution(
-      complete_solution
-    )
-    # plot and save solution
-    if not disable_plotting and Nf <= 10 and Nn <= 10:
-      plot_history(
-        input_requests_traces, 
-        min_run_time, 
-        max_run_time, 
-        run_time_step, 
-        solution, 
-        complete_solution["utilization"], 
-        complete_solution["replicas"], 
-        offloaded,
-        obj_values,
-        os.path.join(solution_folder, f"{M.name}.png")
+        # plot (if needed)
+        if 0 < t < ub - 1 and t % plot_interval == 0:
+          solution, offloaded, detailed_fwd_solution = join_complete_solution(
+            complete_solution
+          )
+          if not disable_plotting and Nf <= 10 and Nn <= 10:
+            plot_folder = os.path.join(solution_folder, M.name, f"{t}_plot")
+            os.makedirs(plot_folder)
+            plot_history(
+              input_requests_traces, 
+              min_run_time, 
+              t, 
+              run_time_step, 
+              solution, 
+              complete_solution["utilization"], 
+              complete_solution["replicas"], 
+              offloaded,
+              obj_values,
+              os.path.join(plot_folder, f"{M.name}.png")
+            )
+      obj_dict[M.name] = obj_values
+      tc_dict[M.name] = termination_conditions
+      runtime_dict[M.name] = runtimes
+      # join
+      solution, offloaded, detailed_fwd_solution = join_complete_solution(
+        complete_solution
       )
-    save_solution(
-      solution,
-      offloaded,
-      complete_solution,
-      detailed_fwd_solution,
-      M.name,
-      solution_folder
+      # plot and save solution
+      if not disable_plotting and Nf <= 10 and Nn <= 10:
+        plot_history(
+          input_requests_traces, 
+          min_run_time, 
+          max_run_time, 
+          run_time_step, 
+          solution, 
+          complete_solution["utilization"], 
+          complete_solution["replicas"], 
+          offloaded,
+          obj_values,
+          os.path.join(solution_folder, f"{M.name}.png")
+        )
+      save_solution(
+        solution,
+        offloaded,
+        complete_solution,
+        detailed_fwd_solution,
+        M.name,
+        solution_folder
+      )
+    # save objective function values and models runtime
+    pd.DataFrame(obj_dict).to_csv(
+      os.path.join(solution_folder, "obj.csv"), index = False
     )
-  # save objective function values and models runtime
-  pd.DataFrame(obj_dict).to_csv(
-    os.path.join(solution_folder, "obj.csv"), index = False
-  )
-  pd.DataFrame(tc_dict).to_csv(
-    os.path.join(solution_folder, "termination_condition.csv"), index = False
-  )
-  pd.DataFrame(runtime_dict).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index = False
-  )
-  if verbose > 0:
-    print(
-      f"All solutions saved in: {solution_folder}", 
-      file = log_stream, 
-      flush = True
+    pd.DataFrame(tc_dict).to_csv(
+      os.path.join(solution_folder, "termination_condition.csv"), index = False
     )
-  # close log stream if needed
-  if log_on_file:
-    log_stream.close()
+    pd.DataFrame(runtime_dict).to_csv(
+      os.path.join(solution_folder, "runtime.csv"), index = False
+    )
+    if verbose > 0:
+      print(
+        f"All solutions saved in: {solution_folder}", 
+        file = log_stream, 
+        flush = True
+      )
+    # close log stream if needed
+    if log_on_file:
+      log_stream.close()
   return solution_folder
 
 
