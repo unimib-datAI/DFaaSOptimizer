@@ -138,7 +138,7 @@ class LoadGenerator:
             ])
         input_requests[agent] = requests
     elif trace_type == "fixed_sum":
-      total_workload = list(limits.values())[0]
+      total_workload = sum(list(limits.values()))/len(list(limits.values()))
       if isinstance(total_workload, dict):
         total_workload = total_workload["max"]
       input_requests = self._impose_system_workload(
