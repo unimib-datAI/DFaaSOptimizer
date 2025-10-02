@@ -7,7 +7,8 @@ from run_centralized_model import (
   extract_solution, 
   get_current_load, 
   join_complete_solution,
-  save_solution
+  save_solution,
+  save_checkpoint
 )
 from utilities import load_configuration
 from generate_data import update_data
@@ -965,6 +966,14 @@ def run(
           f"best centralized it: {best_centralized_it}; "
           f"total runtime: {total_runtime})"
         )
+        # save checkpoint
+        if t % checkpoint_interval == 0 or t == max_steps - 1:
+          save_checkpoint(
+            sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+          )
+          save_checkpoint(
+            spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+          )
     ee = datetime.now()
     if verbose > 0:
       print(
