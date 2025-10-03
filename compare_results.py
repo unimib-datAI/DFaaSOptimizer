@@ -208,7 +208,7 @@ def plot_by_Nn(
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
       fontsize = fontsize,
-      logy = True
+      # logy = True
     )
   )
   bplots[2] = (
@@ -239,11 +239,11 @@ def plot_by_Nn(
     fontsize = fontsize
   )
   # -- x
-  axs[1,0].set_xlabel(
+  axs[2,0].set_xlabel(
     "Number of agents",
     fontsize = fontsize
   )
-  axs[1,1].set_xlabel(
+  axs[2,1].set_xlabel(
     "Number of agents",
     fontsize = fontsize
   )
