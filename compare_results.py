@@ -18,9 +18,16 @@ def dev_plot_by_Nn(
     rej: pd.DataFrame, 
     plot_folder: str
   ):
-  f1, axs = plt.subplots(nrows = 3, ncols = 1, sharex = True, figsize = (8,18))
-  f2, ax2 = plt.subplots(nrows = 2, ncols = 1, sharex = True, figsize = (8,12))
+  f1, axs = plt.subplots(
+    nrows = 3, ncols = 1, sharex = True, figsize = (8,18), 
+    gridspec_kw = {"hspace": 0.01}
+  )
+  f2, ax2 = plt.subplots(
+    nrows = 2, ncols = 1, sharex = True, figsize = (8,12),
+    gridspec_kw = {"hspace": 0.01}
+  )
   bplots = [None] * 5
+  fontsize = 21
   bplots[0] = (
     "dev",
     obj[["Nn", "dev"]].plot.box(
@@ -31,7 +38,7 @@ def dev_plot_by_Nn(
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
-      fontsize = 14
+      fontsize = fontsize
     )
   )
   bplots[1] = (
@@ -44,7 +51,7 @@ def dev_plot_by_Nn(
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
-      fontsize = 14,
+      fontsize = fontsize,
       logy = True
     )
   )
@@ -58,7 +65,7 @@ def dev_plot_by_Nn(
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
-      fontsize = 14
+      fontsize = fontsize
     )
   )
   bplots[3] = (
@@ -71,7 +78,7 @@ def dev_plot_by_Nn(
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
-      fontsize = 14
+      fontsize = fontsize
     )
   )
   bplots[4] = (
@@ -84,7 +91,7 @@ def dev_plot_by_Nn(
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
-      fontsize = 14
+      fontsize = fontsize
     )
   )
   # horizontal lines (for reference)
@@ -110,37 +117,37 @@ def dev_plot_by_Nn(
   # -- y
   axs[0].set_ylabel(
     "Objective deviation\n((SP/coord - LMM) / LMM) [%]",
-    fontsize = 14
+    fontsize = fontsize
   )
   axs[0].set_title(None)
   axs[1].set_ylabel(
     "Runtime deviation\n(SP/coord / LMM) [x]",
-    fontsize = 14
+    fontsize = fontsize
   )
   axs[1].set_title(None)
   axs[2].set_ylabel(
-    "Rejections deviation\n(SP/coord - LMM) [%]",
-    fontsize = 14
+    "Cloud offloading deviation\n(SP/coord - LMM) [%]",
+    fontsize = fontsize
   )
   axs[2].set_title(None)
   ax2[0].set_ylabel(
     "Number of iterations",
-    fontsize = 14
+    fontsize = fontsize
   )
   ax2[0].set_title(None)
   ax2[1].set_ylabel(
     "Best iteration",
-    fontsize = 14
+    fontsize = fontsize
   )
   ax2[1].set_title(None)
   # -- x
   axs[2].set_xlabel(
     "Number of agents",
-    fontsize = 14
+    fontsize = fontsize
   )
   ax2[1].set_xlabel(
     "Number of agents",
-    fontsize = 14
+    fontsize = fontsize
   )
   # colors
   for (key, bplot) in bplots:
@@ -172,9 +179,11 @@ def plot_by_Nn(
     plot_folder: str
   ):
   _, axs = plt.subplots(
-    nrows = 3, ncols = 2, sharex = True, sharey = "row", figsize = (16,18)
+    nrows = 3, ncols = 2, sharex = True, sharey = "row", figsize = (16,18), 
+    gridspec_kw = {"hspace": 0.01, "wspace": 0.01}
   )
   bplots = [None] * 3
+  fontsize = 21
   bplots[0] = (
     ["LoadManagementModel", "SP/coord"],
     obj[["Nn", "LoadManagementModel", "SP/coord"]].plot.box(
@@ -185,7 +194,7 @@ def plot_by_Nn(
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
-      fontsize = 14
+      fontsize = fontsize
     )
   )
   bplots[1] = (
@@ -198,7 +207,8 @@ def plot_by_Nn(
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
-      fontsize = 14
+      fontsize = fontsize,
+      logy = True
     )
   )
   bplots[2] = (
@@ -211,42 +221,46 @@ def plot_by_Nn(
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
-      fontsize = 14
+      fontsize = fontsize
     )
   )
   # axis properties
   # -- y
   axs[0,0].set_ylabel(
     "Objective function value",
-    fontsize = 14
+    fontsize = fontsize
   )
-  # axs[0].set_title(None)
   axs[1,0].set_ylabel(
     "Runtime [s]",
-    fontsize = 14
+    fontsize = fontsize
   )
-  # axs[1].set_title(None)
   axs[2,0].set_ylabel(
-    "Percentage number of rejections [%]",
-    fontsize = 14
+    "Cloud offloading [%]",
+    fontsize = fontsize
   )
-  # axs[2].set_title(None)
   # -- x
-  axs[2,0].set_xlabel(
+  axs[1,0].set_xlabel(
     "Number of agents",
-    fontsize = 14
+    fontsize = fontsize
   )
-  axs[2,1].set_xlabel(
+  axs[1,1].set_xlabel(
     "Number of agents",
-    fontsize = 14
+    fontsize = fontsize
   )
+  # -- title
+  axs[0,0].set_title(None)
+  axs[0,1].set_title(None)
+  axs[1,0].set_title(None)
+  axs[1,1].set_title(None)
+  axs[2,0].set_title(None)
+  axs[2,1].set_title(None)
   # colors
   colors = [
     mcolors.CSS4_COLORS["lightgreen"],
     mcolors.CSS4_COLORS["lightpink"]
   ]
-  for (keys, bplot) in bplots:
-    for key, color in zip(keys, colors):
+  for ridx, (keys, bplot) in enumerate(bplots):
+    for cidx, (key, color) in enumerate(zip(keys, colors)):
       for patch in bplot[key]["boxes"]:
         patch.set_facecolor(color)
       for median in bplot[key]['medians']:
@@ -254,6 +268,9 @@ def plot_by_Nn(
       for mean in bplot[key]['means']:
         mean.set_markerfacecolor(mcolors.TABLEAU_COLORS["tab:red"])
         mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
+      # -- legend
+      if ridx == 0:
+        axs[0,cidx].legend([bplot[key]["boxes"][0]], [key], fontsize=fontsize)
   plt.savefig(
     os.path.join(plot_folder, "box_detailed.png"),
     dpi = 300,
@@ -263,5 +280,9 @@ def plot_by_Nn(
 
 
 if __name__ == "__main__":
-  postprocessing_folder = "solutions/homogeneous_demands/heterogeneous_memory_req/Nf_5-alpha_0.5_1.0-beta_0.5_0.95-p_1.0-greedy_product-maxit_50-pat_10/postprocessing"
-  compare_results(postprocessing_folder)
+  postprocessing_folders = [
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-spcoord_greedy"
+  ]
+  for postprocessing_folder in postprocessing_folders:
+    print(postprocessing_folder)
+    compare_results(os.path.join(postprocessing_folder, "postprocessing"))
