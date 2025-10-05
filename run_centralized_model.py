@@ -385,10 +385,11 @@ def init_problem(
   )
   # draw graph
   node_colors = [
-    mcolors.TABLEAU_COLORS["tab:red"] if load_limits[0][n]["max"] == 0.0 
-      else mcolors.CSS4_COLORS["lightskyblue"] for n in range(
-        len(load_limits[0])
-      )
+    mcolors.TABLEAU_COLORS["tab:red"] if (
+      input_requests_traces[0][n] == 0.0
+    ).all() else mcolors.CSS4_COLORS["lightskyblue"] for n in range(
+      len(load_limits[0])
+    )
   ]
   draw_networkx(
     graph, 
