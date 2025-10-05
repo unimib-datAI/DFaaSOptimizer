@@ -418,10 +418,12 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       rejs = all_rej_values[all_rej_values["Nn"] == Nn]
       rtvs = all_runtime_values[all_runtime_values["Nn"] == Nn]
       fig, axs = plt.subplots(
-        nrows = 2, ncols = 2, figsize = (12, 8), sharex = True
+        nrows = 2, ncols = 2, figsize = (12, 8), sharex = True,
+        gridspec_kw = {"hspace": 0.02}
       )
       fig2, axs2 = plt.subplots(
-        nrows = 1, ncols = 3, figsize = (18, 4), sharex = True
+        nrows = 1, ncols = 3, figsize = (18, 4), sharex = True,
+        gridspec_kw = {"hspace": 0.02}
       )
       for seed, obj in objs.groupby("seed"):
         rej = rejs[rejs["seed"] == seed]

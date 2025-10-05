@@ -361,7 +361,10 @@ def init_problem(
   draw_networkx(
     graph, 
     pos = kamada_kawai_layout(graph, weight = "network_latency"),
-    node_color = mcolors.CSS4_COLORS["lightskyblue"]
+    node_color = mcolors.CSS4_COLORS["lightskyblue"],
+    with_labels = False,
+    node_size = 30,
+    width = 0.1
   )
   plt.savefig(
     os.path.join(solution_folder, "graph.png"), 
