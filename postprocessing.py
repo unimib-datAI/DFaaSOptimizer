@@ -544,12 +544,12 @@ def runtime_obj_boxplot(
 
 
 if __name__ == "__main__":
-  base_solution_folder = "solutions/prova_RR_centralized2"
+  base_solution_folder = "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/2024_RussoRusso-0_10"
   models = [
     "LoadManagementModel"
     # "LSP"
   ]
-  plot_all_history = True
+  plot_all_history = False
   # solution_folder = base_solution_folder
   # process_results(solution_folder, models)
   # load results
