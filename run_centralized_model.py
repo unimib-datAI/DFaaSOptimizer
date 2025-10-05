@@ -384,10 +384,16 @@ def init_problem(
     load_limits, max_steps, seed, trace_type, solution_folder
   )
   # draw graph
+  node_colors = [
+    mcolors.TABLEAU_COLORS["tab:red"] if load_limits[0][n]["max"] == 0.0 
+      else mcolors.CSS4_COLORS["lightskyblue"] for n in range(
+        len(load_limits[0])
+      )
+  ]
   draw_networkx(
     graph, 
     pos = kamada_kawai_layout(graph, weight = "network_latency"),
-    node_color = mcolors.CSS4_COLORS["lightskyblue"],
+    node_color = node_colors,
     with_labels = False,
     node_size = 30,
     width = 0.1
