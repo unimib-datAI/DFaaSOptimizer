@@ -137,8 +137,14 @@ class LoadGenerator:
               round(rescale(r, in_min, in_max, minr, maxr), 3) for r in requests
             ])
         input_requests[agent] = requests
-    elif trace_type == "fixed_sum":
-      total_workload = sum(list(limits.values()))/len(list(limits.values()))
+    elif trace_type.startswith("fixed_sum"):
+      total_workload = 0.0
+      if trace_type == "fixed_sum":
+        total_workload = sum(list(limits.values()))/len(list(limits.values()))
+      else:
+        total_workload = min(list(limits.values())) if trace_type.endswith(
+          "min"
+        ) else max(list(limits.values()))
       if isinstance(total_workload, dict):
         total_workload = total_workload["max"]
       input_requests = self._impose_system_workload(

@@ -265,11 +265,16 @@ def generate_load_traces(
     # generate trace for all request classes
     input_requests_traces = {}
     for function, function_limits in limits.items():
+      new_trace_type = trace_type
+      if trace_type == "fixed_sum_minmax" and function%2 == 0: # min for even
+        new_trace_type = "fixed_sum_min"
+      elif trace_type == "fixed_sum_minmax" and function%2 != 0: # max for odd
+        new_trace_type = "fixed_sum_max"
       input_requests_traces[function] = LG.generate_traces(
         max_steps = max_steps, 
         limits = function_limits,
         rng = rng,
-        trace_type = trace_type #f"manual{function}"#
+        trace_type = new_trace_type #f"manual{function}"#
       )
       # plot trace (if required)
       if len(limits) <= 10 and len(function_limits) <= 10:
