@@ -1,10 +1,12 @@
 from pyomo.util.infeasible import log_infeasible_constraints
 from pyomo.opt.results import SolverStatus
 from pyomo.opt import TerminationCondition
+from pyomo.contrib.iis import write_iis
 import pyomo.environ as pyo
+
 from abc import ABC, abstractmethod
 from datetime import datetime
-import logging
+
 
 PYO_VAR_TYPE = pyo.NonNegativeReals
 PYO_PARAM_TYPE = pyo.NonNegativeReals
@@ -66,7 +68,7 @@ class BaseAbstractModel():
       # get objective function value
       solution["obj"] = pyo.value(instance.OBJ)
     else:
-      instance.pprint()
+      _ = write_iis(instance, "infeas.ilp", "gurobi")
     return solution
 
 
