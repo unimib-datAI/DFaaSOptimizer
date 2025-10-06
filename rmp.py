@@ -146,7 +146,7 @@ class LRMP(RMPAbstractModel):
   def residual_capacity(model, n):
     return sum(
       model.r[n,f] * model.memory_requirement[f] for f in model.F
-    ) == model.memory_capacity[n] - sum(
+    ) <= model.memory_capacity[n] - sum(
       model.r_bar[n,f] * model.memory_requirement[f] for f in model.F
     )
   
