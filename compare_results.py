@@ -8,14 +8,20 @@ def compare_results(postprocessing_folder: str):
   obj = pd.read_csv(os.path.join(postprocessing_folder, "obj.csv"))
   rej = pd.read_csv(os.path.join(postprocessing_folder, "rejections.csv"))
   runtime = pd.read_csv(os.path.join(postprocessing_folder, "runtime.csv"))
-  dev_plot_by_Nn(obj, runtime, rej, postprocessing_folder)
-  plot_by_Nn(obj, runtime, rej, postprocessing_folder)
+  dev_plot_by_key(
+    obj, runtime, rej, "Nn", "Number of agents", postprocessing_folder
+  )
+  plot_by_key(
+    obj, runtime, rej, "Nn", "Number of agents", postprocessing_folder
+  )
 
 
-def dev_plot_by_Nn(
+def dev_plot_by_key(
     obj: pd.DataFrame, 
     runtime: pd.DataFrame, 
     rej: pd.DataFrame, 
+    key: str,
+    label: str,
     plot_folder: str
   ):
   f1, axs = plt.subplots(
@@ -30,8 +36,8 @@ def dev_plot_by_Nn(
   fontsize = 21
   bplots[0] = (
     "dev",
-    obj[["Nn", "dev"]].plot.box(
-      by = "Nn",
+    obj[[key, "dev"]].plot.box(
+      by = key,
       grid = True,
       ax = axs[0],
       showmeans = True,
@@ -43,8 +49,8 @@ def dev_plot_by_Nn(
   )
   bplots[1] = (
     "dev",
-    runtime[["Nn", "dev"]].plot.box(
-      by = "Nn",
+    runtime[[key, "dev"]].plot.box(
+      by = key,
       grid = True,
       ax = axs[1],
       showmeans = True,
@@ -57,8 +63,8 @@ def dev_plot_by_Nn(
   )
   bplots[2] = (
     "dev",
-    rej[["Nn", "dev"]].plot.box(
-      by = "Nn",
+    rej[[key, "dev"]].plot.box(
+      by = key,
       grid = True,
       ax = axs[2],
       showmeans = True,
@@ -70,8 +76,8 @@ def dev_plot_by_Nn(
   )
   bplots[3] = (
     "iteration",
-    runtime[["Nn", "iteration"]].plot.box(
-      by = "Nn",
+    runtime[[key, "iteration"]].plot.box(
+      by = key,
       grid = True,
       ax = ax2[0],
       showmeans = True,
@@ -83,8 +89,8 @@ def dev_plot_by_Nn(
   )
   bplots[4] = (
     "best_iteration",
-    runtime[["Nn", "best_iteration"]].plot.box(
-      by = "Nn",
+    runtime[[key, "best_iteration"]].plot.box(
+      by = key,
       grid = True,
       ax = ax2[1],
       showmeans = True,
@@ -142,11 +148,11 @@ def dev_plot_by_Nn(
   ax2[1].set_title(None)
   # -- x
   axs[2].set_xlabel(
-    "Number of agents",
+    label,
     fontsize = fontsize
   )
   ax2[1].set_xlabel(
-    "Number of agents",
+    label,
     fontsize = fontsize
   )
   # colors
@@ -172,10 +178,12 @@ def dev_plot_by_Nn(
   )
 
 
-def plot_by_Nn(
+def plot_by_key(
     obj: pd.DataFrame, 
     runtime: pd.DataFrame, 
     rej: pd.DataFrame, 
+    key: str,
+    label: str,
     plot_folder: str
   ):
   _, axs = plt.subplots(
@@ -186,8 +194,8 @@ def plot_by_Nn(
   fontsize = 21
   bplots[0] = (
     ["LoadManagementModel", "SP/coord"],
-    obj[["Nn", "LoadManagementModel", "SP/coord"]].plot.box(
-      by = "Nn",
+    obj[[key, "LoadManagementModel", "SP/coord"]].plot.box(
+      by = key,
       grid = True,
       ax = axs[0,:],
       showmeans = True,
@@ -199,8 +207,8 @@ def plot_by_Nn(
   )
   bplots[1] = (
     ["LoadManagementModel", "SP/coord"],
-    runtime[["Nn", "LoadManagementModel", "SP/coord"]].plot.box(
-      by = "Nn",
+    runtime[[key, "LoadManagementModel", "SP/coord"]].plot.box(
+      by = key,
       grid = True,
       ax = axs[1,:],
       showmeans = True,
@@ -213,8 +221,8 @@ def plot_by_Nn(
   )
   bplots[2] = (
     ["LoadManagementModel", "SP/coord"],
-    rej[["Nn", "LoadManagementModel", "SP/coord"]].plot.box(
-      by = "Nn",
+    rej[[key, "LoadManagementModel", "SP/coord"]].plot.box(
+      by = key,
       grid = True,
       ax = axs[2,:],
       showmeans = True,
@@ -240,11 +248,11 @@ def plot_by_Nn(
   )
   # -- x
   axs[2,0].set_xlabel(
-    "Number of agents",
+    label,
     fontsize = fontsize
   )
   axs[2,1].set_xlabel(
-    "Number of agents",
+    label,
     fontsize = fontsize
   )
   # -- title
@@ -281,7 +289,7 @@ def plot_by_Nn(
 
 if __name__ == "__main__":
   postprocessing_folders = [
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-spcoord_greedy"
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingK/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_3-spcoord_greedy"
   ]
   for postprocessing_folder in postprocessing_folders:
     print(postprocessing_folder)
