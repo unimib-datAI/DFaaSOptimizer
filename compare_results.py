@@ -1,7 +1,41 @@
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
+from parse import parse
 import pandas as pd
 import os
+
+
+def compare_across_folders(
+    postprocessing_folders: list, 
+    str_format: str, 
+    key_label: str,
+    plot_folder: str
+  ):
+  all_obj = pd.DataFrame()
+  all_rej = pd.DataFrame()
+  all_runtime = pd.DataFrame()
+  for postprocessing_folder in postprocessing_folders:
+    print(postprocessing_folder)
+    obj, rej, runtime = compare_results(
+      os.path.join(postprocessing_folder, "postprocessing")
+    )
+    key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
+    # add info
+    obj[key] = float(key_val)
+    rej[key] = float(key_val)
+    runtime[key] = float(key_val)
+    # merge
+    all_obj = pd.concat([all_obj, obj])
+    all_rej = pd.concat([all_rej, rej])
+    all_runtime = pd.concat([all_runtime, runtime])
+  # plot
+  os.makedirs(plot_folder, exist_ok = True)
+  dev_plot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
+  plot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
+  # save
+  all_obj.to_csv(os.path.join(plot_folder, "obj.csv"))
+  all_rej.to_csv(os.path.join(plot_folder, "rejections.csv"))
+  all_runtime.to_csv(os.path.join(plot_folder, "runtime.csv"))
 
 
 def compare_results(postprocessing_folder: str):
@@ -14,6 +48,7 @@ def compare_results(postprocessing_folder: str):
   plot_by_key(
     obj, runtime, rej, "Nn", "Number of agents", postprocessing_folder
   )
+  return obj, rej, runtime
 
 
 def dev_plot_by_key(
@@ -176,6 +211,7 @@ def dev_plot_by_key(
     format = "png",
     bbox_inches = "tight"
   )
+  plt.close()
 
 
 def plot_by_key(
@@ -285,12 +321,22 @@ def plot_by_key(
     format = "png",
     bbox_inches = "tight"
   )
+  plt.close()
 
 
 if __name__ == "__main__":
   postprocessing_folders = [
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingK/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_3-spcoord_greedy"
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-eef_0.1-spcoord_greedy",
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-eef_0.25-spcoord_greedy",
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-eef_0.5-spcoord_greedy",
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-eef_0.75-spcoord_greedy"
   ]
-  for postprocessing_folder in postprocessing_folders:
-    print(postprocessing_folder)
-    compare_results(os.path.join(postprocessing_folder, "postprocessing"))
+  # for postprocessing_folder in postprocessing_folders:
+  #   print(postprocessing_folder)
+  #   compare_results(os.path.join(postprocessing_folder, "postprocessing"))
+  compare_across_folders(
+    postprocessing_folders, 
+    "024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-{}_{}-spcoord_greedy",
+    "Edge-exposed fraction",
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/postprocessing_by_eef-spcoord_greedy"
+  )
