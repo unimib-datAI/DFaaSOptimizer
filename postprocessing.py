@@ -512,7 +512,7 @@ def runtime_obj_boxplot(
     bplot = mdata.plot.box(
       column = colname, 
       by = "Nn",
-      logy = True,
+      logy = True if colname == "runtime" else False,
       grid = True,
       showmeans = True,
       return_type = "dict",
@@ -544,7 +544,7 @@ def runtime_obj_boxplot(
 
 
 if __name__ == "__main__":
-  base_solution_folder = "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/2024_RussoRusso-0_10"
+  base_solution_folder = "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_TL_30"
   models = [
     "LoadManagementModel"
     # "LSP"
@@ -686,7 +686,13 @@ if __name__ == "__main__":
       runtime_obj_boxplot(
         all_runtimes, "runtime", base_postprocessing_folder, "runtime_box"
       )
+      all_runtimes.to_csv(
+        os.path.join(base_postprocessing_folder, "runtime.csv"), index = False
+      )
     if len(all_obj) > 0:
       runtime_obj_boxplot(
         all_obj, "obj", base_postprocessing_folder, "obj_box"
+      )
+      all_obj.to_csv(
+        os.path.join(base_postprocessing_folder, "obj.csv"), index = False
       )
