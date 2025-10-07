@@ -214,26 +214,27 @@ def plot_global_count(
         else:
           plt.show()
     else:
-      all_models_count_by_key["tot"].plot.bar(
-        rot = 0, logy = logy
-      )
-      if len(all_models_count_by_key["tot"]) <= 10:
-        plt.grid(True, which = "both", axis = "both")
-      else:
-        plt.grid(True, which = "both", axis = "y")
-      plt.title(f"{title} {key}")
-      if plot_folder is not None:
-        plt.savefig(
-          os.path.join(
-            plot_folder, f"{title}-{key}-tot.png"
-          ),
-          dpi = 300,
-          format = "png",
-          bbox_inches = "tight"
+      if "tot" in all_models_count_by_key:
+        all_models_count_by_key["tot"].plot.bar(
+          rot = 0, logy = logy
         )
-        plt.close()
-      else:
-        plt.show()
+        if len(all_models_count_by_key["tot"]) <= 10:
+          plt.grid(True, which = "both", axis = "both")
+        else:
+          plt.grid(True, which = "both", axis = "y")
+        plt.title(f"{title} {key}")
+        if plot_folder is not None:
+          plt.savefig(
+            os.path.join(
+              plot_folder, f"{title}-{key}-tot.png"
+            ),
+            dpi = 300,
+            format = "png",
+            bbox_inches = "tight"
+          )
+          plt.close()
+        else:
+          plt.show()
 
 def plot_history(
     input_requests_traces: dict, 
@@ -354,46 +355,47 @@ def process_results(
   os.makedirs(plot_folder, exist_ok = True)
   #
   for key in all_models_local_count:
-    model = all_models_local_count[key]["tot"].columns[0]
-    tot_load = (
-      all_models_local_count[key]["tot"] + 
-      all_models_fwd_count[key]["tot"] + 
-      all_models_rej_count[key]["tot"]
-    )
-    amlc = (
-      all_models_local_count[key]["tot"] / tot_load
-    ).rename(columns={model: "ratio"})
-    amfc = (
-      all_models_fwd_count[key]["tot"] / tot_load
-    ).rename(columns={model: "ratio"})
-    amrc = (
-      all_models_rej_count[key]["tot"] / tot_load
-    ).rename(columns={model: "ratio"})
-    all_tot = amlc.join(amfc, lsuffix = "_loc", rsuffix = "_fwd").join(amrc)
-    ax = all_tot.plot.bar(
-      rot = 0,
-      stacked = True
-    )
-    (amlc + amfc).rename(columns={"ratio": "PROCESSED"}).plot(
-      ax = ax,
-      color = mcolors.TABLEAU_COLORS["tab:red"],
-      linewidth = 2
-    )
-    if len(all_tot) <= 10:
-      plt.grid(True, axis = "both")
-    else:
-      plt.grid(True, axis = "y")
-    plt.ylim((0,1.05))
-    # plt.title(key)
-    plt.savefig(
-      os.path.join(
-        plot_folder, f"{key}-ALL.png"
-      ),
-      dpi = 300,
-      format = "png",
-      bbox_inches = "tight"
-    )
-    plt.close()
+    if len(all_models_local_count[key]) > 0:
+      model = all_models_local_count[key]["tot"].columns[0]
+      tot_load = (
+        all_models_local_count[key]["tot"] + 
+        all_models_fwd_count[key]["tot"] + 
+        all_models_rej_count[key]["tot"]
+      )
+      amlc = (
+        all_models_local_count[key]["tot"] / tot_load
+      ).rename(columns={model: "ratio"})
+      amfc = (
+        all_models_fwd_count[key]["tot"] / tot_load
+      ).rename(columns={model: "ratio"})
+      amrc = (
+        all_models_rej_count[key]["tot"] / tot_load
+      ).rename(columns={model: "ratio"})
+      all_tot = amlc.join(amfc, lsuffix = "_loc", rsuffix = "_fwd").join(amrc)
+      ax = all_tot.plot.bar(
+        rot = 0,
+        stacked = True
+      )
+      (amlc + amfc).rename(columns={"ratio": "PROCESSED"}).plot(
+        ax = ax,
+        color = mcolors.TABLEAU_COLORS["tab:red"],
+        linewidth = 2
+      )
+      if len(all_tot) <= 10:
+        plt.grid(True, axis = "both")
+      else:
+        plt.grid(True, axis = "y")
+      plt.ylim((0,1.05))
+      # plt.title(key)
+      plt.savefig(
+        os.path.join(
+          plot_folder, f"{key}-ALL.png"
+        ),
+        dpi = 300,
+        format = "png",
+        bbox_inches = "tight"
+      )
+      plt.close()
   # requests
   plot_global_count(
     all_models_local_count, 
@@ -544,7 +546,7 @@ def runtime_obj_boxplot(
 
 
 if __name__ == "__main__":
-  base_solution_folder = "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_TL_30"
+  base_solution_folder = "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_TL_120"
   models = [
     "LoadManagementModel"
     # "LSP"
