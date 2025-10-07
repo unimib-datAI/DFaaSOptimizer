@@ -31,7 +31,15 @@ def compare_across_folders(
   # plot
   os.makedirs(plot_folder, exist_ok = True)
   dev_plot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
-  plot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
+  plot_by_key(
+    all_obj, 
+    all_runtime, 
+    all_rej, 
+    ["LoadManagementModel", "SP/coord"],
+    key, 
+    key_label, 
+    plot_folder
+  )
   # save
   all_obj.to_csv(os.path.join(plot_folder, "obj.csv"))
   all_rej.to_csv(os.path.join(plot_folder, "rejections.csv"))
@@ -46,9 +54,93 @@ def compare_results(postprocessing_folder: str):
     obj, runtime, rej, "Nn", "Number of agents", postprocessing_folder
   )
   plot_by_key(
-    obj, runtime, rej, "Nn", "Number of agents", postprocessing_folder
+    obj, 
+    runtime, 
+    rej, 
+    ["LoadManagementModel", "SP/coord"],
+    "Nn", 
+    "Number of agents", 
+    postprocessing_folder
   )
   return obj, rej, runtime
+
+
+def compare_single_model(
+    postprocessing_folders: list, 
+    str_format: str, 
+    key_label: str,
+    plot_folder: str,
+    baseline = None
+  ):
+  all_obj = pd.DataFrame()
+  all_runtime = pd.DataFrame()
+  for postprocessing_folder in postprocessing_folders:
+    print(postprocessing_folder)
+    obj = pd.read_csv(
+      os.path.join(postprocessing_folder, "postprocessing", "obj.csv")
+    )
+    obj.rename(columns = {"obj": "LoadManagementModel"}, inplace = True)
+    runtime = pd.read_csv(
+      os.path.join(postprocessing_folder, "postprocessing", "runtime.csv")
+    )
+    runtime.rename(columns= {"runtime": "LoadManagementModel"}, inplace = True)
+    key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
+    # add info
+    obj[key] = float(key_val)
+    runtime[key] = float(key_val)
+    # merge
+    all_obj = pd.concat([all_obj, obj])
+    all_runtime = pd.concat([all_runtime, runtime])
+  # plot
+  os.makedirs(plot_folder, exist_ok = True)
+  plot_by_key(
+    all_obj, 
+    all_runtime, 
+    None,
+    ["LoadManagementModel"],
+    key, 
+    key_label, 
+    plot_folder
+  )
+  # save
+  all_obj.to_csv(os.path.join(plot_folder, "obj.csv"))
+  all_runtime.to_csv(os.path.join(plot_folder, "runtime.csv"))
+  # compute deviation (if a baseline is provided)
+  if baseline is not None:
+    obj_dev = pd.DataFrame()
+    runtime_dev = pd.DataFrame()
+    bo = all_obj[all_obj[key] == baseline]
+    br = all_runtime[all_runtime[key] == baseline]
+    for key_val, key_data in all_obj.groupby(key):
+      if key_val != baseline:
+        # -- obj
+        dev = bo.join(
+          key_data.set_index(["Nn", "seed", "time"]), 
+          on = ["Nn", "seed", "time"], 
+          lsuffix = "_baseline"
+        )
+        df = dev[["Nn", "seed", "time"]].copy(deep = True)
+        df["dev"] = (
+          dev["LoadManagementModel"].values - 
+            dev["LoadManagementModel_baseline"].values
+        ) / dev["LoadManagementModel"].values * 100
+        df[key] = key_val
+        obj_dev = pd.concat([obj_dev, df], ignore_index = True)
+        # -- runtime
+        rt = all_runtime[all_runtime[key] == key_val]
+        rt_dev = br.join(
+          rt.set_index(["Nn", "seed", "time"]), 
+          on = ["Nn", "seed", "time"], 
+          lsuffix = "_baseline"
+        )
+        df = rt_dev[["Nn", "seed", "time"]].copy(deep = True)
+        df["dev"] = (
+          rt_dev["LoadManagementModel"].values / 
+            rt_dev["LoadManagementModel_baseline"].values
+        )
+        df[key] = key_val
+        runtime_dev = pd.concat([runtime_dev, df], ignore_index = True)
+    dev_plot_by_key(obj_dev, runtime_dev, None, key, key_label, plot_folder)
 
 
 def dev_plot_by_key(
@@ -59,15 +151,13 @@ def dev_plot_by_key(
     label: str,
     plot_folder: str
   ):
+  nrows = 3 if rej is not None else 2
   f1, axs = plt.subplots(
-    nrows = 3, ncols = 1, sharex = True, figsize = (8,18), 
+    nrows = nrows, ncols = 1, sharex = True, figsize = (8,6 * nrows), 
     gridspec_kw = {"hspace": 0.01}
   )
-  f2, ax2 = plt.subplots(
-    nrows = 2, ncols = 1, sharex = True, figsize = (8,12),
-    gridspec_kw = {"hspace": 0.01}
-  )
-  bplots = [None] * 5
+  f2 = None
+  bplots = [None] * nrows
   fontsize = 21
   bplots[0] = (
     "dev",
@@ -96,45 +186,6 @@ def dev_plot_by_key(
       logy = True
     )
   )
-  bplots[2] = (
-    "dev",
-    rej[[key, "dev"]].plot.box(
-      by = key,
-      grid = True,
-      ax = axs[2],
-      showmeans = True,
-      patch_artist = True,
-      meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-      return_type = "dict",
-      fontsize = fontsize
-    )
-  )
-  bplots[3] = (
-    "iteration",
-    runtime[[key, "iteration"]].plot.box(
-      by = key,
-      grid = True,
-      ax = ax2[0],
-      showmeans = True,
-      patch_artist = True,
-      meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-      return_type = "dict",
-      fontsize = fontsize
-    )
-  )
-  bplots[4] = (
-    "best_iteration",
-    runtime[[key, "best_iteration"]].plot.box(
-      by = key,
-      grid = True,
-      ax = ax2[1],
-      showmeans = True,
-      patch_artist = True,
-      meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-      return_type = "dict",
-      fontsize = fontsize
-    )
-  )
   # horizontal lines (for reference)
   axs[0].axhline(
     y = 0,
@@ -144,12 +195,6 @@ def dev_plot_by_key(
   )
   axs[1].axhline(
     y = 1,
-    linestyle = "dashed",
-    linewidth = 2,
-    color = "k"
-  )
-  axs[2].axhline(
-    y = 0,
     linestyle = "dashed",
     linewidth = 2,
     color = "k"
@@ -166,30 +211,85 @@ def dev_plot_by_key(
     fontsize = fontsize
   )
   axs[1].set_title(None)
-  axs[2].set_ylabel(
-    "Cloud offloading deviation\n(SP/coord - LMM) [%]",
-    fontsize = fontsize
-  )
-  axs[2].set_title(None)
-  ax2[0].set_ylabel(
-    "Number of iterations",
-    fontsize = fontsize
-  )
-  ax2[0].set_title(None)
-  ax2[1].set_ylabel(
-    "Best iteration",
-    fontsize = fontsize
-  )
-  ax2[1].set_title(None)
+  if rej is not None:
+    bplots[2] = (
+      "dev",
+      rej[[key, "dev"]].plot.box(
+        by = key,
+        grid = True,
+        ax = axs[2],
+        showmeans = True,
+        patch_artist = True,
+        meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+        return_type = "dict",
+        fontsize = fontsize
+      )
+    )
+    axs[2].axhline(
+      y = 0,
+      linestyle = "dashed",
+      linewidth = 2,
+      color = "k"
+    )
+    axs[2].set_ylabel(
+      "Cloud offloading deviation\n(SP/coord - LMM) [%]",
+      fontsize = fontsize
+    )
+    axs[2].set_title(None)
   # -- x
-  axs[2].set_xlabel(
+  axs[-1].set_xlabel(
     label,
     fontsize = fontsize
   )
-  ax2[1].set_xlabel(
-    label,
-    fontsize = fontsize
-  )
+  if "iteration" in runtime and "best_iteration" in runtime:
+    f2, ax2 = plt.subplots(
+      nrows = 2, ncols = 1, sharex = True, figsize = (8,12),
+      gridspec_kw = {"hspace": 0.01}
+    )
+    bplots += [None, None]
+    bplots[3] = (
+      "iteration",
+      runtime[[key, "iteration"]].plot.box(
+        by = key,
+        grid = True,
+        ax = ax2[0],
+        showmeans = True,
+        patch_artist = True,
+        meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+        return_type = "dict",
+        fontsize = fontsize
+      )
+    )
+    bplots[4] = (
+      "best_iteration",
+      runtime[[key, "best_iteration"]].plot.box(
+        by = key,
+        grid = True,
+        ax = ax2[1],
+        showmeans = True,
+        patch_artist = True,
+        meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+        return_type = "dict",
+        fontsize = fontsize
+      )
+    )
+    # axis properties
+    # -- y
+    ax2[0].set_ylabel(
+      "Number of iterations",
+      fontsize = fontsize
+    )
+    ax2[0].set_title(None)
+    ax2[1].set_ylabel(
+      "Best iteration",
+      fontsize = fontsize
+    )
+    ax2[1].set_title(None)
+    # -- x
+    ax2[1].set_xlabel(
+      label,
+      fontsize = fontsize
+    )
   # colors
   for (key, bplot) in bplots:
     for patch in bplot[key]["boxes"]:
@@ -205,12 +305,13 @@ def dev_plot_by_key(
     format = "png",
     bbox_inches = "tight"
   )
-  f2.savefig(
-    os.path.join(plot_folder, "box_iterations.png"),
-    dpi = 300,
-    format = "png",
-    bbox_inches = "tight"
-  )
+  if f2 is not None:
+    f2.savefig(
+      os.path.join(plot_folder, "box_iterations.png"),
+      dpi = 300,
+      format = "png",
+      bbox_inches = "tight"
+    )
   plt.close()
 
 
@@ -218,22 +319,29 @@ def plot_by_key(
     obj: pd.DataFrame, 
     runtime: pd.DataFrame, 
     rej: pd.DataFrame, 
+    models: list,
     key: str,
     label: str,
     plot_folder: str
   ):
+  nrows = 3 if rej is not None else 2
+  ncols = len(models)
   _, axs = plt.subplots(
-    nrows = 3, ncols = 2, sharex = True, sharey = "row", figsize = (16,18), 
+    nrows = nrows, 
+    ncols = ncols, 
+    sharex = True, 
+    sharey = "row", 
+    figsize = (8 * ncols, 6 * nrows), 
     gridspec_kw = {"hspace": 0.01, "wspace": 0.01}
   )
-  bplots = [None] * 3
+  bplots = [None] * nrows
   fontsize = 21
   bplots[0] = (
-    ["LoadManagementModel", "SP/coord"],
-    obj[[key, "LoadManagementModel", "SP/coord"]].plot.box(
+    models,
+    obj[[key] + models].plot.box(
       by = key,
       grid = True,
-      ax = axs[0,:],
+      ax = axs[0] if ncols == 1 else axs[0,:],
       showmeans = True,
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
@@ -242,62 +350,79 @@ def plot_by_key(
     )
   )
   bplots[1] = (
-    ["LoadManagementModel", "SP/coord"],
-    runtime[[key, "LoadManagementModel", "SP/coord"]].plot.box(
+    models,
+    runtime[[key] + models].plot.box(
       by = key,
       grid = True,
-      ax = axs[1,:],
+      ax = axs[1] if ncols == 1 else axs[1,:],
       showmeans = True,
       patch_artist = True,
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
       fontsize = fontsize,
-      # logy = True
+      logy = True
     )
   )
-  bplots[2] = (
-    ["LoadManagementModel", "SP/coord"],
-    rej[[key, "LoadManagementModel", "SP/coord"]].plot.box(
-      by = key,
-      grid = True,
-      ax = axs[2,:],
-      showmeans = True,
-      patch_artist = True,
-      meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-      return_type = "dict",
-      fontsize = fontsize
+  if nrows > 2:
+    bplots[2] = (
+      models,
+      rej[[key] + models].plot.box(
+        by = key,
+        grid = True,
+        ax = axs[2] if ncols == 1 else axs[2,:],
+        showmeans = True,
+        patch_artist = True,
+        meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+        return_type = "dict",
+        fontsize = fontsize
+      )
     )
-  )
   # axis properties
   # -- y
-  axs[0,0].set_ylabel(
-    "Objective function value",
-    fontsize = fontsize
-  )
-  axs[1,0].set_ylabel(
-    "Runtime [s]",
-    fontsize = fontsize
-  )
-  axs[2,0].set_ylabel(
-    "Cloud offloading [%]",
-    fontsize = fontsize
-  )
-  # -- x
-  axs[2,0].set_xlabel(
-    label,
-    fontsize = fontsize
-  )
-  axs[2,1].set_xlabel(
-    label,
-    fontsize = fontsize
-  )
+  if ncols > 1:
+    axs[0,0].set_ylabel(
+      "Objective function value",
+      fontsize = fontsize
+    )
+    axs[1,0].set_ylabel(
+      "Runtime [s]",
+      fontsize = fontsize
+    )
+    if nrows > 2:
+      axs[2,0].set_ylabel(
+        "Cloud offloading [%]",
+        fontsize = fontsize
+      )
+    # -- x
+    axs[-1,0].set_xlabel(
+      label,
+      fontsize = fontsize
+    )
+    axs[-1,1].set_xlabel(
+      label,
+      fontsize = fontsize
+    )
+  else:
+    axs[0].set_ylabel(
+      "Objective function value",
+      fontsize = fontsize
+    )
+    axs[1].set_ylabel(
+      "Runtime [s]",
+      fontsize = fontsize
+    )
+    if nrows > 2:
+      axs[2].set_ylabel(
+        "Cloud offloading [%]",
+        fontsize = fontsize
+      )
+    # -- x
+    axs[-1].set_xlabel(
+      label,
+      fontsize = fontsize
+    )
   # -- title
-  axs[0,0].set_title(None)
-  axs[0,1].set_title(None)
-  axs[1,0].set_title(None)
-  axs[1,1].set_title(None)
-  axs[2,0].set_title(None)
-  axs[2,1].set_title(None)
+  plt.setp(axs, title = None)
   # colors
   colors = [
     mcolors.CSS4_COLORS["lightgreen"],
@@ -314,7 +439,14 @@ def plot_by_key(
         mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
       # -- legend
       if ridx == 0:
-        axs[0,cidx].legend([bplot[key]["boxes"][0]], [key], fontsize=fontsize)
+        if ncols > 1:
+          axs[0,cidx].legend(
+            [bplot[key]["boxes"][0]], [key], fontsize=fontsize
+          )
+        else:
+          axs[0].legend(
+            [bplot[key]["boxes"][0]], [key], fontsize=fontsize
+          )
   plt.savefig(
     os.path.join(plot_folder, "box_detailed.png"),
     dpi = 300,
@@ -326,17 +458,21 @@ def plot_by_key(
 
 if __name__ == "__main__":
   postprocessing_folders = [
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-eef_0.1-spcoord_greedy",
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-eef_0.25-spcoord_greedy",
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-eef_0.5-spcoord_greedy",
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-eef_0.75-spcoord_greedy"
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingK/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_3-spcoord_greedy_500iter_pat100"
   ]
-  # for postprocessing_folder in postprocessing_folders:
-  #   print(postprocessing_folder)
-  #   compare_results(os.path.join(postprocessing_folder, "postprocessing"))
-  compare_across_folders(
-    postprocessing_folders, 
-    "024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-{}_{}-spcoord_greedy",
-    "Edge-exposed fraction",
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/postprocessing_by_eef-spcoord_greedy"
-  )
+  for postprocessing_folder in postprocessing_folders:
+    print(postprocessing_folder)
+    compare_results(os.path.join(postprocessing_folder, "postprocessing"))
+  # compare_across_folders(
+  #   postprocessing_folders, 
+  #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_{}_{}",
+  #   "Time limit [s]",
+  #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/postprocessing_by_TL"
+  # )
+  # compare_single_model(
+  #   postprocessing_folders, 
+  #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_{}_{}",
+  #   "Time limit [s]",
+  #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/postprocessing_by_TL",
+  #   baseline = 5
+  # )
