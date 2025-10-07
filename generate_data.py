@@ -98,7 +98,7 @@ def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
     if "edge_exposed_fraction" in limits["load"]:
       edge_exposed_fraction = limits["load"]["edge_exposed_fraction"]
       nonzero = int(np.ceil(Nn * edge_exposed_fraction))
-      zero_load = np.array([1] * nonzero + [0] * (Nn - nonzero))
+      zero_load = np.array([0] * nonzero + [1] * (Nn - nonzero))
       rng.shuffle(zero_load)
       for f in range(Nf):
         for n in range(Nn):
@@ -415,7 +415,7 @@ def random_instance_data(
   else:
     edge_exposed_fraction = limits["load"].get("edge_exposed_fraction", 1.0)
     nonzero = int(np.ceil(Nn * edge_exposed_fraction))
-    zero_load = np.array([1] * nonzero + [0] * (Nn - nonzero))
+    zero_load = np.array([0] * nonzero + [1] * (Nn - nonzero))
     rng.shuffle(zero_load)
     load_limits = {
       f: {
