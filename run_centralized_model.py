@@ -435,6 +435,16 @@ def save_checkpoint(complete_solution: dict, solution_folder: str, t: int):
     val.to_csv(checkpoint_path, index = False)
 
 
+def load_checkpoint(solution_folder: str, t: int):
+  checkpoint_folder = os.path.join(solution_folder, str(t))
+  complete_solution = {}
+  for filename in os.listdir(checkpoint_folder):
+    if filename.endswith(".csv"):
+      df = pd.read_csv(os.path.join(checkpoint_folder, filename))
+      complete_solution[filename.split(".")[0]] = df
+  return complete_solution
+
+
 def save_solution(
     solution: pd.DataFrame,
     offloaded: pd.DataFrame,
