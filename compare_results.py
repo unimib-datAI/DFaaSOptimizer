@@ -9,6 +9,7 @@ def compare_across_folders(
     postprocessing_folders: list, 
     str_format: str, 
     key_label: str,
+    models: list,
     plot_folder: str
   ):
   all_obj = pd.DataFrame()
@@ -16,18 +17,33 @@ def compare_across_folders(
   all_runtime = pd.DataFrame()
   for postprocessing_folder in postprocessing_folders:
     print(postprocessing_folder)
-    obj, rej, runtime = compare_results(
-      os.path.join(postprocessing_folder, "postprocessing")
-    )
     key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
+    obj, rej, runtime = compare_results(
+      os.path.join(postprocessing_folder, "postprocessing"), 
+      "Nn", 
+      "Number of agents",
+      models
+    )
     # add info
-    obj[key] = float(key_val)
-    rej[key] = float(key_val)
-    runtime[key] = float(key_val)
+    obj[key] = int(key_val) if key != "eef" else round(
+      float(key_val) * 100, 2
+    )
+    rej[key] = int(key_val) if key != "eef" else round(
+      float(key_val) * 100, 2
+    )
+    runtime[key] = int(key_val) if key != "eef" else round(
+      float(key_val) * 100, 2
+    )
     # merge
     all_obj = pd.concat([all_obj, obj])
     all_rej = pd.concat([all_rej, rej])
     all_runtime = pd.concat([all_runtime, runtime])
+  # 
+  if "ScaledOnSumLMM" in models:
+    all_obj.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
+    all_rej.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
+    all_runtime.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
+    models = ["LoadManagementModel", "SP/coord"]
   # plot
   os.makedirs(plot_folder, exist_ok = True)
   dev_plot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
@@ -35,7 +51,7 @@ def compare_across_folders(
     all_obj, 
     all_runtime, 
     all_rej, 
-    ["LoadManagementModel", "SP/coord"],
+    models,
     key, 
     key_label, 
     plot_folder
@@ -46,20 +62,25 @@ def compare_across_folders(
   all_runtime.to_csv(os.path.join(plot_folder, "runtime.csv"))
 
 
-def compare_results(postprocessing_folder: str):
+def compare_results(
+    postprocessing_folder: str, 
+    key: str, 
+    key_label: str,
+    models: list
+  ):
   obj = pd.read_csv(os.path.join(postprocessing_folder, "obj.csv"))
   rej = pd.read_csv(os.path.join(postprocessing_folder, "rejections.csv"))
   runtime = pd.read_csv(os.path.join(postprocessing_folder, "runtime.csv"))
   dev_plot_by_key(
-    obj, runtime, rej, "Nn", "Number of agents", postprocessing_folder
+    obj, runtime, rej, key, key_label, postprocessing_folder
   )
   plot_by_key(
     obj, 
     runtime, 
     rej, 
-    ["LoadManagementModel", "SP/coord"],
-    "Nn", 
-    "Number of agents", 
+    models,
+    key, 
+    key_label, 
     postprocessing_folder
   )
   return obj, rej, runtime
@@ -70,24 +91,39 @@ def compare_single_model(
     str_format: str, 
     key_label: str,
     plot_folder: str,
-    baseline = None
+    baseline = None,
+    filter_by = None,
+    keep_only = None,
+    drop_value = None
   ):
   all_obj = pd.DataFrame()
   all_runtime = pd.DataFrame()
   for postprocessing_folder in postprocessing_folders:
     print(postprocessing_folder)
+    # -- objective function value
     obj = pd.read_csv(
       os.path.join(postprocessing_folder, "postprocessing", "obj.csv")
     )
     obj.rename(columns = {"obj": "LoadManagementModel"}, inplace = True)
+    if filter_by is not None and filter_by in obj:
+      if keep_only is not None:
+        obj = obj[obj[filter_by] == keep_only]
+      elif drop_value is not None:
+        obj = obj[obj[filter_by] != drop_value]
+    # -- runtime
     runtime = pd.read_csv(
       os.path.join(postprocessing_folder, "postprocessing", "runtime.csv")
     )
     runtime.rename(columns= {"runtime": "LoadManagementModel"}, inplace = True)
-    key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
+    if filter_by is not None and filter_by in obj:
+      if keep_only is not None:
+        runtime = runtime[runtime[filter_by] == keep_only]
+      elif drop_value is not None:
+        runtime = runtime[runtime[filter_by] != drop_value]
     # add info
-    obj[key] = float(key_val)
-    runtime[key] = float(key_val)
+    key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
+    obj[key] = int(key_val)
+    runtime[key] = int(key_val)
     # merge
     all_obj = pd.concat([all_obj, obj])
     all_runtime = pd.concat([all_runtime, runtime])
@@ -154,7 +190,7 @@ def dev_plot_by_key(
   nrows = 3 if rej is not None else 2
   f1, axs = plt.subplots(
     nrows = nrows, ncols = 1, sharex = True, figsize = (8,6 * nrows), 
-    gridspec_kw = {"hspace": 0.01}
+    gridspec_kw = {"hspace": 0.02}
   )
   f2 = None
   bplots = [None] * nrows
@@ -244,7 +280,7 @@ def dev_plot_by_key(
   if "iteration" in runtime and "best_iteration" in runtime:
     f2, ax2 = plt.subplots(
       nrows = 2, ncols = 1, sharex = True, figsize = (8,12),
-      gridspec_kw = {"hspace": 0.01}
+      gridspec_kw = {"hspace": 0.02}
     )
     bplots += [None, None]
     bplots[3] = (
@@ -332,7 +368,7 @@ def plot_by_key(
     sharex = True, 
     sharey = "row", 
     figsize = (8 * ncols, 6 * nrows), 
-    gridspec_kw = {"hspace": 0.01, "wspace": 0.01}
+    gridspec_kw = {"hspace": 0.02, "wspace": 0.01}
   )
   bplots = [None] * nrows
   fontsize = 21
@@ -360,7 +396,7 @@ def plot_by_key(
       meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
       return_type = "dict",
       fontsize = fontsize,
-      logy = True
+      # logy = True
     )
   )
   if nrows > 2:
@@ -458,21 +494,29 @@ def plot_by_key(
 
 if __name__ == "__main__":
   postprocessing_folders = [
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingK/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_3-spcoord_greedy_500iter_pat100"
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-0_10-varyingF-spcoord_optimal"
   ]
   for postprocessing_folder in postprocessing_folders:
     print(postprocessing_folder)
-    compare_results(os.path.join(postprocessing_folder, "postprocessing"))
+    compare_results(
+      os.path.join(postprocessing_folder, "postprocessing"),
+      "Nf",
+      "Number of functions",
+      ["LoadManagementModel", "SP/coord"]
+    )
   # compare_across_folders(
   #   postprocessing_folders, 
-  #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_{}_{}",
-  #   "Time limit [s]",
-  #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/postprocessing_by_TL"
+  #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-{}_{}-spcoord_greedy",
+  #   "Edge-exposed fraction [%]",
+  #   ["SP/coord", "ScaledOnSumLMM"],
+  #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed/postprocessing_by_eef"
   # )
   # compare_single_model(
   #   postprocessing_folders, 
   #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_{}_{}",
   #   "Time limit [s]",
   #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/postprocessing_by_TL",
-  #   baseline = 5
+  #   baseline = 5,
+  #   filter_by = "Nn",
+  #   drop_value = 200
   # )
