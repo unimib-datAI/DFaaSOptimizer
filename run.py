@@ -149,6 +149,9 @@ def load_termination_condition(
             "{} (it: {}; obj. deviation: {})", 
             s
           )
+        if c.startswith("reached time limit"):
+          c1, c2 = parse("reached time limit: {} >= {}", c)
+          c = f"reached time limit ({c2})"
         criterion.append(c)
         iteration.append(int(i))
         deviation.append(float(d))
@@ -192,6 +195,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
   all_obj_values = pd.DataFrame()
   all_rej_values = pd.DataFrame()
   all_runtime_values = pd.DataFrame()
+  all_i_tc = pd.DataFrame()
   ping_pong_list = []
   # loop over experiments
   for exp_description_tuple, c_folder, i_folder in zip(
@@ -349,6 +353,10 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
           bbox_inches = "tight"
         )
         plt.close()
+        # -- merge
+        i_tc["Nn"] = exp_description_tuple[0]
+        i_tc["seed"] = exp_description_tuple[1]
+        all_i_tc = pd.concat([all_i_tc, i_tc], ignore_index = True)
     # runtime
     c_runtime = pd.DataFrame()
     i_runtime = pd.DataFrame()
@@ -413,10 +421,14 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
     all_runtime_values.to_csv(
       os.path.join(plot_folder, "runtime.csv"), index = False
     )
+    all_i_tc.to_csv(
+      os.path.join(plot_folder, "i_termination_condition.csv"), index = False
+    )
     # -- plot
     for Nn, objs in all_obj_values.groupby("Nn"):
       rejs = all_rej_values[all_rej_values["Nn"] == Nn]
       rtvs = all_runtime_values[all_runtime_values["Nn"] == Nn]
+      i_tc = all_i_tc[all_i_tc["Nn"] == Nn]
       fig, axs = plt.subplots(
         nrows = 2, ncols = 2, figsize = (12, 8), sharex = True,
         gridspec_kw = {"hspace": 0.02}
@@ -667,6 +679,33 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         bbox_inches = "tight"
       )
       plt.close(fig2)
+      # termination condition
+      i_tc["criterion"].value_counts().plot.bar(
+        rot = 0,
+        grid = True
+      )
+      plt.savefig(
+        os.path.join(plot_folder, f"i_tc-Nn_{Nn}.png"),
+        dpi = 300,
+        format = "png",
+        bbox_inches = "tight"
+      )
+      plt.close()
+  # termination condition
+  _, ax = plt.subplots(figsize = (20,6))
+  all_i_tc["criterion"].value_counts(normalize = True).plot.bar(
+    rot = 0,
+    grid = True,
+    ax = ax
+  )
+  ax.set_ylabel("Frequency")
+  plt.savefig(
+    os.path.join(plot_folder, "i_termination_condition.png"),
+    dpi = 300,
+    format = "png",
+    bbox_inches = "tight"
+  )
+  plt.close()
   # save ping-pong problems info
   with open(os.path.join(plot_folder, "ping_pong_problems.txt"), "w") as ost:
     for el in ping_pong_list:
