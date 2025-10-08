@@ -105,25 +105,22 @@ def compare_single_model(
       os.path.join(postprocessing_folder, "postprocessing", "obj.csv")
     )
     obj.rename(columns = {"obj": "LoadManagementModel"}, inplace = True)
-    if filter_by is not None and filter_by in obj:
-      if keep_only is not None:
-        obj = obj[obj[filter_by] == keep_only]
-      elif drop_value is not None:
-        obj = obj[obj[filter_by] != drop_value]
     # -- runtime
     runtime = pd.read_csv(
       os.path.join(postprocessing_folder, "postprocessing", "runtime.csv")
     )
     runtime.rename(columns= {"runtime": "LoadManagementModel"}, inplace = True)
-    if filter_by is not None and filter_by in obj:
-      if keep_only is not None:
-        runtime = runtime[runtime[filter_by] == keep_only]
-      elif drop_value is not None:
-        runtime = runtime[runtime[filter_by] != drop_value]
     # add info
     key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
     obj[key] = int(key_val)
     runtime[key] = int(key_val)
+    if filter_by is not None and filter_by in obj and filter_by in runtime:
+      if keep_only is not None:
+        obj = obj[obj[filter_by] == keep_only]
+        runtime = runtime[runtime[filter_by] == keep_only]
+      elif drop_value is not None:
+        obj = obj[obj[filter_by] != drop_value]
+        runtime = runtime[runtime[filter_by] != drop_value]
     # merge
     all_obj = pd.concat([all_obj, obj])
     all_runtime = pd.concat([all_runtime, runtime])
@@ -494,16 +491,21 @@ def plot_by_key(
 
 if __name__ == "__main__":
   postprocessing_folders = [
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/2024_RussoRusso-3classes-0_10-varyingF-spcoord_optimal"
+    os.path.join(
+      "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/centralized",
+      f
+    ) for f in os.listdir(
+      "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/centralized"
+    ) if not f.startswith(".") and not f.startswith("post")
   ]
-  for postprocessing_folder in postprocessing_folders:
-    print(postprocessing_folder)
-    compare_results(
-      os.path.join(postprocessing_folder, "postprocessing"),
-      "Nf",
-      "Number of functions",
-      ["LoadManagementModel", "SP/coord"]
-    )
+  # for postprocessing_folder in postprocessing_folders:
+  #   print(postprocessing_folder)
+  #   compare_results(
+  #     os.path.join(postprocessing_folder, "postprocessing"),
+  #     "Nf",
+  #     "Number of functions",
+  #     ["LoadManagementModel", "SP/coord"]
+  #   )
   # compare_across_folders(
   #   postprocessing_folders, 
   #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-{}_{}-spcoord_greedy",
@@ -511,12 +513,12 @@ if __name__ == "__main__":
   #   ["SP/coord", "ScaledOnSumLMM"],
   #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed/postprocessing_by_eef"
   # )
-  # compare_single_model(
-  #   postprocessing_folders, 
-  #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_{}_{}",
-  #   "Time limit [s]",
-  #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/postprocessing_by_TL",
-  #   baseline = 5,
-  #   filter_by = "Nn",
-  #   drop_value = 200
-  # )
+  compare_single_model(
+    postprocessing_folders, 
+    "2024_RussoRusso-0_10-centralized_{}_{}",
+    "Time limit [s]",
+    "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/centralized/postprocessing_by_TL",
+    baseline = 10,
+    filter_by = "Nn",
+    keep_only = 50
+  )
