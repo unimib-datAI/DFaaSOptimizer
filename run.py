@@ -843,7 +843,7 @@ def run(
       ) as ost:
         ost.write(json.dumps(solution_folders, indent = 2))
   # immediate postprocessing
-  results_postprocessing(solution_folders, base_solution_folder)
+  results_postprocessing(solution_folders, base_solution_folder, loop_over)
 
 
 if __name__ == "__main__":
