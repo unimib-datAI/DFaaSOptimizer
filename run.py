@@ -706,9 +706,11 @@ def results_postprocessing(
   all_i_tc["criterion"].value_counts(normalize = True).plot.bar(
     rot = 0,
     grid = True,
-    ax = ax
+    ax = ax,
+    fontsize = 21
   )
-  ax.set_ylabel("Frequency")
+  ax.set_xlabel("Stopping criterion", fontsize = 21)
+  ax.set_ylabel("Frequency", fontsize = 21)
   plt.savefig(
     os.path.join(plot_folder, "i_termination_condition.png"),
     dpi = 300,
