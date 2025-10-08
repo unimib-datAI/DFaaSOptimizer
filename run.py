@@ -80,24 +80,30 @@ def parse_arguments() -> argparse.Namespace:
     default = False,
     action = "store_true"
   )
+  parser.add_argument(
+    "--loop_over",
+    help = "Key to loop over",
+    type = str,
+    default = "Nn"
+  )
   # Parse the arguments
   args: argparse.Namespace = parser.parse_known_args()[0]
   return args
 
 
-def generate_experiments_list(nodes, seed, n_experiments):
+def generate_experiments_list(exp_values, seed, n_experiments):
   rng = np.random.default_rng(seed)
-  # list of Nn values
-  nodes_list = nodes.get("values", [])
-  if len(nodes_list) == 0:
-    step = nodes.get("step", 1)
-    nodes_list = list(range(nodes["min"], nodes["max"] + step, step))
+  # list of exp values
+  exp_list = exp_values.get("values", [])
+  if len(exp_list) == 0:
+    step = exp_values.get("step", 1)
+    exp_list = list(range(exp_values["min"], exp_values["max"] + step, step))
   # seed(s)
   seed_list = [seed] + rng.integers(
     1000, 10000, endpoint = True, size = (n_experiments - 1,)
   ).tolist()
   # list of experiments
-  return [[Nn, int(s)] for s in seed_list for Nn in nodes_list]
+  return [[exp_value, int(s)] for s in seed_list for exp_value in exp_list]
 
 
 def load_obj_value(solution_folder: str) -> pd.DataFrame:
@@ -188,7 +194,11 @@ def plot_total_count(df: pd.DataFrame, plot_filename: str):
   plt.close()
 
 
-def results_postprocessing(solution_folders: dict, base_folder: str):
+def results_postprocessing(
+    solution_folders: dict, 
+    base_folder: str,
+    loop_over: str
+  ):
   # prepare folder to store plots
   plot_folder = os.path.join(base_folder, "postprocessing")
   os.makedirs(plot_folder, exist_ok = True)
@@ -308,13 +318,13 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         obj.to_csv(os.path.join(exp_plot_folder, "obj.csv"), index = False)
         # merge
         obj["time"] = obj.index
-        obj["Nn"] = exp_description_tuple[0]
+        obj[loop_over] = exp_description_tuple[0]
         obj["seed"] = exp_description_tuple[1]
         all_obj_values = pd.concat([all_obj_values, obj], ignore_index = True)
         #
         all_rej.drop("tot", inplace = True)
         all_rej["time"] = all_rej.index
-        all_rej["Nn"] = exp_description_tuple[0]
+        all_rej[loop_over] = exp_description_tuple[0]
         all_rej["seed"] = exp_description_tuple[1]
         all_rej_values = pd.concat(
           [all_rej_values, all_rej], ignore_index = True
@@ -354,7 +364,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         )
         plt.close()
         # -- merge
-        i_tc["Nn"] = exp_description_tuple[0]
+        i_tc[loop_over] = exp_description_tuple[0]
         i_tc["seed"] = exp_description_tuple[1]
         all_i_tc = pd.concat([all_i_tc, i_tc], ignore_index = True)
     # runtime
@@ -404,7 +414,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       plt.close()
       # merge
       runtime_comparison["time"] = runtime_comparison.index
-      runtime_comparison["Nn"] = exp_description_tuple[0]
+      runtime_comparison[loop_over] = exp_description_tuple[0]
       runtime_comparison["seed"] = exp_description_tuple[1]
       all_runtime_values = pd.concat(
         [all_runtime_values, runtime_comparison], ignore_index = True
@@ -425,10 +435,10 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       os.path.join(plot_folder, "i_termination_condition.csv"), index = False
     )
     # -- plot
-    for Nn, objs in all_obj_values.groupby("Nn"):
-      rejs = all_rej_values[all_rej_values["Nn"] == Nn]
-      rtvs = all_runtime_values[all_runtime_values["Nn"] == Nn]
-      i_tc = all_i_tc[all_i_tc["Nn"] == Nn]
+    for exp_value, objs in all_obj_values.groupby(loop_over):
+      rejs = all_rej_values[all_rej_values[loop_over] == exp_value]
+      rtvs = all_runtime_values[all_runtime_values[loop_over] == exp_value]
+      i_tc = all_i_tc[all_i_tc[loop_over] == exp_value]
       fig, axs = plt.subplots(
         nrows = 2, ncols = 2, figsize = (12, 8), sharex = True,
         gridspec_kw = {"hspace": 0.02}
@@ -666,14 +676,14 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
       axs2[1].set_ylabel("Runtime deviation [x]")
       axs2[2].set_ylabel("Number of iterations")
       fig.savefig(
-        os.path.join(plot_folder, f"obj-Nn_{Nn}.png"),
+        os.path.join(plot_folder, f"obj-{loop_over}_{exp_value}.png"),
         dpi = 300,
         format = "png",
         bbox_inches = "tight"
       )
       plt.close(fig)
       fig2.savefig(
-        os.path.join(plot_folder, f"runtime-Nn_{Nn}.png"),
+        os.path.join(plot_folder, f"runtime-{loop_over}_{exp_value}.png"),
         dpi = 300,
         format = "png",
         bbox_inches = "tight"
@@ -685,7 +695,7 @@ def results_postprocessing(solution_folders: dict, base_folder: str):
         grid = True
       )
       plt.savefig(
-        os.path.join(plot_folder, f"i_tc-Nn_{Nn}.png"),
+        os.path.join(plot_folder, f"i_tc-{loop_over}_{exp_value}.png"),
         dpi = 300,
         format = "png",
         bbox_inches = "tight"
@@ -721,15 +731,16 @@ def run(
     generate_only: bool,
     fix_r: bool,
     sp_parallelism: int,
-    enable_plotting: bool
+    enable_plotting: bool,
+    loop_over: str
   ):
   seed = base_config["seed"]
   log_on_file = True if base_config["verbose"] > 0 else False
-  nodes = base_config["limits"]["Nn"]
+  exp_values = base_config["limits"][loop_over]
   disable_plotting = not enable_plotting
   from_instances = base_config["limits"].get("path", None)
   # generate list of experiments
-  experiments_list = generate_experiments_list(nodes, seed, n_experiments)
+  experiments_list = generate_experiments_list(exp_values, seed, n_experiments)
   # load list of already-run experiments (if any)
   solution_folders = {
     "experiments_list": [], "centralized": [], "sp-coord": []
@@ -745,13 +756,15 @@ def run(
     with open(os.path.join(from_instances, "experiments.json"), "r") as ist:
       old_instance_paths = json.load(ist)
   # loop over the experiments list
-  for Nn, seed in tqdm(experiments_list):
+  for exp_value, seed in tqdm(experiments_list):
     # check if the experiment is still to run
     run_c = False
     run_i = False
     experiment_idx = None
     try:
-      experiment_idx = solution_folders["experiments_list"].index([Nn, seed])
+      experiment_idx = solution_folders["experiments_list"].index(
+        [exp_value, seed]
+      )
       if not (run_spcoord_only or generate_only) and ((
           len(solution_folders["centralized"]) <= experiment_idx
         ) or (
@@ -771,15 +784,15 @@ def run(
     if run_c or run_i or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
-      config["limits"]["Nn"].pop("values", None)
-      config["limits"]["Nn"]["min"] = Nn
-      config["limits"]["Nn"]["max"] = Nn
+      config["limits"][loop_over].pop("values", None)
+      config["limits"][loop_over]["min"] = exp_value
+      config["limits"][loop_over]["max"] = exp_value
       config["seed"] = seed
       # -- look for old instance path (if required)
       if "experiments_list" in old_instance_paths:
         try:
           old_exp_idx = old_instance_paths["experiments_list"].index(
-            [Nn, seed]
+            [exp_value, seed]
           )
           old_exp_path = None
           if "centralized" in old_instance_paths:
@@ -821,7 +834,7 @@ def run(
         solution_folders["sp-coord"].append(i_folder)
       # -- save info
       if experiment_idx is None:
-        solution_folders["experiments_list"].append([Nn, seed])
+        solution_folders["experiments_list"].append([exp_value, seed])
       # -- save
       with open(
         os.path.join(base_solution_folder,"experiments.json"),"w"
@@ -843,6 +856,7 @@ if __name__ == "__main__":
   fix_r = args.fix_r
   sp_parallelism = args.sp_parallelism
   enable_plotting = args.enable_plotting
+  loop_over = args.loop_over
   # load configuration file
   base_config = load_configuration(config_file)
   base_solution_folder = base_config["base_solution_folder"]
@@ -861,7 +875,8 @@ if __name__ == "__main__":
       generate_only,
       fix_r,
       sp_parallelism,
-      enable_plotting
+      enable_plotting,
+      loop_over
     )
   else:
     if not postprocessing_list:
@@ -870,7 +885,7 @@ if __name__ == "__main__":
         os.path.join(base_solution_folder, "experiments.json"), "r"
       ) as ist:
         solution_folders = json.load(ist)
-      results_postprocessing(solution_folders, base_solution_folder)
+      results_postprocessing(solution_folders, base_solution_folder, loop_over)
     else:
       for foldername in os.listdir(base_solution_folder):
         if not foldername.startswith("."):
@@ -881,4 +896,4 @@ if __name__ == "__main__":
             os.path.join(bsf, "experiments.json"), "r"
           ) as ist:
             solution_folders = json.load(ist)
-          results_postprocessing(solution_folders, bsf)
+          results_postprocessing(solution_folders, bsf, loop_over)
