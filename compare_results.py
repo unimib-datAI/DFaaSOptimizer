@@ -10,7 +10,10 @@ def compare_across_folders(
     str_format: str, 
     key_label: str,
     models: list,
-    plot_folder: str
+    plot_folder: str,
+    filter_by = None,
+    keep_only = None,
+    drop_value = None
   ):
   all_obj = pd.DataFrame()
   all_rej = pd.DataFrame()
@@ -34,6 +37,15 @@ def compare_across_folders(
     runtime[key] = int(key_val) if key != "eef" else round(
       float(key_val) * 100, 2
     )
+    if filter_by is not None and filter_by in obj and filter_by in runtime:
+      if keep_only is not None:
+        obj = obj[obj[filter_by] == keep_only]
+        rej = rej[rej[filter_by] == keep_only]
+        runtime = runtime[runtime[filter_by] == keep_only]
+      elif drop_value is not None:
+        obj = obj[obj[filter_by] != drop_value]
+        rej = rej[rej[filter_by] != drop_value]
+        runtime = runtime[runtime[filter_by] != drop_value]
     # merge
     all_obj = pd.concat([all_obj, obj])
     all_rej = pd.concat([all_rej, rej])
@@ -492,10 +504,10 @@ def plot_by_key(
 if __name__ == "__main__":
   postprocessing_folders = [
     os.path.join(
-      "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/centralized",
+      "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed",
       f
     ) for f in os.listdir(
-      "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/centralized"
+      "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed"
     ) if not f.startswith(".") and not f.startswith("post")
   ]
   # for postprocessing_folder in postprocessing_folders:
@@ -506,19 +518,19 @@ if __name__ == "__main__":
   #     "Number of functions",
   #     ["LoadManagementModel", "SP/coord"]
   #   )
-  # compare_across_folders(
-  #   postprocessing_folders, 
-  #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_10-{}_{}-spcoord_greedy",
-  #   "Edge-exposed fraction [%]",
-  #   ["SP/coord", "ScaledOnSumLMM"],
-  #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed/postprocessing_by_eef"
-  # )
-  compare_single_model(
+  compare_across_folders(
     postprocessing_folders, 
-    "2024_RussoRusso-0_10-centralized_{}_{}",
-    "Time limit [s]",
-    "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/centralized/postprocessing_by_TL",
-    baseline = 10,
-    filter_by = "Nn",
-    keep_only = 50
+    "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_100-{}_{}-spcoord_greedy",
+    "Edge-exposed fraction [%]",
+    ["SP/coord", "ScaledOnSumLMM"],
+    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed/postprocessing_by_eef"
   )
+  # compare_single_model(
+  #   postprocessing_folders, 
+  #   "2024_RussoRusso-0_10-centralized_{}_{}",
+  #   "Time limit [s]",
+  #   "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/centralized/postprocessing_by_TL",
+  #   baseline = 10,
+  #   filter_by = "Nn",
+  #   keep_only = 50
+  # )
