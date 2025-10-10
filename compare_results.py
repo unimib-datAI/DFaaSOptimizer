@@ -1,6 +1,7 @@
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 from parse import parse
+import seaborn as sns
 import pandas as pd
 import os
 
@@ -59,7 +60,17 @@ def compare_across_folders(
   # plot
   os.makedirs(plot_folder, exist_ok = True)
   dev_plot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
+  dev_barplot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
   plot_by_key(
+    all_obj, 
+    all_runtime, 
+    all_rej, 
+    models,
+    key, 
+    key_label, 
+    plot_folder
+  )
+  violinplot_by_key(
     all_obj, 
     all_runtime, 
     all_rej, 
@@ -501,30 +512,387 @@ def plot_by_key(
   plt.close()
 
 
+def dev_barplot_by_key(
+    obj: pd.DataFrame, 
+    runtime: pd.DataFrame, 
+    rej: pd.DataFrame, 
+    key: str,
+    label: str,
+    plot_folder: str
+  ):
+  nrows = 1
+  ncols = 3 if rej is not None else 2
+  # f1, axs = plt.subplots(
+  #   nrows = nrows, ncols = ncols, figsize = (12 * ncols, 6 * nrows), 
+  #   gridspec_kw = {"wspace": 0.2}
+  # )
+  # bplots = [None] * ncols
+  fontsize = 21
+  # bplots[0] = (
+  #   "dev",
+  #   sns.violinplot(
+  #     data = obj,#[[key, "dev"]],
+  #     x = key,
+  #     y = "dev",
+  #     ax = axs[0],
+  #     inner = "quart",
+  #     color = mcolors.CSS4_COLORS["lightskyblue"],
+  #     density_norm = "count"
+  #   )
+  # )
+  # bplots[1] = (
+  #   "dev",
+  #   sns.violinplot(
+  #     data = runtime,#[[key, "dev"]],
+  #     x = key,
+  #     y = "dev",
+  #     ax = axs[1],
+  #     log_scale = (False,True),
+  #     inner = "quart",
+  #     color = mcolors.CSS4_COLORS["lightskyblue"],
+  #     density_norm = "count"
+  #   )
+  # )
+  # if rej is not None:
+  #   bplots[2] = (
+  #     "dev",
+  #     sns.violinplot(
+  #       data = rej,#[[key, "dev"]],
+  #       x = key,
+  #       y = "dev",
+  #       ax = axs[2],
+  #       inner = "quart",
+  #       color = mcolors.CSS4_COLORS["lightskyblue"],
+  #       density_norm = "count"
+  #     )
+  #   )
+  # # horizontal lines (for reference)
+  # axs[0].axhline(
+  #   y = 0,
+  #   linestyle = "dashed",
+  #   linewidth = 2,
+  #   color = "k"
+  # )
+  # axs[1].axhline(
+  #   y = 1,
+  #   linestyle = "dashed",
+  #   linewidth = 2,
+  #   color = "k"
+  # )
+  # # axis properties
+  # # -- y
+  # axs[0].set_ylabel(
+  #   "Objective deviation\n((SP/coord - LMM) / LMM) [%]",
+  #   fontsize = fontsize
+  # )
+  # axs[1].set_ylabel(
+  #   "Runtime deviation\n(SP/coord / LMM) [x]",
+  #   fontsize = fontsize
+  # )
+  # if rej is not None:
+  #   axs[2].axhline(
+  #     y = 0,
+  #     linestyle = "dashed",
+  #     linewidth = 2,
+  #     color = "k"
+  #   )
+  #   axs[2].set_ylabel(
+  #     "Cloud offloading deviation\n(SP/coord - LMM) [%]",
+  #     fontsize = fontsize
+  #   )
+  # # -- common properties
+  # plt.setp(axs, title = None)
+  # for idx in range(len(axs)):
+  #   axs[idx].set_xlabel(
+  #     label,
+  #     fontsize = fontsize
+  #   )
+  #   axs[idx].grid(True)
+  #   axs[idx].set_xticks(
+  #     axs[idx].get_xticks(), 
+  #     axs[idx].get_xticklabels(), 
+  #     fontsize = fontsize
+  #   )
+  #   axs[idx].set_yticks(
+  #     axs[idx].get_yticks(), 
+  #     axs[idx].get_yticklabels(), 
+  #     fontsize = fontsize
+  #   )
+  #   axs[idx].legend(fontsize = fontsize)
+  # f1.savefig(
+  #   os.path.join(plot_folder, "violin.png"),
+  #   dpi = 300,
+  #   format = "png",
+  #   bbox_inches = "tight"
+  # )
+  # plt.close()
+  ##
+  f2, axs2 = plt.subplots(
+    nrows = nrows, ncols = ncols, figsize = (12 * ncols, 6 * nrows), 
+    gridspec_kw = {"wspace": 0.2}
+  )
+  group = obj.groupby(key)
+  data = pd.DataFrame({
+    key: list(group.groups.keys()),
+    "avg": group.mean()["dev"].values.tolist(),
+    "min": group.min()["dev"].values.tolist(),
+    "max": group.max()["dev"].values.tolist()
+  })
+  data.plot.bar(
+    x = key,
+    ax = axs2[0],
+    grid = True,
+    fontsize = fontsize,
+    rot = 0
+  )
+  group = runtime.groupby(key)
+  data = pd.DataFrame({
+    key: list(group.groups.keys()),
+    "avg": group.mean()["dev"].values.tolist(),
+    "min": group.min()["dev"].values.tolist(),
+    "max": group.max()["dev"].values.tolist()
+  })
+  data.plot.bar(
+    x = key,
+    ax = axs2[1],
+    grid = True,
+    fontsize = fontsize,
+    rot = 0,
+    logy = True
+  )
+  if ncols > 2:
+    group = rej.groupby(key)
+    data = pd.DataFrame({
+      key: list(group.groups.keys()),
+      "avg": group.mean()["dev"].values.tolist(),
+      "min": group.min()["dev"].values.tolist(),
+      "max": group.max()["dev"].values.tolist()
+    })
+    data.plot.bar(
+      x = key,
+      ax = axs2[2],
+      grid = True,
+      fontsize = fontsize,
+      rot = 0
+    )
+  # horizontal lines (for reference)
+  axs2[0].axhline(
+    y = 0,
+    linestyle = "dashed",
+    linewidth = 2,
+    color = "k"
+  )
+  axs2[1].axhline(
+    y = 1,
+    linestyle = "dashed",
+    linewidth = 2,
+    color = "k"
+  )
+  # axis properties
+  # -- y
+  axs2[0].set_ylabel(
+    "Objective deviation\n((SP/coord - LMM) / LMM) [%]",
+    fontsize = fontsize
+  )
+  axs2[1].set_ylabel(
+    "Runtime deviation\n(SP/coord / LMM) [x]",
+    fontsize = fontsize
+  )
+  if rej is not None:
+    axs2[2].axhline(
+      y = 0,
+      linestyle = "dashed",
+      linewidth = 2,
+      color = "k"
+    )
+    axs2[2].set_ylabel(
+      "Cloud offloading deviation\n(SP/coord - LMM) [%]",
+      fontsize = fontsize
+    )
+  # -- common properties
+  plt.setp(axs2, title = None)
+  for idx in range(len(axs2)):
+    axs2[idx].set_xlabel(
+      label,
+      fontsize = fontsize
+    )
+    axs2[idx].legend(fontsize = fontsize)
+  f2.savefig(
+    os.path.join(plot_folder, "bars.png"),
+    dpi = 300,
+    format = "png",
+    bbox_inches = "tight"
+  )
+  plt.close()
+
+
+def violinplot_by_key(
+    obj: pd.DataFrame, 
+    runtime: pd.DataFrame, 
+    rej: pd.DataFrame, 
+    models: list,
+    key: str,
+    label: str,
+    plot_folder: str
+  ):
+  nrows = 1
+  ncols = 3 if rej is not None else 2
+  _, axs = plt.subplots(
+    nrows = nrows, 
+    ncols = ncols,  
+    figsize = (12 * ncols, 6 * nrows), 
+    gridspec_kw = {"wspace": 0.15}
+  )
+  bplots = [None] * ncols
+  fontsize = 21
+  # -- objective function value
+  data = {key: [], "obj": [], "method": []}
+  for model in models:
+    data[key] += obj[key].values.tolist()
+    data["obj"] += obj[model].values.tolist()
+    data["method"] += [model] * len(obj)
+  data = pd.DataFrame(data)
+  bplots[0] = (
+    models,
+    sns.violinplot(
+      data = data,
+      x = key,
+      y = "obj",
+      hue = "method",
+      split = True, 
+      inner = "quart",
+      ax = axs[0],
+      palette = {
+        models[0]: mcolors.CSS4_COLORS["lightgreen"],
+        models[1]: mcolors.CSS4_COLORS["lightpink"]
+      },
+      density_norm = "count"
+    )
+  )
+  # -- runtime
+  data = {key: [], "obj": [], "method": []}
+  for model in models:
+    data[key] += runtime[key].values.tolist()
+    data["obj"] += runtime[model].values.tolist()
+    data["method"] += [model] * len(runtime)
+  data = pd.DataFrame(data)
+  bplots[1] = (
+    models,
+    sns.violinplot(
+      data = data,
+      x = key,
+      y = "obj",
+      hue = "method",
+      split = True, 
+      inner = "quart",
+      ax = axs[1],
+      log_scale = (False, True),
+      palette = {
+        models[0]: mcolors.CSS4_COLORS["lightgreen"],
+        models[1]: mcolors.CSS4_COLORS["lightpink"]
+      },
+      density_norm = "count"
+    )
+  )
+  if ncols > 2:
+    # -- rejections
+    data = {key: [], "obj": [], "method": []}
+    for model in models:
+      data[key] += rej[key].values.tolist()
+      data["obj"] += rej[model].values.tolist()
+      data["method"] += [model] * len(rej)
+    data = pd.DataFrame(data)
+    bplots[2] = (
+      models,
+      sns.violinplot(
+        data = data,
+        x = key,
+        y = "obj",
+        hue = "method",
+        split = True, 
+        inner = "quart",
+        ax = axs[2],
+        palette = {
+          models[0]: mcolors.CSS4_COLORS["lightgreen"],
+          models[1]: mcolors.CSS4_COLORS["lightpink"]
+        },
+        density_norm = "count",
+        cut = 0
+      )
+    )
+  # axis properties
+  # -- y
+  axs[0].set_ylabel(
+    "Objective function value",
+    fontsize = fontsize
+  )
+  axs[1].set_ylabel(
+    "Runtime [s]",
+    fontsize = fontsize
+  )
+  if ncols > 2:
+    axs[2].set_ylabel(
+      "Cloud offloading [%]",
+      fontsize = fontsize
+    )
+  # -- some common properties
+  for idx in range(len(axs)):
+    axs[idx].set_xlabel(
+      label,
+      fontsize = fontsize
+    )
+    axs[idx].grid(True)
+    axs[idx].set_xticks(
+      axs[idx].get_xticks(), 
+      axs[idx].get_xticklabels(), 
+      fontsize = fontsize
+    )
+    axs[idx].set_yticks(
+      axs[idx].get_yticks(), 
+      axs[idx].get_yticklabels(), 
+      fontsize = fontsize
+    )
+    axs[idx].legend(fontsize = fontsize)
+    # if idx == 0:
+    #   axs[idx].legend(fontsize = fontsize)
+    # else:
+    #   axs[idx].legend().set_visible(False)
+  # -- title
+  plt.setp(axs, title = None)
+  plt.savefig(
+    os.path.join(plot_folder, "violin_detailed.png"),
+    dpi = 300,
+    format = "png",
+    bbox_inches = "tight"
+  )
+  plt.close()
+
+
 if __name__ == "__main__":
   postprocessing_folders = [
-    os.path.join(
-      "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed",
-      f
-    ) for f in os.listdir(
-      "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed"
-    ) if not f.startswith(".") and not f.startswith("post")
+    # os.path.join(
+    #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/Nn_200-k_100",
+    #   f
+    # ) for f in os.listdir(
+    #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/Nn_200-k_100"
+    # ) if not f.startswith(".") and not f.startswith("post") and not f.startswith("temp")
+    "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/2024_RussoRusso-0_10-spcoord_optimal"
   ]
-  # for postprocessing_folder in postprocessing_folders:
-  #   print(postprocessing_folder)
-  #   compare_results(
-  #     os.path.join(postprocessing_folder, "postprocessing"),
-  #     "Nf",
-  #     "Number of functions",
-  #     ["LoadManagementModel", "SP/coord"]
-  #   )
-  compare_across_folders(
-    postprocessing_folders, 
-    "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_100-{}_{}-spcoord_greedy",
-    "Edge-exposed fraction [%]",
-    ["SP/coord", "ScaledOnSumLMM"],
-    "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/reversed/postprocessing_by_eef"
-  )
+  for postprocessing_folder in postprocessing_folders:
+    print(postprocessing_folder)
+    compare_results(
+      os.path.join(postprocessing_folder, "postprocessing"),
+      "Nn",
+      "Number of agents",
+      ["LoadManagementModel", "SP/coord"]
+    )
+  # compare_across_folders(
+  #   postprocessing_folders, 
+  #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_100-{}_{}-spcoord_greedy",
+  #   "Edge-exposed fraction [%]",
+  #   ["SP/coord", "ScaledOnSumLMM"],
+  #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/Nn_200-k_100/temp"
+  # )
   # compare_single_model(
   #   postprocessing_folders, 
   #   "2024_RussoRusso-0_10-centralized_{}_{}",
