@@ -760,22 +760,23 @@ def results_postprocessing(
       )
       plt.close()
   # termination condition
-  _, ax = plt.subplots(figsize = (20,6))
-  all_i_tc["criterion"].value_counts(normalize = True).plot.bar(
-    rot = 0,
-    grid = True,
-    ax = ax,
-    fontsize = 21
-  )
-  ax.set_xlabel("Stopping criterion", fontsize = 21)
-  ax.set_ylabel("Frequency", fontsize = 21)
-  plt.savefig(
-    os.path.join(plot_folder, "i_termination_condition.png"),
-    dpi = 300,
-    format = "png",
-    bbox_inches = "tight"
-  )
-  plt.close()
+  if "criterion" in all_i_tc:
+    _, ax = plt.subplots(figsize = (20,6))
+    all_i_tc["criterion"].value_counts(normalize = True).plot.bar(
+      rot = 0,
+      grid = True,
+      ax = ax,
+      fontsize = 21
+    )
+    ax.set_xlabel("Stopping criterion", fontsize = 21)
+    ax.set_ylabel("Frequency", fontsize = 21)
+    plt.savefig(
+      os.path.join(plot_folder, "i_termination_condition.png"),
+      dpi = 300,
+      format = "png",
+      bbox_inches = "tight"
+    )
+    plt.close()
   # save ping-pong problems info
   with open(os.path.join(plot_folder, "ping_pong_problems.txt"), "w") as ost:
     for el in ping_pong_list:
