@@ -907,11 +907,11 @@ def run(
 
 if __name__ == "__main__":
   args = parse_arguments()
-  config_file = "manual_config.json"#args.config
+  config_file = args.config
   n_experiments = args.n_experiments
   run_centralized_only = args.run_centralized_only
   run_spcoord_only = args.run_spcoord_only
-  postprocessing_only = True#args.postprocessing_only
+  postprocessing_only = args.postprocessing_only
   generate_only = args.generate_only
   postprocessing_list = args.postprocessing_list
   fix_r = args.fix_r
