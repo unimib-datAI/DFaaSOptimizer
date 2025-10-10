@@ -437,7 +437,9 @@ def results_postprocessing(
     # -- plot
     for exp_value, objs in all_obj_values.groupby(loop_over):
       rejs = all_rej_values[all_rej_values[loop_over] == exp_value]
-      rtvs = all_runtime_values[all_runtime_values[loop_over] == exp_value]
+      rtvs = all_runtime_values[
+        all_runtime_values[loop_over] == exp_value
+      ].copy(deep = True)
       i_tc = all_i_tc[all_i_tc[loop_over] == exp_value]
       fig, axs = plt.subplots(
         nrows = 2, ncols = 2, figsize = (12, 8), sharex = True,
@@ -559,6 +561,35 @@ def results_postprocessing(
           grid = True,
           legend = False
         )
+      fig3, axs3 = plt.subplots(
+        nrows = 2, ncols = 1, figsize = (12, 6), sharex = True,
+        gridspec_kw = {"hspace": 0.02}
+      )
+      rtvs["idx"] = rtvs.index
+      rtvs.plot.scatter(
+        x = "idx",
+        y = "LoadManagementModel",
+        ax = axs3[0],
+        c = mcolors.TABLEAU_COLORS["tab:blue"],
+        grid = True,
+        label = "LoadManagementModel"
+      )
+      rtvs.plot.scatter(
+        x = "idx",
+        y = "SP/coord",
+        ax = axs3[0],
+        c = mcolors.TABLEAU_COLORS["tab:orange"],
+        grid = True,
+        label = "SP/coord"
+      )
+      if "dev" in rtvs:
+        rtvs.plot.scatter(
+          x = "idx",
+          y = "dev",
+          ax = axs3[1],
+          c = mcolors.TABLEAU_COLORS["tab:green"],
+          grid = True
+        )
       # average
       avg = objs.groupby("time").mean(numeric_only = True)
       avg_rej = rejs.groupby("time").mean(numeric_only = True)
@@ -637,6 +668,11 @@ def results_postprocessing(
         grid = True,
         label = "Average LMM"
       )
+      axs3[0].axhline(
+        y = rtvs["LoadManagementModel"].mean(),
+        color = mcolors.TABLEAU_COLORS["tab:blue"],
+        linewidth = 2
+      )
       # -- SP/coord
       avg.plot(
         y = "SP/coord",
@@ -663,6 +699,16 @@ def results_postprocessing(
           grid = True,
           label = "Average SP/coord"
         )
+        axs3[0].axhline(
+          y = rtvs["SP/coord"].mean(),
+          color = mcolors.TABLEAU_COLORS["tab:orange"],
+          linewidth = 2
+        )
+        axs3[1].axhline(
+          y = rtvs["dev"].mean(),
+          color = mcolors.TABLEAU_COLORS["tab:green"],
+          linewidth = 2
+        )
       axs[1,0].set_xlabel("Control time period $t$")
       axs[1,1].set_xlabel("Control time period $t$")
       axs[0,0].set_ylabel("Objective function value")
@@ -675,6 +721,9 @@ def results_postprocessing(
       axs2[0].set_ylabel("Runtime [s]")
       axs2[1].set_ylabel("Runtime deviation [x]")
       axs2[2].set_ylabel("Number of iterations")
+      axs3[-1].set_xlabel("Experiment")
+      axs3[0].set_ylabel("Runtime [s]")
+      axs3[1].set_ylabel("Runtime deviation [x]")
       fig.savefig(
         os.path.join(plot_folder, f"obj-{loop_over}_{exp_value}.png"),
         dpi = 300,
@@ -689,6 +738,15 @@ def results_postprocessing(
         bbox_inches = "tight"
       )
       plt.close(fig2)
+      fig3.savefig(
+        os.path.join(
+          plot_folder, f"linear_runtime-{loop_over}_{exp_value}.png"
+        ),
+        dpi = 300,
+        format = "png",
+        bbox_inches = "tight"
+      )
+      plt.close(fig3)
       # termination condition
       i_tc["criterion"].value_counts().plot.bar(
         rot = 0,
@@ -848,11 +906,11 @@ def run(
 
 if __name__ == "__main__":
   args = parse_arguments()
-  config_file = args.config
+  config_file = "manual_config.json"#args.config
   n_experiments = args.n_experiments
   run_centralized_only = args.run_centralized_only
   run_spcoord_only = args.run_spcoord_only
-  postprocessing_only = args.postprocessing_only
+  postprocessing_only = True#args.postprocessing_only
   generate_only = args.generate_only
   postprocessing_list = args.postprocessing_list
   fix_r = args.fix_r
