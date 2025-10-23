@@ -34,37 +34,44 @@ def get_spcoord_runtime(
       "tot": tot_t["tot"]
     })
     _, axs = plt.subplots(
-      nrows = 4, ncols = 1, sharex = True, figsize = (8,20)
+      nrows = 4, ncols = 1, sharex = True, figsize = (8,20),
+      gridspec_kw = {"hspace": 0.04, "wspace": 0.01}
     )
+    fontsize = 18
     # -- min
     min_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
       grid = True, 
       ax = axs[0],
-      stacked = True
+      stacked = True,
+      fontsize = fontsize
     )
     # -- max
     max_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
       grid = True, 
       ax = axs[1],
-      stacked = True
+      stacked = True,
+      fontsize = fontsize
     )
     # -- avg
     avg_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
       grid = True, 
       ax = axs[2],
-      stacked = True
+      stacked = True,
+      fontsize = fontsize
     )
     # -- tot
     tot_t.drop(["tot", "iteration"], axis = "columns").plot.bar(
       grid = True, 
       ax = axs[3],
-      stacked = True
+      stacked = True,
+      fontsize = fontsize
     )
     total_runtime["tot"].plot(
       grid = True, 
       ax = axs[3],
       linewidth = 3,
-      color = "k"
+      color = "k",
+      fontsize = fontsize
     )
     axs[3].axhline(
       y = total_runtime["tot"].mean(),
@@ -72,11 +79,12 @@ def get_spcoord_runtime(
       linewidth = 3,
       color = mcolors.TABLEAU_COLORS["tab:red"]
     )
-    axs[0].set_ylabel("Min 1-iter runtime [s]")
-    axs[1].set_ylabel("Max 1-iter runtime [s]")
-    axs[2].set_ylabel("Avg 1-iter runtime [s]")
-    axs[-1].set_ylabel("Total runtime [s]")
-    axs[-1].set_xlabel("Control time period $t$")
+    axs[0].set_ylabel("Min 1-iter runtime [s]", fontsize = fontsize)
+    axs[1].set_ylabel("Max 1-iter runtime [s]", fontsize = fontsize)
+    axs[2].set_ylabel("Avg 1-iter runtime [s]", fontsize = fontsize)
+    axs[-1].set_ylabel("Total runtime [s]", fontsize = fontsize)
+    axs[-1].set_xlabel("Control time period $t$", fontsize = fontsize)
+    # axs[-1].set_xlabel("Experiment", fontsize = fontsize)
     plt.savefig(
       os.path.join(plot_folder, "runtime.png"),
       dpi = 300,
