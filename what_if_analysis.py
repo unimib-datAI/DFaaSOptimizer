@@ -8,113 +8,23 @@ import json
 import os
 
 
-def find_best_iterations(
-    experiment_folder: str
-  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-  # build folder to store the analysis outcomes
-  output_folder = os.path.join(experiment_folder, "postprocessing")
-  os.makedirs(output_folder, exist_ok = True)
-  # get the number of nodes
-  Nn = None
-  with open(
-      os.path.join(experiment_folder, "base_instance_data.json"), "r"
-    ) as istream:
-    data = json.load(istream)
-    Nn = int(data["None"]["Nn"]["None"])
-  # parse logs file
-  exp = os.path.basename(experiment_folder)
-  logs_df, best_sol_df = parse_log_file(
-    experiment_folder, 
-    exp,
-    pd.DataFrame(),
-    {"social_welfare": pd.DataFrame(), "centralized": pd.DataFrame()},
-    Nn
+def add_time(
+    best_sol_df: pd.DataFrame, logs_df: pd.DataFrame
+  ) -> pd.DataFrame:
+  new_df = best_sol_df.rename(
+    columns = {"best_solution_it": "iteration"}
+  ).set_index(
+    ["exp","Nn","time","iteration"]).join(
+    logs_df.set_index(["exp","Nn","time","iteration"])
+  )[["obj", "measured_total_time"]].reset_index().rename(
+    columns = {"iteration": "best_solution_it"}
   )
-  # save
-  best_sol_df["social_welfare"].to_csv(
-    os.path.join(output_folder, "best_sw_sol_df.csv"), index = False
-  )
-  best_sol_df["centralized"].to_csv(
-    os.path.join(output_folder, "best_c_sol_df.csv"), index = False
-  )
-  logs_df.to_csv(os.path.join(output_folder, "logs_df.csv"), index = False)
-  # plot
-  _, axs = plt.subplots(nrows = 2, ncols = 1, figsize=(20,12), sharex = True)
-  last_it = [0]
-  for t, data in best_sol_df["social_welfare"].groupby("time"):
-    data["x"] = data["best_solution_it"] + last_it[-1]
-    data.plot(
-      x = "x",
-      y = "obj",
-      ax = axs[0],
-      grid = True,
-      marker = ".",
-      markersize = 10,
-      linewidth = 2,
-      # label = f"t = {t}"
-      label = None,
-      legend = False
-    )
-    axs[0].axvline(
-      x = last_it[-1],
-      linestyle = "dotted",
-      linewidth = 1,
-      color = "k"
-    )
-    last_it.append(last_it[-1] + data["best_solution_it"].max())
-  idx = 0
-  for t, data in best_sol_df["centralized"].groupby("time"):
-    data["x"] = data["best_solution_it"] + last_it[idx]
-    data.plot(
-      x = "x",
-      y = "obj",
-      ax = axs[1],
-      grid = True,
-      marker = ".",
-      markersize = 10,
-      linewidth = 2,
-      # label = f"t = {t}"
-      label = None,
-      legend = False
-    )
-    axs[1].axvline(
-      x = last_it[idx],
-      linestyle = "dotted",
-      linewidth = 1,
-      color = "k"
-    )
-    idx += 1
-  plt.savefig(
-    os.path.join(output_folder, "best_solution_obj.png"),
-    dpi = 300,
-    format = "png",
-    bbox_inches = "tight"
-  )
-  plt.close()
-  return best_sol_df["social_welfare"], best_sol_df["centralized"]
+  return new_df
 
 
-def main(base_folder: str):
-  # build folder to store the analysis outcomes
-  output_folder = os.path.join(base_folder, "postprocessing")
-  os.makedirs(output_folder, exist_ok = True)
-  # load information
-  by_social_welfare = pd.DataFrame()
-  by_centralized_objective = pd.DataFrame()
-  for foldername in os.listdir(base_folder):
-    experiment_folder = os.path.join(base_folder, foldername)
-    if os.path.isdir(experiment_folder) and not foldername.startswith("."):
-      if "LSP_solution.csv" in os.listdir(experiment_folder):
-        print(foldername)
-        sw, cobj = find_best_iterations(experiment_folder)
-        by_social_welfare = pd.concat(
-          [by_social_welfare, sw], ignore_index = True
-        )
-        by_centralized_objective = pd.concat(
-          [by_centralized_objective, cobj], ignore_index = True
-        )
-  last_by_sw = by_social_welfare.groupby(["exp", "Nn", "time"]).last()
-  last_by_cobj = by_centralized_objective.groupby(["exp", "Nn", "time"]).last()
+def analyze_final_results(
+    last_by_sw: pd.DataFrame, last_by_cobj: pd.DataFrame, output_folder: str
+  ):
   # plot
   _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (10,6), sharey = True)
   b0 = last_by_sw.plot.box(
@@ -213,7 +123,194 @@ def main(base_folder: str):
   )
 
 
+def find_best_iterations(
+    experiment_folder: str
+  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+  # build folder to store the analysis outcomes
+  output_folder = os.path.join(experiment_folder, "postprocessing")
+  os.makedirs(output_folder, exist_ok = True)
+  # get the number of nodes
+  Nn = None
+  with open(
+      os.path.join(experiment_folder, "base_instance_data.json"), "r"
+    ) as istream:
+    data = json.load(istream)
+    Nn = int(data["None"]["Nn"]["None"])
+  # parse logs file
+  exp = os.path.basename(experiment_folder)
+  logs_df, best_sol_df = parse_log_file(
+    experiment_folder, 
+    exp,
+    pd.DataFrame(),
+    {"social_welfare": pd.DataFrame(), "centralized": pd.DataFrame()},
+    Nn
+  )
+  best_sol_df["social_welfare"] = add_time(
+    best_sol_df["social_welfare"], logs_df
+  )
+  best_sol_df["centralized"] = add_time(
+    best_sol_df["centralized"], logs_df
+  )
+  # save
+  best_sol_df["social_welfare"].to_csv(
+    os.path.join(output_folder, "best_sw_sol_df.csv"), index = False
+  )
+  best_sol_df["centralized"].to_csv(
+    os.path.join(output_folder, "best_c_sol_df.csv"), index = False
+  )
+  logs_df.to_csv(os.path.join(output_folder, "logs_df.csv"), index = False)
+  # plot
+  _, axs = plt.subplots(nrows = 2, ncols = 1, figsize=(20,12), sharex = True)
+  last_it = [0]
+  for t, data in best_sol_df["social_welfare"].groupby("time"):
+    data["x"] = data["best_solution_it"] + last_it[-1]
+    data.plot(
+      x = "x",
+      y = "obj",
+      ax = axs[0],
+      grid = True,
+      marker = ".",
+      markersize = 10,
+      linewidth = 2,
+      # label = f"t = {t}"
+      label = None,
+      legend = False
+    )
+    axs[0].axvline(
+      x = last_it[-1],
+      linestyle = "dotted",
+      linewidth = 1,
+      color = "k"
+    )
+    last_it.append(last_it[-1] + data["best_solution_it"].max())
+  idx = 0
+  for t, data in best_sol_df["centralized"].groupby("time"):
+    data["x"] = data["best_solution_it"] + last_it[idx]
+    data.plot(
+      x = "x",
+      y = "obj",
+      ax = axs[1],
+      grid = True,
+      marker = ".",
+      markersize = 10,
+      linewidth = 2,
+      # label = f"t = {t}"
+      label = None,
+      legend = False
+    )
+    axs[1].axvline(
+      x = last_it[idx],
+      linestyle = "dotted",
+      linewidth = 1,
+      color = "k"
+    )
+    idx += 1
+  plt.savefig(
+    os.path.join(output_folder, "best_solution_obj.png"),
+    dpi = 300,
+    format = "png",
+    bbox_inches = "tight"
+  )
+  plt.close()
+  return best_sol_df["social_welfare"], best_sol_df["centralized"]
+
+
+def main(base_folder: str):
+  # build folder to store the analysis outcomes
+  output_folder = os.path.join(base_folder, "postprocessing")
+  os.makedirs(output_folder, exist_ok = True)
+  # load information
+  by_social_welfare = pd.DataFrame()
+  by_centralized_objective = pd.DataFrame()
+  for foldername in os.listdir(base_folder):
+    experiment_folder = os.path.join(base_folder, foldername)
+    if os.path.isdir(experiment_folder) and not foldername.startswith("."):
+      if "LSP_solution.csv" in os.listdir(experiment_folder):
+        print(foldername)
+        sw, cobj = find_best_iterations(experiment_folder)
+        by_social_welfare = pd.concat(
+          [by_social_welfare, sw], ignore_index = True
+        )
+        by_centralized_objective = pd.concat(
+          [by_centralized_objective, cobj], ignore_index = True
+        )
+  # analyze final result
+  last_by_sw = by_social_welfare.groupby(["exp", "Nn", "time"]).last()
+  last_by_cobj = by_centralized_objective.groupby(["exp", "Nn", "time"]).last()
+  analyze_final_results(last_by_sw, last_by_cobj, output_folder)
+  # compute progressive deviation
+  progressive_dev = pd.DataFrame()
+  for _, vals in by_centralized_objective.groupby(["exp", "Nn", "time"]):
+    dev = []
+    for idx in range(1, len(vals)):
+      dev.append(
+        (
+          vals.iloc[idx]["obj"] - vals.iloc[0]["obj"]
+        ) / vals.iloc[0]["obj"] * 100
+      )
+    dev_df = vals.iloc[1:].copy(deep = True).rename(columns = {"obj": "dev"})
+    dev_df["dev"] = dev
+    progressive_dev = pd.concat([progressive_dev, dev_df], ignore_index = True)
+  # save
+  progressive_dev.to_csv(
+    os.path.join(output_folder, "progressive_dev.csv"), index = False
+  )
+  for Nn, vals in progressive_dev.groupby("Nn"):
+    _, ax = plt.subplots()
+    for _, tvals in vals.groupby("time"):
+      tvals.plot.scatter(
+        x = "measured_total_time",
+        y = "dev",
+        c = mcolors.TABLEAU_COLORS["tab:blue"],
+        grid = True,
+        ax = ax,
+        label = None,
+        legend = False
+      )
+    milestones = [0, 1, 10, 30, 60, 120]
+    for idx in range(1,len(milestones)):
+      tvals = vals[
+        (
+          vals["measured_total_time"] >= milestones[idx - 1]
+        ) & 
+        (
+          vals["measured_total_time"] < milestones[idx]
+        )
+      ]
+      if len(tvals) > 0:
+        ax.axvline(
+          x = milestones[idx], linestyle = "dashed", linewidth = 2, color = "k"
+        )
+        avgdev = tvals["dev"].mean()
+        avgmtt = tvals["measured_total_time"].mean()
+        ax.plot(
+          [avgmtt], 
+          [avgdev], 
+          '*', 
+          color = mcolors.TABLEAU_COLORS["tab:red"],
+          markersize = 10
+        )
+    tvals = vals[vals["measured_total_time"] >= milestones[-1]]
+    if len(tvals) > 0:
+      avgdev = tvals["dev"].mean()
+      avgmtt = tvals["measured_total_time"].mean()
+      ax.plot(
+        [avgmtt], 
+        [avgdev], 
+        '*', 
+        color = mcolors.TABLEAU_COLORS["tab:red"],
+        markersize = 10
+      )
+    plt.savefig(
+      os.path.join(output_folder, f"progressive_dev-Nn_{Nn}.png"),
+      dpi = 300,
+      format = "png",
+      bbox_inches = "tight"
+    )
+    plt.close()
+
+
 if __name__ == "__main__":
-  base_folder = "solutions/2024_RussoRusso_spcoord2"
+  base_folder = "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/2024_RussoRusso-0_10-spcoord_optimal"
   main(base_folder)
 
