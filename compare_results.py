@@ -3,7 +3,89 @@ import matplotlib.pyplot as plt
 from parse import parse
 import seaborn as sns
 import pandas as pd
+import argparse
 import os
+
+
+def parse_arguments() -> argparse.Namespace:
+  """
+  Parse input arguments
+  """
+  parser: argparse.ArgumentParser = argparse.ArgumentParser(
+    description = "Compare results", 
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+  )
+  parser.add_argument(
+    "-i", "--postprocessing_folders",
+    help = "Results folder (or list of result folders)",
+    nargs = "+",
+    required = True
+  )
+  parser.add_argument(
+    "--run",
+    help = "What to do",
+    choices = [
+      "compare_results", "compare_across_folders", "compare_single_model"
+    ],
+    default = "compare_results"
+  )
+  parser.add_argument(
+    "-o", "--common_output_folder",
+    help = "Path to a folder where to save plots",
+    type = str,
+    default = None
+  )
+  parser.add_argument(
+  "--loop_over",
+  help = "Key to loop over",
+  type = str,
+  default = "Nn"
+  )
+  parser.add_argument(
+  "--loop_over_label",
+  help = "Label to be attached to the loop-over key",
+  type = str,
+  default = "Number of agents"
+  )
+  parser.add_argument(
+    "--models",
+    help = "List of model names",
+    nargs = "*",
+    default = ["LoadManagementModel", "SP/coord"]
+  )
+  parser.add_argument(
+  "--filter_by",
+  help = "Key to filter",
+  type = str,
+  default = None
+  )
+  parser.add_argument(
+  "--keep_only",
+  help = "Unique value to keep",
+  type = int,
+  default = None
+  )
+  parser.add_argument(
+  "--drop_value",
+  help = "Unique value to drop",
+  type = int,
+  default = None
+  )
+  parser.add_argument(
+  "--folder_parse_format",
+  help = "Format to parse the folder name",
+  type = str,
+  default = None
+  )
+  parser.add_argument(
+  "--single_model_baseline",
+  help = "Baseline for time comparison",
+  type = int,
+  default = None
+  )
+  # Parse the arguments
+  args: argparse.Namespace = parser.parse_known_args()[0]
+  return args
 
 
 def compare_across_folders(
@@ -97,7 +179,17 @@ def compare_results(
   dev_plot_by_key(
     obj, runtime, rej, key, key_label, postprocessing_folder
   )
+  dev_barplot_by_key(obj, runtime, rej, key, key_label, postprocessing_folder)
   plot_by_key(
+    obj, 
+    runtime, 
+    rej, 
+    models,
+    key, 
+    key_label, 
+    postprocessing_folder
+  )
+  violinplot_by_key(
     obj, 
     runtime, 
     rej, 
@@ -258,12 +350,12 @@ def dev_plot_by_key(
   # axis properties
   # -- y
   axs[0].set_ylabel(
-    "Objective deviation\n((SP/coord - LMM) / LMM) [%]",
+    "Objective deviation\n((FaaS-MACoord - LMM) / LMM) [%]",
     fontsize = fontsize
   )
   axs[0].set_title(None)
   axs[1].set_ylabel(
-    "Runtime deviation\n(SP/coord / LMM) [x]",
+    "Runtime deviation\n(FaaS-MACoord / LMM) [x]",
     fontsize = fontsize
   )
   axs[1].set_title(None)
@@ -288,7 +380,7 @@ def dev_plot_by_key(
       color = "k"
     )
     axs[2].set_ylabel(
-      "Cloud offloading deviation\n(SP/coord - LMM) [%]",
+      "Cloud offloading deviation\n(FaaS-MACoord - LMM) [%]",
       fontsize = fontsize
     )
     axs[2].set_title(None)
@@ -582,11 +674,11 @@ def dev_barplot_by_key(
   # # axis properties
   # # -- y
   # axs[0].set_ylabel(
-  #   "Objective deviation\n((SP/coord - LMM) / LMM) [%]",
+  #   "Objective deviation\n((FaaS-MACoord - LMM) / LMM) [%]",
   #   fontsize = fontsize
   # )
   # axs[1].set_ylabel(
-  #   "Runtime deviation\n(SP/coord / LMM) [x]",
+  #   "Runtime deviation\n(FaaS-MACoord / LMM) [x]",
   #   fontsize = fontsize
   # )
   # if rej is not None:
@@ -597,7 +689,7 @@ def dev_barplot_by_key(
   #     color = "k"
   #   )
   #   axs[2].set_ylabel(
-  #     "Cloud offloading deviation\n(SP/coord - LMM) [%]",
+  #     "Cloud offloading deviation\n(FaaS-MACoord - LMM) [%]",
   #     fontsize = fontsize
   #   )
   # # -- common properties
@@ -628,7 +720,7 @@ def dev_barplot_by_key(
   # plt.close()
   ##
   f2, axs2 = plt.subplots(
-    nrows = nrows, ncols = ncols, figsize = (12 * ncols, 6 * nrows), 
+    nrows = nrows, ncols = ncols, figsize = (12 * ncols, 7 * nrows), 
     gridspec_kw = {"wspace": 0.2}
   )
   group = obj.groupby(key)
@@ -691,11 +783,11 @@ def dev_barplot_by_key(
   # axis properties
   # -- y
   axs2[0].set_ylabel(
-    "Objective deviation\n((SP/coord - LMM) / LMM) [%]",
+    "Objective deviation\n((FaaS-MACoord - LMM) / LMM) [%]",
     fontsize = fontsize
   )
   axs2[1].set_ylabel(
-    "Runtime deviation\n(SP/coord / LMM) [x]",
+    "Runtime deviation\n(FaaS-MACoord / LMM) [x]",
     fontsize = fontsize
   )
   if rej is not None:
@@ -706,7 +798,7 @@ def dev_barplot_by_key(
       color = "k"
     )
     axs2[2].set_ylabel(
-      "Cloud offloading deviation\n(SP/coord - LMM) [%]",
+      "Cloud offloading deviation\n(FaaS-MACoord - LMM) [%]",
       fontsize = fontsize
     )
   # -- common properties
@@ -869,36 +961,77 @@ def violinplot_by_key(
 
 
 if __name__ == "__main__":
-  postprocessing_folders = [
-    # os.path.join(
-    #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/Nn_200-k_100",
-    #   f
-    # ) for f in os.listdir(
-    #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/Nn_200-k_100"
-    # ) if not f.startswith(".") and not f.startswith("post") and not f.startswith("temp")
-    "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/2024_RussoRusso-0_10-spcoord_optimal"
-  ]
-  for postprocessing_folder in postprocessing_folders:
-    print(postprocessing_folder)
-    compare_results(
-      os.path.join(postprocessing_folder, "postprocessing"),
-      "Nn",
-      "Number of agents",
-      ["LoadManagementModel", "SP/coord"]
+  # parse arguments
+  args = parse_arguments()
+  postprocessing_folders = args.postprocessing_folders
+  common_output_folder = args.common_output_folder
+  what_to_do = args.run
+  loop_over = args.loop_over
+  loop_over_label = args.loop_over_label
+  models = args.models
+  filter_by = args.filter_by
+  keep_only = args.keep_only
+  drop_value = args.drop_value
+  folder_parse_format = args.folder_parse_format
+  single_model_baseline = args.single_model_baseline
+  # build list of postprocessing folders if only the base was provided
+  if len(postprocessing_folders) == 1:
+    if "experiments.json" not in os.listdir(postprocessing_folders[0]):
+      base_folder = postprocessing_folders[0]
+      postprocessing_folders = [
+        os.path.join(
+          base_folder, f
+        ) for f in os.listdir(base_folder) if not f.startswith(".") and \
+          not f.startswith("post")
+      ]
+  # check what to do
+  if what_to_do == "compare_results":
+    if common_output_folder is not None:
+      print(
+        "WARNING: `common_output_folder` is ignored in this setting."
+        " All results will be saved in <postprocessing_folder>/postprocessing"
+      )
+    for postprocessing_folder in postprocessing_folders:
+      print(postprocessing_folder)
+      compare_results(
+        os.path.join(postprocessing_folder, "postprocessing"),
+        loop_over,
+        loop_over_label,
+        models
+      )
+  elif what_to_do == "compare_across_folders":
+    # for eef,
+    # loop_over_label = "Edge-exposed fraction [%]"
+    # models = ["SP/coord", "ScaledOnSumLMM"]
+    if keep_only is not None and drop_value is not None:
+      print(
+        "WARNING: both `keep_only` and `drop_value` set."
+        " `drop_value` will be ignored"
+      )
+    if folder_parse_format is None:
+      raise KeyError(
+        f"It is mandatory to set `folder_parse_format` in {what_to_do} mode"
+      )
+    compare_across_folders(
+      postprocessing_folders, 
+      folder_parse_format,
+      loop_over_label,
+      models,
+      common_output_folder,
+      filter_by = filter_by,
+      keep_only = keep_only,
+      drop_value = drop_value
     )
-  # compare_across_folders(
-  #   postprocessing_folders, 
-  #   "2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-k_100-{}_{}-spcoord_greedy",
-  #   "Edge-exposed fraction [%]",
-  #   ["SP/coord", "ScaledOnSumLMM"],
-  #   "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/varyingEef/Nn_200-k_100/temp"
-  # )
-  # compare_single_model(
-  #   postprocessing_folders, 
-  #   "2024_RussoRusso-0_10-centralized_{}_{}",
-  #   "Time limit [s]",
-  #   "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/centralized/postprocessing_by_TL",
-  #   baseline = 10,
-  #   filter_by = "Nn",
-  #   keep_only = 50
-  # )
+  elif what_to_do == "compare_single_model":
+    # usually:
+    # loop_over_label = "Time limit [s]"
+    # single_model_baseline = 10
+    compare_single_model(
+      postprocessing_folders, 
+      folder_parse_format,
+      common_output_folder,
+      baseline = single_model_baseline,
+      filter_by = filter_by,
+      keep_only = keep_only,
+      drop_value = drop_value
+    )
