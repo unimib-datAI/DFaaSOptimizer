@@ -177,7 +177,7 @@ def encode_solution(
 
 
 def extract_solution(
-    data: dict, solution: dict
+    data: dict, solution: dict, approx_tol: float = 1e-6
   ) -> Tuple[
     np.array, np.array, np.array, np.array, np.array, np.array, float
   ]:
@@ -213,12 +213,20 @@ def extract_solution(
   # -- number of function replicas
   if "r" in solution:
     r = np.array(
-      [float_to_int(rval) for rval in np.array(solution["r"]).flatten()], 
+      [
+        float_to_int(
+          rval, approx_tol
+        ) for rval in np.array(solution["r"]).flatten()
+      ], 
       dtype = int
     ).reshape((Nn, Nf))
     if "r_bar" in data[None]:
       r_bar = np.array(
-        [float_to_int(rval) for rval in data[None]["r_bar"].values()], 
+        [
+          float_to_int(
+            rval, approx_tol
+          ) for rval in data[None]["r_bar"].values()
+        ], 
         dtype = int
       ).reshape((Nn, Nf))
       r += r_bar
@@ -422,7 +430,9 @@ def solve_instance(
     data[None]["Nn"][None], data[None]["Nf"][None]
   )
   if solution["solution_exists"]:
-    x, y, z, r, xi, omega, rho, obj = extract_solution(data, solution)
+    x, y, z, r, xi, omega, rho, obj = extract_solution(
+      data, solution, approx_tol = solver_options.get("FeasibilityTol", 1e-6)
+    )
     U = compute_utilization(data, solution)
   return x, y, z, r, xi, omega, rho, U, obj, solution["runtime"], tc
 

@@ -29,12 +29,12 @@ def delete_tuples(_dict: dict):
   return serializable_dict
 
 
-def float_to_int(fval: float) -> int:
+def float_to_int(fval: float, approx_tol: float) -> int:
   ival = None
-  if np.floor(fval) > 0 and ((fval / np.floor(fval) - 1) > 1e-6):
+  if np.floor(fval) > 0 and ((fval / np.floor(fval) - 1) > approx_tol):
     ival = int(np.ceil(fval))
   else:
-    if int(np.floor(fval)) == 0 and (fval > 1e-6):
+    if int(np.floor(fval)) == 0 and (fval > approx_tol):
       ival = int(np.ceil(fval))
     else:
       ival = int(fval)

@@ -365,7 +365,7 @@ def init_parallel_worker(
 
 
 def merge_agents_solutions(
-    data: dict, agents_sol: dict
+    data: dict, agents_sol: dict, approx_tol: float = 1e-6
   ) -> Tuple[np.array, np.array, np.array, np.array, dict, dict]:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
@@ -389,7 +389,7 @@ def merge_agents_solutions(
     temp_data["indices"] = [agent]
     # -- variables
     a_x, _, _, a_r, _, a_omega, a_rho, a_obj = extract_solution(
-      temp_data, agent_solution
+      temp_data, agent_solution, approx_tol = approx_tol
     )
     if a_x is not None:
       x[agent,:] = a_x
@@ -461,7 +461,9 @@ def solve_master_problem(
   (
     rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, obj
   ) = extract_solution(
-    rmp_data, rmp_solution
+    rmp_data, rmp_solution, approx_tol = solver_options.get(
+      "FeasibilityTol", 1e-6
+    )
   )
   rmp_U = compute_utilization(rmp_data, rmp_solution)
   return (
@@ -522,7 +524,7 @@ def solve_subproblem(
       )
   # merge solutions
   sp_x, sp_omega, sp_r, sp_rho, obj, tc, runtime = merge_agents_solutions(
-    sp_data, agents_sol
+    sp_data, agents_sol, approx_tol=solver_options.get("FeasibilityTol", 1e-6)
   )
   sp_solution = {
     "x": sp_x, 
