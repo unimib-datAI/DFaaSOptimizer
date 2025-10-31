@@ -123,6 +123,170 @@ def analyze_final_results(
   )
 
 
+def compute_minmaxavg_in_milestone(
+    tvals: pd.DataFrame, milestone: float
+  ) -> pd.DataFrame:
+  columns = ["Nn","obj","measured_total_time","dev","centralized_dev"]
+  metrics_by_milestones = pd.DataFrame()
+  # ---- min
+  tdf = pd.DataFrame(tvals[columns].min()).transpose()
+  tdf["time_limit"] = milestone
+  tdf["which"] = "min"
+  metrics_by_milestones = pd.concat(
+    [metrics_by_milestones, tdf], ignore_index = True
+  )
+  # ---- max
+  tdf = pd.DataFrame(tvals[columns].max()).transpose()
+  tdf["time_limit"] = milestone
+  tdf["which"] = "max"
+  metrics_by_milestones = pd.concat(
+    [metrics_by_milestones, tdf], ignore_index = True
+  )
+  # ---- avg
+  tdf = pd.DataFrame(tvals[columns].mean()).transpose()
+  tdf["time_limit"] = milestone
+  tdf["which"] = "avg"
+  metrics_by_milestones = pd.concat(
+    [metrics_by_milestones, tdf], ignore_index = True
+  )
+  return metrics_by_milestones
+
+
+def compute_progressive_deviation(
+    obj_df: pd.DataFrame, milestones: list, output_folder: str
+  ):
+  progressive_dev = pd.DataFrame()
+  for _, vals in obj_df.groupby(["exp", "Nn", "time"]):
+    dev = []
+    for idx in range(1, len(vals)):
+      dev.append(
+        (
+          vals.iloc[idx]["obj"] - vals.iloc[0]["obj"]
+        ) / vals.iloc[0]["obj"] * 100
+      )
+    dev_df = vals.iloc[1:].copy(deep = True)
+    dev_df["dev"] = dev
+    progressive_dev = pd.concat([progressive_dev, dev_df], ignore_index = True)
+  # match experiment name with description (if available)
+  if os.path.exists(os.path.join(output_folder, "../experiments.json")):
+    experiments = {}
+    with open(
+        os.path.join(output_folder, "../experiments.json"), "r"
+      ) as ist:
+      experiments = json.load(ist)
+    exp_description_match = {}
+    for exp, exp_description_tuple in zip(
+        experiments["sp-coord"], experiments["experiments_list"]
+      ):
+      exp_description_match[os.path.basename(exp)] = {
+        "Nn": int(exp_description_tuple[0]),
+        "seed": int(exp_description_tuple[-1])
+      }
+    # -- add match info
+    progressive_dev["seed"] = [
+      exp_description_match[exp]["seed"] for exp in progressive_dev["exp"]
+    ]
+  # load centralized solution (if available)
+  if os.path.exists(os.path.join(output_folder, "obj.csv")):
+    centralized_obj = pd.read_csv(os.path.join(output_folder, "obj.csv"))
+    progressive_dev["centralized_obj"] = None
+    for (Nn, seed, time), val in centralized_obj.groupby(["Nn","seed","time"]):
+      idxs = progressive_dev[
+        (
+          progressive_dev["Nn"] == Nn
+        ) & (
+          progressive_dev["seed"] == seed
+        ) & (
+          progressive_dev["time"] == time
+        )
+      ].index
+      progressive_dev.loc[
+        idxs, "centralized_obj"
+      ] = val["LoadManagementModel"].iloc[0]
+  progressive_dev["centralized_dev"] = (
+    progressive_dev["obj"] - progressive_dev["centralized_obj"]
+  ) / progressive_dev["centralized_obj"] * 100
+  # save
+  progressive_dev.to_csv(
+    os.path.join(output_folder, "progressive_dev.csv"), index = False
+  )
+  # plot and compute metrics by milestones
+  metrics_by_milestones = pd.DataFrame()
+  for Nn, vals in progressive_dev.groupby("Nn"):
+    _, ax = plt.subplots(figsize = (8,3))
+    fontsize = 10
+    for _, tvals in vals.groupby("time"):
+      tvals.plot.scatter(
+        x = "measured_total_time",
+        y = "centralized_dev",
+        c = mcolors.TABLEAU_COLORS["tab:blue"],
+        grid = True,
+        ax = ax,
+        label = None,
+        legend = False,
+        fontsize = fontsize
+      )
+    # -- loop over milestones and compute average
+    for idx in range(1,len(milestones)):
+      tvals = vals[
+        (
+          vals["measured_total_time"] >= milestones[idx - 1]
+        ) & 
+        (
+          vals["measured_total_time"] < milestones[idx]
+        )
+      ]
+      if len(tvals) > 0:
+        ax.axvline(
+          x = milestones[idx], linestyle = "dashed", linewidth = 2, color = "k"
+        )
+        avgdev = tvals["centralized_dev"].mean()
+        avgmtt = tvals["measured_total_time"].mean()
+        ax.plot(
+          [avgmtt], 
+          [avgdev], 
+          '*', 
+          color = mcolors.TABLEAU_COLORS["tab:red"],
+          markersize = 10
+        )
+        # -- add to metrics
+        mmm = compute_minmaxavg_in_milestone(tvals, milestones[idx])
+        metrics_by_milestones = pd.concat(
+          [metrics_by_milestones, mmm], ignore_index = True
+        )
+    tvals = vals[vals["measured_total_time"] >= milestones[-1]]
+    if len(tvals) > 0:
+      avgdev = tvals["centralized_dev"].mean()
+      avgmtt = tvals["measured_total_time"].mean()
+      ax.plot(
+        [avgmtt], 
+        [avgdev], 
+        '*', 
+        color = mcolors.TABLEAU_COLORS["tab:red"],
+        markersize = 10
+      )
+      # -- add to metrics
+      mmm = compute_minmaxavg_in_milestone(tvals, 3600)
+      metrics_by_milestones = pd.concat(
+        [metrics_by_milestones, mmm], ignore_index = True
+      )
+    ax.set_xlabel("Runtime [s]", fontsize = fontsize)
+    ax.set_ylabel(
+      "Objective deviation\n((FaaS-MACoord - LMM) / LMM) [%]", 
+      fontsize = fontsize
+    )
+    plt.savefig(
+      os.path.join(output_folder, f"progressive_dev-Nn_{Nn}.png"),
+      dpi = 300,
+      format = "png",
+      bbox_inches = "tight"
+    )
+    plt.close()
+    metrics_by_milestones.to_csv(
+      os.path.join(output_folder, "metrics_by_milestones.csv"), index = False
+    )
+
+
 def find_best_iterations(
     experiment_folder: str
   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
@@ -239,78 +403,12 @@ def main(base_folder: str):
   last_by_cobj = by_centralized_objective.groupby(["exp", "Nn", "time"]).last()
   analyze_final_results(last_by_sw, last_by_cobj, output_folder)
   # compute progressive deviation
-  progressive_dev = pd.DataFrame()
-  for _, vals in by_centralized_objective.groupby(["exp", "Nn", "time"]):
-    dev = []
-    for idx in range(1, len(vals)):
-      dev.append(
-        (
-          vals.iloc[idx]["obj"] - vals.iloc[0]["obj"]
-        ) / vals.iloc[0]["obj"] * 100
-      )
-    dev_df = vals.iloc[1:].copy(deep = True).rename(columns = {"obj": "dev"})
-    dev_df["dev"] = dev
-    progressive_dev = pd.concat([progressive_dev, dev_df], ignore_index = True)
-  # save
-  progressive_dev.to_csv(
-    os.path.join(output_folder, "progressive_dev.csv"), index = False
+  compute_progressive_deviation(
+    by_centralized_objective, [0, 1, 10, 30, 60, 120], output_folder
   )
-  for Nn, vals in progressive_dev.groupby("Nn"):
-    _, ax = plt.subplots()
-    for _, tvals in vals.groupby("time"):
-      tvals.plot.scatter(
-        x = "measured_total_time",
-        y = "dev",
-        c = mcolors.TABLEAU_COLORS["tab:blue"],
-        grid = True,
-        ax = ax,
-        label = None,
-        legend = False
-      )
-    milestones = [0, 1, 10, 30, 60, 120]
-    for idx in range(1,len(milestones)):
-      tvals = vals[
-        (
-          vals["measured_total_time"] >= milestones[idx - 1]
-        ) & 
-        (
-          vals["measured_total_time"] < milestones[idx]
-        )
-      ]
-      if len(tvals) > 0:
-        ax.axvline(
-          x = milestones[idx], linestyle = "dashed", linewidth = 2, color = "k"
-        )
-        avgdev = tvals["dev"].mean()
-        avgmtt = tvals["measured_total_time"].mean()
-        ax.plot(
-          [avgmtt], 
-          [avgdev], 
-          '*', 
-          color = mcolors.TABLEAU_COLORS["tab:red"],
-          markersize = 10
-        )
-    tvals = vals[vals["measured_total_time"] >= milestones[-1]]
-    if len(tvals) > 0:
-      avgdev = tvals["dev"].mean()
-      avgmtt = tvals["measured_total_time"].mean()
-      ax.plot(
-        [avgmtt], 
-        [avgdev], 
-        '*', 
-        color = mcolors.TABLEAU_COLORS["tab:red"],
-        markersize = 10
-      )
-    plt.savefig(
-      os.path.join(output_folder, f"progressive_dev-Nn_{Nn}.png"),
-      dpi = 300,
-      format = "png",
-      bbox_inches = "tight"
-    )
-    plt.close()
 
 
 if __name__ == "__main__":
-  base_folder = "/Users/federicafilippini/Documents/ServerBackups/DFaaSOptimizer_solutions/2024_RussoRusso/2024_RussoRusso-0_10-spcoord_optimal"
+  base_folder = "/Users/federicafilippini/Documents/ToGDrive/Madrid/20251025/homogeneous/2024_RussoRusso/2024_RussoRusso-0_10-spcoord_greedy"
   main(base_folder)
 
