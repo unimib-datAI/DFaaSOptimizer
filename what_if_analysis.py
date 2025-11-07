@@ -4,8 +4,31 @@ from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 from typing import Tuple
 import pandas as pd
+import argparse
 import json
 import os
+
+
+def parse_arguments() -> argparse.Namespace:
+  """
+  Parse input arguments
+  """
+  parser: argparse.ArgumentParser = argparse.ArgumentParser(
+    description = "run", 
+    formatter_class = argparse.ArgumentDefaultsHelpFormatter
+  )
+  parser.add_argument(
+    "-f", "--base_folders",
+    help = "Base experiment folder",
+    type = str,
+    required = True
+  )
+  parser.add_argument(
+    "-m", "--milestones",
+    help = "List of time limits to consider as milestones",
+    nargs = "+",
+    default = [0, 10, 30, 60, 120]
+  )
 
 
 def add_time(
@@ -213,7 +236,7 @@ def compute_progressive_deviation(
   # plot and compute metrics by milestones
   metrics_by_milestones = pd.DataFrame()
   for Nn, vals in progressive_dev.groupby("Nn"):
-    _, ax = plt.subplots(figsize = (8,3))
+    _, ax = plt.subplots(figsize = (7,3))
     fontsize = 10
     for _, tvals in vals.groupby("time"):
       tvals.plot.scatter(
@@ -237,11 +260,15 @@ def compute_progressive_deviation(
         )
       ]
       if len(tvals) > 0:
+        idxmax = tvals.groupby(
+          ["Nn", "seed", "time"]
+        )["measured_total_time"].idxmax()
+        tvals_at_max = tvals.loc[idxmax,:]
         ax.axvline(
           x = milestones[idx], linestyle = "dashed", linewidth = 2, color = "k"
         )
-        avgdev = tvals["centralized_dev"].mean()
-        avgmtt = tvals["measured_total_time"].mean()
+        avgdev = tvals_at_max["centralized_dev"].mean()
+        avgmtt = tvals_at_max["measured_total_time"].mean()
         ax.plot(
           [avgmtt], 
           [avgdev], 
@@ -250,14 +277,18 @@ def compute_progressive_deviation(
           markersize = 10
         )
         # -- add to metrics
-        mmm = compute_minmaxavg_in_milestone(tvals, milestones[idx])
+        mmm = compute_minmaxavg_in_milestone(tvals_at_max, milestones[idx])
         metrics_by_milestones = pd.concat(
           [metrics_by_milestones, mmm], ignore_index = True
         )
     tvals = vals[vals["measured_total_time"] >= milestones[-1]]
     if len(tvals) > 0:
-      avgdev = tvals["centralized_dev"].mean()
-      avgmtt = tvals["measured_total_time"].mean()
+      idxmax = tvals.groupby(
+        ["Nn", "seed", "time"]
+      )["measured_total_time"].idxmax()
+      tvals_at_max = tvals.loc[idxmax,:]
+      avgdev = tvals_at_max["centralized_dev"].mean()
+      avgmtt = tvals_at_max["measured_total_time"].mean()
       ax.plot(
         [avgmtt], 
         [avgdev], 
@@ -266,13 +297,13 @@ def compute_progressive_deviation(
         markersize = 10
       )
       # -- add to metrics
-      mmm = compute_minmaxavg_in_milestone(tvals, 3600)
+      mmm = compute_minmaxavg_in_milestone(tvals_at_max, 3600)
       metrics_by_milestones = pd.concat(
         [metrics_by_milestones, mmm], ignore_index = True
       )
     ax.set_xlabel("Runtime [s]", fontsize = fontsize)
     ax.set_ylabel(
-      "Objective deviation\n((FaaS-MACoord - LMM) / LMM) [%]", 
+      "Objective deviation\n((MOSAIC - LMM) / LMM) [%]", 
       fontsize = fontsize
     )
     plt.savefig(
@@ -379,7 +410,7 @@ def find_best_iterations(
   return best_sol_df["social_welfare"], best_sol_df["centralized"]
 
 
-def main(base_folder: str):
+def main(base_folder: str, milestones: list):
   # build folder to store the analysis outcomes
   output_folder = os.path.join(base_folder, "postprocessing")
   os.makedirs(output_folder, exist_ok = True)
@@ -404,11 +435,13 @@ def main(base_folder: str):
   analyze_final_results(last_by_sw, last_by_cobj, output_folder)
   # compute progressive deviation
   compute_progressive_deviation(
-    by_centralized_objective, [0, 1, 10, 30, 60, 120], output_folder
+    by_centralized_objective, milestones, output_folder
   )
 
 
 if __name__ == "__main__":
-  base_folder = "/Users/federicafilippini/Documents/ToGDrive/Madrid/20251025/homogeneous/2024_RussoRusso/2024_RussoRusso-0_10-spcoord_greedy"
-  main(base_folder)
+  args = parse_arguments()
+  base_folder = args.base_folder
+  milestones = args.milestones
+  main(base_folder, milestones)
 
