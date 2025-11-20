@@ -1,4 +1,4 @@
-from logs_postprocessing import parse_log_file, get_spcoord_runtime
+from logs_postprocessing import parse_log_file, get_faasmacro_runtime
 from run_centralized_model import load_configuration
 from run_centralized_model import run as run_centralized
 from l_run_iterations import run as run_iterations
@@ -45,7 +45,7 @@ def parse_arguments() -> argparse.Namespace:
     action = "store_true"
   )
   parser.add_argument(
-    "--run_spcoord_only",
+    "--run_faasmacro_only",
     default = False,
     action = "store_true"
   )
@@ -211,7 +211,7 @@ def results_postprocessing(
   for exp_description_tuple, c_folder, i_folder in zip(
       solution_folders["experiments_list"], 
       solution_folders["centralized"],
-      solution_folders["sp-coord"]
+      solution_folders["faas-macro"]
     ):
     print(f"Postprocessing exp: {exp_description_tuple}")
     # prepare folder to store results
@@ -227,7 +227,7 @@ def results_postprocessing(
         if len(c_res[-1]["LoadManagementModel"]) > 0:
           ping_pong_list.append([exp_description, "centralized", c_folder])
         if len(i_res[-1]["LSP"]) > 0:
-          ping_pong_list.append([exp_description, "sp-coord", i_folder])
+          ping_pong_list.append([exp_description, "faas-macro", i_folder])
         # merge solutions
         local_count = merge_sol_dict(
           c_res[0]["by_function"], i_res[0]["by_function"]
@@ -262,7 +262,7 @@ def results_postprocessing(
           local_count.groupby("time").sum() + fwd_count.groupby("time").sum()
         ) + all_rej
         all_rej = all_rej / all_req * 100
-        all_rej.rename(columns = {"LSP": "SP/coord"}, inplace = True)
+        all_rej.rename(columns = {"LSP": "FaaS-MACrO"}, inplace = True)
         # plot
         _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
         obj.plot(marker = ".", grid = True, ax = axs[0])
@@ -280,10 +280,10 @@ def results_postprocessing(
         plt.close()
         # compute deviation
         obj["dev"] = (
-          obj["SP/coord"] - obj["LoadManagementModel"]
+          obj["FaaS-MACrO"] - obj["LoadManagementModel"]
         ) / obj["LoadManagementModel"] * 100
         all_rej["dev"] = (
-          all_rej["SP/coord"] - all_rej["LoadManagementModel"]
+          all_rej["FaaS-MACrO"] - all_rej["LoadManagementModel"]
         )
         # plot
         _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
@@ -302,10 +302,10 @@ def results_postprocessing(
         axs[0].set_xlabel("Control time period $t$")
         axs[1].set_xlabel("Control time period $t$")
         axs[0].set_ylabel(
-          "Objective function deviation ((SP/coord - LMM) / LMM )[%]"
+          "Objective function deviation ((FaaS-MACrO - LMM) / LMM )[%]"
         )
         axs[1].set_ylabel(
-          "Percentage rejections deviation (SP/coord - LMM) [%]"
+          "Percentage rejections deviation (FaaS-MACrO - LMM) [%]"
         )
         plt.savefig(
           os.path.join(exp_plot_folder, "obj_deviation.png"),
@@ -382,19 +382,19 @@ def results_postprocessing(
         {}, 
         int(exp_description_tuple[0])
       )
-      i_runtime = get_spcoord_runtime(logs_df, exp_plot_folder)
+      i_runtime = get_faasmacro_runtime(logs_df, exp_plot_folder)
     # plot runtime comparison
     if len(c_runtime) > 0 and len(i_runtime) > 0:
       runtime_comparison = pd.DataFrame({
         "LoadManagementModel": c_runtime["LoadManagementModel"],
-        "SP/coord": i_runtime["tot"],
+        "FaaS-MACrO": i_runtime["tot"],
         "iteration": i_tc["iteration"],
         "best_iteration": i_tc["best_iteration"],
       })
       _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (12,8))
       runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
       runtime_comparison["dev"] = (
-        runtime_comparison["SP/coord"] / runtime_comparison["LoadManagementModel"]
+        runtime_comparison["FaaS-MACrO"] / runtime_comparison["LoadManagementModel"]
       )
       runtime_comparison["dev"].plot(
         grid = True, marker = ".", ax = axs[1]
@@ -533,10 +533,10 @@ def results_postprocessing(
           grid = True,
           legend = False
         )
-        # SP/coord
+        # FaaS-MACrO
         obj.plot(
           x = "time", 
-          y = "SP/coord", 
+          y = "FaaS-MACrO", 
           ax = axs[0,0], 
           color = mcolors.TABLEAU_COLORS["tab:orange"], 
           linewidth = 1,
@@ -545,7 +545,7 @@ def results_postprocessing(
         )
         rej.plot(
           x = "time", 
-          y = "SP/coord", 
+          y = "FaaS-MACrO", 
           ax = axs[1,0], 
           color = mcolors.TABLEAU_COLORS["tab:orange"], 
           linewidth = 1,
@@ -554,7 +554,7 @@ def results_postprocessing(
         )
         rtv.plot(
           x = "time", 
-          y = "SP/coord", 
+          y = "FaaS-MACrO", 
           ax = axs2[0], 
           color = mcolors.TABLEAU_COLORS["tab:orange"], 
           linewidth = 1,
@@ -576,11 +576,11 @@ def results_postprocessing(
       )
       rtvs.plot.scatter(
         x = "idx",
-        y = "SP/coord",
+        y = "FaaS-MACrO",
         ax = axs3[0],
         c = mcolors.TABLEAU_COLORS["tab:orange"],
         grid = True,
-        label = "SP/coord"
+        label = "FaaS-MACrO"
       )
       if "dev" in rtvs:
         rtvs.plot.scatter(
@@ -602,7 +602,7 @@ def results_postprocessing(
         linewidth = 2,
         marker = ".", 
         grid = True,
-        label = "Average deviation ((SP/coord - LMM) / LMM) [%]"
+        label = "Average deviation ((FaaS-MACrO - LMM) / LMM) [%]"
       )
       avg_rej.plot(
         y = "dev",
@@ -611,7 +611,7 @@ def results_postprocessing(
         linewidth = 2,
         marker = ".", 
         grid = True,
-        label = "Average deviation (SP/coord - LMM) [%]"
+        label = "Average deviation (FaaS-MACrO - LMM) [%]"
       )
       if "dev" in avg_rtv:
         avg_rtv.plot(
@@ -621,7 +621,7 @@ def results_postprocessing(
           linewidth = 2,
           marker = ".", 
           grid = True,
-          label = "Average deviation (SP/coord / LMM) [x]"
+          label = "Average deviation (FaaS-MACrO / LMM) [x]"
         )
       if "best_iteration" in avg_rtv:
         avg_rtv.plot(
@@ -673,34 +673,34 @@ def results_postprocessing(
         color = mcolors.TABLEAU_COLORS["tab:blue"],
         linewidth = 2
       )
-      # -- SP/coord
+      # -- FaaS-MACrO
       avg.plot(
-        y = "SP/coord",
+        y = "FaaS-MACrO",
         ax = axs[0,0],
         color = mcolors.TABLEAU_COLORS["tab:orange"],
         linewidth = 2,
         grid = True,
-        label = "Average SP/coord"
+        label = "Average FaaS-MACrO"
       )
       avg_rej.plot(
-        y = "SP/coord",
+        y = "FaaS-MACrO",
         ax = axs[1,0],
         color = mcolors.TABLEAU_COLORS["tab:orange"],
         linewidth = 2,
         grid = True,
-        label = "Average SP/coord"
+        label = "Average FaaS-MACrO"
       )
-      if "SP/coord" in avg_rtv:
+      if "FaaS-MACrO" in avg_rtv:
         avg_rtv.plot(
-          y = "SP/coord",
+          y = "FaaS-MACrO",
           ax = axs2[0],
           color = mcolors.TABLEAU_COLORS["tab:orange"],
           linewidth = 2,
           grid = True,
-          label = "Average SP/coord"
+          label = "Average FaaS-MACrO"
         )
         axs3[0].axhline(
-          y = rtvs["SP/coord"].mean(),
+          y = rtvs["FaaS-MACrO"].mean(),
           color = mcolors.TABLEAU_COLORS["tab:orange"],
           linewidth = 2
         )
@@ -788,7 +788,7 @@ def run(
     base_solution_folder: str, 
     n_experiments: int, 
     run_centralized_only: bool,
-    run_spcoord_only: bool,
+    run_faasmacro_only: bool,
     generate_only: bool,
     fix_r: bool,
     sp_parallelism: int,
@@ -804,7 +804,7 @@ def run(
   experiments_list = generate_experiments_list(exp_values, seed, n_experiments)
   # load list of already-run experiments (if any)
   solution_folders = {
-    "experiments_list": [], "centralized": [], "sp-coord": []
+    "experiments_list": [], "centralized": [], "faas-macro": []
   }
   if os.path.exists(os.path.join(base_solution_folder, "experiments.json")):
     with open(
@@ -826,20 +826,20 @@ def run(
       experiment_idx = solution_folders["experiments_list"].index(
         [exp_value, seed]
       )
-      if not (run_spcoord_only or generate_only) and ((
+      if not (run_faasmacro_only or generate_only) and ((
           len(solution_folders["centralized"]) <= experiment_idx
         ) or (
           solution_folders["centralized"][experiment_idx] is None
         )):
         run_c = True
       if not (run_centralized_only or generate_only) and ((
-          len(solution_folders["sp-coord"]) <= experiment_idx
+          len(solution_folders["faas-macro"]) <= experiment_idx
         ) or (
-          solution_folders["sp-coord"][experiment_idx] is None
+          solution_folders["faas-macro"][experiment_idx] is None
         )):
         run_i = True
     except ValueError:
-      run_c = True if not (run_spcoord_only or generate_only) else False
+      run_c = True if not (run_faasmacro_only or generate_only) else False
       run_i = True if not (run_centralized_only or generate_only) else False
     # if the experiment is still to run...
     if run_c or run_i or generate_only:
@@ -860,8 +860,8 @@ def run(
             old_exp_path = old_instance_paths["centralized"][
               old_exp_idx
             ]
-          elif "sp-coord" in old_instance_paths:
-            old_exp_path = old_instance_paths["sp-coord"][
+          elif "faas-macro" in old_instance_paths:
+            old_exp_path = old_instance_paths["faas-macro"][
               old_exp_idx
             ]
           config["limits"]["path"] = old_exp_path
@@ -892,13 +892,13 @@ def run(
           log_on_file = log_on_file, 
           disable_plotting = disable_plotting
         )
-        solution_folders["sp-coord"].append(i_folder)
+        solution_folders["faas-macro"].append(i_folder)
       # -- save info
       if experiment_idx is None:
         solution_folders["experiments_list"].append([exp_value, seed])
       # -- save
       with open(
-        os.path.join(base_solution_folder,"experiments.json"),"w"
+        os.path.join(base_solution_folder, "experiments.json"), "w"
       ) as ost:
         ost.write(json.dumps(solution_folders, indent = 2))
   # immediate postprocessing
@@ -910,7 +910,7 @@ if __name__ == "__main__":
   config_file = args.config
   n_experiments = args.n_experiments
   run_centralized_only = args.run_centralized_only
-  run_spcoord_only = args.run_spcoord_only
+  run_faasmacro_only = args.run_faasmacro_only
   postprocessing_only = args.postprocessing_only
   generate_only = args.generate_only
   postprocessing_list = args.postprocessing_list
@@ -932,7 +932,7 @@ if __name__ == "__main__":
       base_solution_folder, 
       n_experiments, 
       run_centralized_only,
-      run_spcoord_only,
+      run_faasmacro_only,
       generate_only,
       fix_r,
       sp_parallelism,

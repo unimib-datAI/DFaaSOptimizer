@@ -1056,7 +1056,7 @@ def run(
     solution_folder
   )
   # save objective function values
-  pd.DataFrame(obj_dict["LSPr_final"], columns = ["SP/coord"]).to_csv(
+  pd.DataFrame(obj_dict["LSPr_final"], columns = ["FaaS-MACrO"]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index = False
   )
   # save models termination condition

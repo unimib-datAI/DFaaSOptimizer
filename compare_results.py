@@ -51,7 +51,7 @@ def parse_arguments() -> argparse.Namespace:
     "--models",
     help = "List of model names",
     nargs = "*",
-    default = ["LoadManagementModel", "SP/coord"]
+    default = ["LoadManagementModel", "FaaS-MACrO"]
   )
   parser.add_argument(
   "--filter_by",
@@ -138,7 +138,7 @@ def compare_across_folders(
     all_obj.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
     all_rej.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
     all_runtime.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
-    models = ["LoadManagementModel", "SP/coord"]
+    models = ["LoadManagementModel", "FaaS-MACrO"]
   # plot
   os.makedirs(plot_folder, exist_ok = True)
   dev_plot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
@@ -174,7 +174,9 @@ def compare_results(
     models: list
   ):
   obj = pd.read_csv(os.path.join(postprocessing_folder, "obj.csv"))
-  rej = pd.read_csv(os.path.join(postprocessing_folder, "rejections.csv"))
+  rej = None
+  if os.path.exists(os.path.join(postprocessing_folder, "rejections.csv")):
+    rej = pd.read_csv(os.path.join(postprocessing_folder, "rejections.csv"))
   runtime = pd.read_csv(os.path.join(postprocessing_folder, "runtime.csv"))
   dev_plot_by_key(
     obj, runtime, rej, key, key_label, postprocessing_folder
@@ -1002,7 +1004,7 @@ if __name__ == "__main__":
   elif what_to_do == "compare_across_folders":
     # for eef,
     # loop_over_label = "Edge-exposed fraction [%]"
-    # models = ["SP/coord", "ScaledOnSumLMM"]
+    # models = ["FaaS-MACrO", "ScaledOnSumLMM"]
     if keep_only is not None and drop_value is not None:
       print(
         "WARNING: both `keep_only` and `drop_value` set."
@@ -1029,6 +1031,7 @@ if __name__ == "__main__":
     compare_single_model(
       postprocessing_folders, 
       folder_parse_format,
+      loop_over_label,
       common_output_folder,
       baseline = single_model_baseline,
       filter_by = filter_by,

@@ -7,7 +7,7 @@ import json
 import os
 
 
-def get_spcoord_runtime(
+def get_faasmacro_runtime(
     logs_df: pd.DataFrame, plot_folder: str
   ) -> pd.DataFrame:
   all_total_runtime = pd.DataFrame()
@@ -314,14 +314,14 @@ def parse_logs(base_folder: str) -> pd.DataFrame:
 if __name__ == "__main__":
   base_folder = "solutions/manual"
   social_welfare, best_solution_df = parse_logs(base_folder)
-  total_runtime = get_spcoord_runtime(social_welfare, base_folder)
+  total_runtime = get_faasmacro_runtime(social_welfare, base_folder)
   os.makedirs(os.path.join(base_folder, "postprocessing"), exist_ok = True)
   social_welfare[
     ["exp", "Nn", "time", "measured_total_time", "wallclock_time"]
   ].groupby(["exp", "time"]).mean().reset_index().to_csv(
     os.path.join(base_folder, "postprocessing", "wallclock.csv"), index = False
   )
-  # total_runtime.to_csv(os.path.join(base_folder, "spcoord_runtime.csv"))
+  # total_runtime.to_csv(os.path.join(base_folder, "faasmacro_runtime.csv"))
   # for exp, data in social_welfare.groupby("exp"):
   #   last_it = 0
   #   # social welfare pattern

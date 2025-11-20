@@ -199,7 +199,7 @@ def compute_progressive_deviation(
       experiments = json.load(ist)
     exp_description_match = {}
     for exp, exp_description_tuple in zip(
-        experiments["sp-coord"], experiments["experiments_list"]
+        experiments["faas-macro"], experiments["experiments_list"]
       ):
       exp_description_match[os.path.basename(exp)] = {
         "Nn": int(exp_description_tuple[0]),

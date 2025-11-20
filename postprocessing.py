@@ -6,8 +6,40 @@ from typing import Tuple
 from parse import parse
 import pandas as pd
 import numpy as np
+import argparse
 import json
 import os
+
+
+def parse_arguments() -> argparse.Namespace:
+  """
+  Parse input arguments
+  """
+  parser: argparse.ArgumentParser = argparse.ArgumentParser(
+    description = "Compare results", 
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+  )
+  parser.add_argument(
+    "-i", "--postprocessing_folder",
+    help = "Results folder",
+    type = str,
+    required = True
+  )
+  parser.add_argument(
+    "--models",
+    help = "List of model names",
+    nargs = "*",
+    default = ["LoadManagementModel", "FaaS-MACrO"]
+  )
+  parser.add_argument(
+    "--plot_all_history",
+    help = "True to plot each experiment history (default: false)",
+    default = False,
+    action = "store_true"
+  )
+  # Parse the arguments
+  args: argparse.Namespace = parser.parse_known_args()[0]
+  return args
 
 
 def add_node_function_info(df: pd.DataFrame, cols: np.array) -> pd.DataFrame:
@@ -546,12 +578,10 @@ def runtime_obj_boxplot(
 
 
 if __name__ == "__main__":
-  base_solution_folder = "/Users/federicafilippini/Documents/ServerBackups/my_gurobi_vm/fixed_sum_auto/centralized/2024_RussoRusso-3classes-fixed_sum_auto_avg-0_10-centralized_TL_120"
-  models = [
-    "LoadManagementModel"
-    # "LSP"
-  ]
-  plot_all_history = False
+  args = parse_arguments()
+  base_solution_folder = args.postprocessing_folder
+  models = args.models
+  plot_all_history = args.plot_all_history
   # solution_folder = base_solution_folder
   # process_results(solution_folder, models)
   # load results
@@ -664,7 +694,7 @@ if __name__ == "__main__":
         "seed": int(exp_description_tuple[-1])
       }
     for exp, exp_description_tuple in zip(
-        experiments["sp-coord"], experiments["experiments_list"]
+        experiments["faas-macro"], experiments["experiments_list"]
       ):
       exp_description_match[os.path.basename(exp)] = {
         "Nn": int(exp_description_tuple[0]),
