@@ -186,7 +186,13 @@ def compare_results(
   rej = None
   if os.path.exists(os.path.join(postprocessing_folder, "rejections.csv")):
     rej = pd.read_csv(os.path.join(postprocessing_folder, "rejections.csv"))
+    for k in ["LSP", "SP/coord"]:
+      if k in rej:
+        rej.rename(columns = {k: "FaaS-MACrO"}, inplace = True)
   runtime = pd.read_csv(os.path.join(postprocessing_folder, "runtime.csv"))
+  for k in ["LSP", "SP/coord"]:
+    if k in runtime:
+      runtime.rename(columns = {k: "FaaS-MACrO"}, inplace = True)
   dev_plot_by_key(
     obj, runtime, rej, key, key_label, postprocessing_folder
   )
