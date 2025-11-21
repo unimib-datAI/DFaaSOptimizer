@@ -3,6 +3,7 @@ from run_centralized_model import load_configuration
 from run_centralized_model import run as run_centralized
 from run_faasmacro import run as run_iterations
 from postprocessing import load_models_results
+from utilities import reconcile_paths
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -24,7 +25,7 @@ def parse_arguments() -> argparse.Namespace:
   Parse input arguments
   """
   parser: argparse.ArgumentParser = argparse.ArgumentParser(
-    description = "run", 
+    description = "Run and compare LMM and FaaS-MACrO", 
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
   )
   parser.add_argument(
@@ -113,6 +114,9 @@ def load_obj_value(solution_folder: str) -> pd.DataFrame:
       os.path.join(solution_folder, "obj.csv")
     )
     obj = obj.loc[:,~obj.columns.str.startswith("Unnamed")]
+    for key in ["FaaS-MACrO", "SP/coord"]:
+      if key in obj:
+        obj.rename(columns = {key: "FaaS-MACrO"}, inplace = True)
   return obj
 
 
@@ -218,15 +222,19 @@ def results_postprocessing(
     exp_description = "_".join([str(s) for s in exp_description_tuple])
     exp_plot_folder = os.path.join(plot_folder, exp_description)
     os.makedirs(exp_plot_folder, exist_ok = True)
+    # convert relative to absolute paths
+    abs_c_folder = reconcile_paths(base_solution_folder, c_folder)
+    abs_i_folder = reconcile_paths(base_solution_folder, i_folder)
     # local_count, fwd_count, rej_count, replicas, ping_pong
     if c_folder is not None and i_folder is not None:
-      c_res = load_models_results(c_folder, ["LoadManagementModel"])
-      i_res = load_models_results(i_folder, ["LSP"])
+      # load results
+      c_res = load_models_results(abs_c_folder, ["LoadManagementModel"])
+      i_res = load_models_results(abs_i_folder, ["LSP"])
       if len(c_res[0]["by_function"]) > 0 and len(i_res[0]["by_function"]) > 0:
         # check ping-pong problems
         if len(c_res[-1]["LoadManagementModel"]) > 0:
           ping_pong_list.append([exp_description, "centralized", c_folder])
-        if len(i_res[-1]["LSP"]) > 0:
+        if len(i_res[-1]["FaaS-MACrO"]) > 0:
           ping_pong_list.append([exp_description, "faas-macro", i_folder])
         # merge solutions
         local_count = merge_sol_dict(
@@ -253,8 +261,8 @@ def results_postprocessing(
         fwd_count.to_csv(os.path.join(exp_plot_folder, "fwd_by_function.csv"))
         rej_count.to_csv(os.path.join(exp_plot_folder, "rej_by_function.csv"))
         # objective function value
-        c_obj = load_obj_value(c_folder)
-        i_obj = load_obj_value(i_folder)
+        c_obj = load_obj_value(abs_c_folder)
+        i_obj = load_obj_value(abs_i_folder)
         obj = c_obj.join(i_obj)
         # total rejections
         all_rej = rej_count.groupby("time").sum()
@@ -262,7 +270,7 @@ def results_postprocessing(
           local_count.groupby("time").sum() + fwd_count.groupby("time").sum()
         ) + all_rej
         all_rej = all_rej / all_req * 100
-        all_rej.rename(columns = {"LSP": "FaaS-MACrO"}, inplace = True)
+        all_rej.rename(columns = {"FaaS-MACrO": "FaaS-MACrO"}, inplace = True)
         # plot
         _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
         obj.plot(marker = ".", grid = True, ax = axs[0])
@@ -330,7 +338,7 @@ def results_postprocessing(
           [all_rej_values, all_rej], ignore_index = True
         )
         # termination condition
-        i_tc = load_termination_condition(i_folder)
+        i_tc = load_termination_condition(abs_i_folder)
         _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (20,5))
         i_tc.plot(
           x = "time",
@@ -370,13 +378,13 @@ def results_postprocessing(
     # runtime
     c_runtime = pd.DataFrame()
     i_runtime = pd.DataFrame()
-    if c_folder is not None and os.path.exists(
-        os.path.join(c_folder, "runtime.csv")
+    if abs_c_folder is not None and os.path.exists(
+        os.path.join(abs_c_folder, "runtime.csv")
       ):
-      c_runtime = pd.read_csv(os.path.join(c_folder, "runtime.csv"))
-    if i_folder is not None:
+      c_runtime = pd.read_csv(os.path.join(abs_c_folder, "runtime.csv"))
+    if abs_i_folder is not None:
       logs_df, _ = parse_log_file(
-        i_folder, 
+        abs_i_folder, 
         exp_description, 
         pd.DataFrame(), 
         {}, 

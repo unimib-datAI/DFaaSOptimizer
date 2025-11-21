@@ -116,6 +116,8 @@ def load_models_results(
           obj, 
           os.path.join(solution_folder, f"{model_name}.png")
         )
+      if model_name == "LSP":
+        model_name = "FaaS-MACrO"
       # count locally-processed requests per node/class
       local_cols = solution.columns.str.endswith("_loc")
       all_models_local_count = count_subcols(
@@ -181,6 +183,9 @@ def load_solution(
   obj = pd.DataFrame()
   if os.path.exists(os.path.join(solution_folder, "obj.csv")):
     obj = pd.read_csv(os.path.join(solution_folder, "obj.csv"))
+    for key in ["LSP", "SP/coord"]:
+      if key in obj:
+        obj.rename(columns = {key: "FaaS-MACrO"}, inplace = True)
   return solution, replicas, detailed_fwd_solution, utilization, obj
 
 
@@ -653,6 +658,9 @@ if __name__ == "__main__":
         obj = pd.read_csv(
           os.path.join(solution_folder, "obj.csv")
         )
+        for key in ["LSP", "SP/coord"]:
+          if key in obj:
+            obj.rename(columns = {key: "FaaS-MACrO"}, inplace = True)
         colname = obj.loc[:,~obj.columns.str.startswith("Unnamed")].columns[0]
         obj.loc[:,~obj.columns.str.startswith("Unnamed")].plot(
           marker = ".",

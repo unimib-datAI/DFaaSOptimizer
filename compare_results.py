@@ -135,9 +135,15 @@ def compare_across_folders(
     all_runtime = pd.concat([all_runtime, runtime])
   # 
   if "ScaledOnSumLMM" in models:
-    all_obj.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
-    all_rej.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
-    all_runtime.rename(columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True)
+    all_obj.rename(
+      columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True
+    )
+    all_rej.rename(
+      columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True
+    )
+    all_runtime.rename(
+      columns = {"ScaledOnSumLMM": "LoadManagementModel"}, inplace = True
+    )
     models = ["LoadManagementModel", "FaaS-MACrO"]
   # plot
   os.makedirs(plot_folder, exist_ok = True)
@@ -174,6 +180,9 @@ def compare_results(
     models: list
   ):
   obj = pd.read_csv(os.path.join(postprocessing_folder, "obj.csv"))
+  for k in ["LSP", "SP/coord"]:
+    if k in obj:
+      obj.rename(columns = {k: "FaaS-MACrO"}, inplace = True)
   rej = None
   if os.path.exists(os.path.join(postprocessing_folder, "rejections.csv")):
     rej = pd.read_csv(os.path.join(postprocessing_folder, "rejections.csv"))
@@ -352,12 +361,12 @@ def dev_plot_by_key(
   # axis properties
   # -- y
   axs[0].set_ylabel(
-    "Objective deviation\n((FaaS-MACoord - LMM) / LMM) [%]",
+    "Objective deviation\n((FaaS-MACrO - LMM) / LMM) [%]",
     fontsize = fontsize
   )
   axs[0].set_title(None)
   axs[1].set_ylabel(
-    "Runtime deviation\n(FaaS-MACoord / LMM) [x]",
+    "Runtime deviation\n(FaaS-MACrO / LMM) [x]",
     fontsize = fontsize
   )
   axs[1].set_title(None)
@@ -382,7 +391,7 @@ def dev_plot_by_key(
       color = "k"
     )
     axs[2].set_ylabel(
-      "Cloud offloading deviation\n(FaaS-MACoord - LMM) [%]",
+      "Cloud offloading deviation\n(FaaS-MACrO - LMM) [%]",
       fontsize = fontsize
     )
     axs[2].set_title(None)
@@ -676,11 +685,11 @@ def dev_barplot_by_key(
   # # axis properties
   # # -- y
   # axs[0].set_ylabel(
-  #   "Objective deviation\n((FaaS-MACoord - LMM) / LMM) [%]",
+  #   "Objective deviation\n((FaaS-MACrO - LMM) / LMM) [%]",
   #   fontsize = fontsize
   # )
   # axs[1].set_ylabel(
-  #   "Runtime deviation\n(FaaS-MACoord / LMM) [x]",
+  #   "Runtime deviation\n(FaaS-MACrO / LMM) [x]",
   #   fontsize = fontsize
   # )
   # if rej is not None:
@@ -691,7 +700,7 @@ def dev_barplot_by_key(
   #     color = "k"
   #   )
   #   axs[2].set_ylabel(
-  #     "Cloud offloading deviation\n(FaaS-MACoord - LMM) [%]",
+  #     "Cloud offloading deviation\n(FaaS-MACrO - LMM) [%]",
   #     fontsize = fontsize
   #   )
   # # -- common properties
@@ -785,11 +794,11 @@ def dev_barplot_by_key(
   # axis properties
   # -- y
   axs2[0].set_ylabel(
-    "Objective deviation\n((FaaS-MACoord - LMM) / LMM) [%]",
+    "Objective deviation\n((FaaS-MACrO - LMM) / LMM) [%]",
     fontsize = fontsize
   )
   axs2[1].set_ylabel(
-    "Runtime deviation\n(FaaS-MACoord / LMM) [x]",
+    "Runtime deviation\n(FaaS-MACrO / LMM) [x]",
     fontsize = fontsize
   )
   if rej is not None:
@@ -800,7 +809,7 @@ def dev_barplot_by_key(
       color = "k"
     )
     axs2[2].set_ylabel(
-      "Cloud offloading deviation\n(FaaS-MACoord - LMM) [%]",
+      "Cloud offloading deviation\n(FaaS-MACrO - LMM) [%]",
       fontsize = fontsize
     )
   # -- common properties

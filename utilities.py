@@ -144,6 +144,20 @@ def load_requests_traces(folder: str) -> Tuple[dict, int, int, int]:
   return requests, mt, Mt, ts
 
 
+def reconcile_paths(base_solution_folder: str, fpath: str) -> str:
+  f_complete_path = None
+  if fpath is not None:
+    if fpath.startswith("/"):
+      f_complete_path = fpath
+    elif "solutions/" in base_solution_folder and "solutions/" in fpath:
+      common_base = base_solution_folder.split("solutions/")[0]
+      common_end = fpath.split("solutions/")[1]
+      f_complete_path = os.path.join(common_base, "solutions", common_end)
+    else:
+      f_complete_path = fpath
+  return f_complete_path
+
+
 def restore_types(serialized_dict: dict):
   """Restore the original types"""
   _dict = {}
