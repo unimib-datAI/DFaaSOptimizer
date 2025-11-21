@@ -25,7 +25,7 @@ def parse_arguments() -> argparse.Namespace:
   Parse input arguments
   """
   parser: argparse.ArgumentParser = argparse.ArgumentParser(
-    description = "Run and compare LMM and FaaS-MACrO", 
+    description = "Run LMM and/or FaaS-MACrO on multiple experiments", 
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
   )
   parser.add_argument(
@@ -62,11 +62,15 @@ def parse_arguments() -> argparse.Namespace:
   )
   parser.add_argument(
     "--postprocessing_list",
+    help = "To be used in conjunction with postprocessing_only. True if the "
+          "base_solution_folder includes multiple subfolders to post-process",
     default = False,
     action = "store_true"
   )
   parser.add_argument(
     "--fix_r",
+    help = "True to fix the number of replicas in FaaS-MACrO according to "
+          "the optimal centralized solution",
     default = False,
     action = "store_true"
   )
@@ -957,7 +961,10 @@ if __name__ == "__main__":
       results_postprocessing(solution_folders, base_solution_folder, loop_over)
     else:
       for foldername in os.listdir(base_solution_folder):
-        if not foldername.startswith("."):
+        if (
+            not foldername.startswith(".") and 
+              not foldername.startswith("postprocessing")
+          ):
           bsf = os.path.join(base_solution_folder, foldername)
           print(f"{'-'*80}\n{bsf}")
           solution_folders = {}
