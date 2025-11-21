@@ -714,7 +714,7 @@ def run(
   opt_solution, opt_replicas, opt_detailed_fwd = None, None, None
   if "opt_solution_folder" in config:
     opt_solution, opt_replicas, opt_detailed_fwd, _, _ = load_solution(
-      config["opt_solution_folder"], "LoadManagementModel"
+      config["opt_solution_folder"], "ScaledOnSumLMM"
     )
   # loop over time
   final_pi = None

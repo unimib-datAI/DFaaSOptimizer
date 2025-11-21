@@ -51,7 +51,7 @@ def parse_arguments() -> argparse.Namespace:
     "--models",
     help = "List of model names",
     nargs = "*",
-    default = ["LoadManagementModel", "FaaS-MACrO"]
+    default = ["ScaledOnSumLMM", "FaaS-MACrO"]
   )
   parser.add_argument(
   "--filter_by",

@@ -580,7 +580,7 @@ def results_postprocessing(
       rtvs["idx"] = rtvs.index
       rtvs.plot.scatter(
         x = "idx",
-        y = "LoadManagementModel",
+        y = "ScaledOnSumLMM",
         ax = axs3[0],
         c = mcolors.TABLEAU_COLORS["tab:blue"],
         grid = True,
@@ -681,7 +681,7 @@ def results_postprocessing(
         label = "Average LMM"
       )
       axs3[0].axhline(
-        y = rtvs["LoadManagementModel"].mean(),
+        y = rtvs["ScaledOnSumLMM"].mean(),
         color = mcolors.TABLEAU_COLORS["tab:blue"],
         linewidth = 2
       )

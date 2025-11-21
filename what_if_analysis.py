@@ -228,7 +228,7 @@ def compute_progressive_deviation(
       ].index
       progressive_dev.loc[
         idxs, "centralized_obj"
-      ] = val["LoadManagementModel"].iloc[0]
+      ] = val["ScaledOnSumLMM"].iloc[0]
   progressive_dev["centralized_dev"] = (
     progressive_dev["obj"] - progressive_dev["centralized_obj"]
   ) / progressive_dev["centralized_obj"] * 100
