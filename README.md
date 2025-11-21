@@ -455,6 +455,37 @@ function, a minimum load extracted uniformly at random from the interval
 $[1,10] req/s$, and a maximum load extracted uniformly at random from the 
 interval $[100,150] req/s$.
 
+Optionally, an additional parameter can be set to control the edge-exposed 
+fraction, i.e., the fraction of nodes that receive a non-zero incoming load. 
+Setting, as an example:
+
+```
+{
+  ...,
+  "limits": {
+    ...,
+    "load": {
+      "trace_type": "sinusoidal",
+      "min": {
+        "min": 10,
+        "max": 10
+      },
+      "max": {
+        "min": 100,
+        "max": 100
+      },
+      "edge_exposed_fraction": 0.8
+    },
+    ...
+  }
+}
+```
+
+results in the 80% of nodes receiving sinusoidal load traces with minimum and 
+maximum values equal to 10 and 100 req/s, respectively, while the 20% of 
+nodes are not connected to an access point and therefore does not receive 
+any load.
+
 #### Objective function weights
 
 The objective function weights can be generated following two different 
@@ -604,7 +635,7 @@ options:
                         (default: Number of agents)
   --models [MODELS ...]
                         List of model names 
-                        (default: ['LoadManagementModel', 'FaaS-MACrO'])
+                        (default: ['ScaledOnSumLMM', 'FaaS-MACrO'])
   --filter_by FILTER_BY
                         Key to filter (default: None)
   --keep_only KEEP_ONLY
