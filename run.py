@@ -1,7 +1,7 @@
 from logs_postprocessing import parse_log_file, get_faasmacro_runtime
 from run_centralized_model import load_configuration
 from run_centralized_model import run as run_centralized
-from l_run_iterations import run as run_iterations
+from run_faasmacro import run as run_iterations
 from postprocessing import load_models_results
 
 import matplotlib.colors as mcolors
