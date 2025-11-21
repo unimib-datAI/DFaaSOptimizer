@@ -616,3 +616,41 @@ options:
   --single_model_baseline SINGLE_MODEL_BASELINE
                         Baseline for time comparison (default: None)
 ```
+
+Examples (with the three `run` modes):
+
+- `compare_results`: to be used when results obtained with different 
+values of the `loop_over` parameter are provided in a unique 
+`postprocessing_folders`.
+
+```
+python compare_results.py -i solutions/varyingN/light_load/3classes-0_10-greedy \
+                          --run compare_results \
+                          --loop_over Nn \
+                          --loop_over_label "Number of agents"
+```
+
+- `compare_across_folders`: to be used when results obtained with different 
+values of the `loop_over` parameter are provided in different subfolders 
+of `postprocessing_folders`.
+
+```
+python compare_results.py -i solutions/varyingK \
+                          -o solutions/varyingK/postprocessing_by_k \
+                          --run compare_across_folders \
+                          --loop_over k \
+                          --loop_over_label "Node degree k" \
+                          --folder_parse_format 3classes-0_10-{}_{}-greedy`
+```
+
+- `compare_single_model`: to be used to compare results obtained with a 
+single model in variable conditions (identified by the `loop_over` parameter).
+
+```
+python compare_results.py -i solutions/centralized \
+                          -o solutions/centralized/postprocessing_by_TL \
+                          --run compare_single_model \
+                          --loop_over TL \
+                          --loop_over_label "Time limit [s]" \
+                          --folder_parse_format 3classes-0_10-centralized-{}_{}`
+```
