@@ -24,27 +24,28 @@ VAR_TYPE = int if PYO_VAR_TYPE == pyo.NonNegativeIntegers else float
 
 
 def parse_arguments() -> argparse.Namespace:
-   """
-   Parse input arguments
-   """
-   parser: argparse.ArgumentParser = argparse.ArgumentParser(
-     description = "run", 
-     formatter_class=argparse.ArgumentDefaultsHelpFormatter
-   )
-   parser.add_argument(
-     "-c", "--config",
-     help = "Configuration file",
-     type = str,
-     default = "config.json"
-   )
-   parser.add_argument(
-     "--disable_plotting",
-     default = False,
-     action = "store_true"
-   )
-   # Parse the arguments
-   args: argparse.Namespace = parser.parse_known_args()[0]
-   return args
+  """
+  Parse input arguments
+  """
+  parser: argparse.ArgumentParser = argparse.ArgumentParser(
+    description = "Run LoadManagementModel (LMM)", 
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+  )
+  parser.add_argument(
+    "-c", "--config",
+    help = "Configuration file",
+    type = str,
+    default = "manual_config.json"
+  )
+  parser.add_argument(
+    "--disable_plotting",
+    help = "True to disable automatic plot generation for each experiment",
+    default = False,
+    action = "store_true"
+  )
+  # Parse the arguments
+  args: argparse.Namespace = parser.parse_known_args()[0]
+  return args
 
 
 def compute_residual_capacity(data: dict, r: np.array) -> np.array:

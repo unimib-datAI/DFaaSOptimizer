@@ -39,27 +39,34 @@ _sp = None
 
 
 def parse_arguments() -> argparse.Namespace:
-   """
-   Parse input arguments
-   """
-   parser: argparse.ArgumentParser = argparse.ArgumentParser(
-     description = "run", formatter_class=argparse.ArgumentDefaultsHelpFormatter
-   )
-   parser.add_argument(
-     "-c", "--config",
-     help = "Configuration file",
-     type = str,
-     default = "manual_config.json"
-   )
-   parser.add_argument(
-     "-j", "--parallelism",
-     help = "Number of parallel processes to start (-1: auto, 0: sequential)",
-     type = int,
-     default = -1
-   )
-   # Parse the arguments
-   args: argparse.Namespace = parser.parse_known_args()[0]
-   return args
+  """
+  Parse input arguments
+  """
+  parser: argparse.ArgumentParser = argparse.ArgumentParser(
+    description = "Run FaaS-MACrO", 
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
+  )
+  parser.add_argument(
+    "-c", "--config",
+    help = "Configuration file",
+    type = str,
+    default = "manual_config.json"
+  )
+  parser.add_argument(
+    "-j", "--parallelism",
+    help = "Number of parallel processes to start (-1: auto, 0: sequential)",
+    type = int,
+    default = -1
+  )
+  parser.add_argument(
+    "--disable_plotting",
+    help = "True to disable automatic plot generation for each experiment",
+    default = False,
+    action = "store_true"
+  )
+  # Parse the arguments
+  args: argparse.Namespace = parser.parse_known_args()[0]
+  return args
 
 
 def check_stopping_criteria(
@@ -1079,7 +1086,13 @@ if __name__ == "__main__":
   args = parse_arguments()
   config_file = args.config
   parallelism = args.parallelism
+  disable_plotting = args.disable_plotting
   # load configuration file
   config = load_configuration(config_file)
   # run
-  run(config, parallelism)
+  run(
+    config, 
+    parallelism, 
+    log_on_file = False, 
+    disable_plotting = disable_plotting
+  )
