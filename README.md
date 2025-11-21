@@ -652,5 +652,6 @@ python compare_results.py -i solutions/centralized \
                           --run compare_single_model \
                           --loop_over TL \
                           --loop_over_label "Time limit [s]" \
-                          --folder_parse_format 3classes-0_10-centralized-{}_{}`
+                          --folder_parse_format 3classes-0_10-centralized-{}_{}` \
+                          --single_model_baseline 5
 ```
