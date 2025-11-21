@@ -14,11 +14,11 @@ def parse_arguments() -> argparse.Namespace:
   Parse input arguments
   """
   parser: argparse.ArgumentParser = argparse.ArgumentParser(
-    description = "run", 
+    description = "What-if analysis", 
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
   )
   parser.add_argument(
-    "-f", "--base_folders",
+    "-f", "--base_folder",
     help = "Base experiment folder",
     type = str,
     required = True
@@ -29,6 +29,9 @@ def parse_arguments() -> argparse.Namespace:
     nargs = "+",
     default = [0, 10, 30, 60, 120]
   )
+  # Parse the arguments
+  args: argparse.Namespace = parser.parse_known_args()[0]
+  return args
 
 
 def add_time(
@@ -303,7 +306,7 @@ def compute_progressive_deviation(
       )
     ax.set_xlabel("Runtime [s]", fontsize = fontsize)
     ax.set_ylabel(
-      "Objective deviation\n((MOSAIC - LMM) / LMM) [%]", 
+      "Objective deviation\n((FaaS-MACrO - LMM) / LMM) [%]", 
       fontsize = fontsize
     )
     plt.savefig(
@@ -442,6 +445,6 @@ def main(base_folder: str, milestones: list):
 if __name__ == "__main__":
   args = parse_arguments()
   base_folder = args.base_folder
-  milestones = args.milestones
+  milestones = [int(m) for m in args.milestones]
   main(base_folder, milestones)
 
