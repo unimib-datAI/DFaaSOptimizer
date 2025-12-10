@@ -233,6 +233,7 @@ def generate_weights(
       delta[n1,:] = d
       for n2 in range(n1, Nn):
         beta[n1,n2,:] = b
+        beta[n2,n1,:] = b
     gamma[Nn-1,:] = g
     delta[Nn-1,:] = d
   else:
