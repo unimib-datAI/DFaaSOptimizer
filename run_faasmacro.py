@@ -343,17 +343,18 @@ def decode_solutions(
     sp_x, sp_y, sp_z, sp_r, sp_xi, sp_rho, sp_U, sp_complete_solution
   )
   # -- RMP
-  rmp_x = solution["rmp"]["x"]
-  rmp_y = solution["rmp"]["y"]
-  rmp_z = solution["rmp"]["z"]
-  rmp_xi = solution["rmp"]["xi"]
-  rmp_rho = solution["rmp"]["rho"]
-  rmp_U = solution["rmp"]["U"]
-  rmp_r = solution["rmp"]["r"]
-  rmp_complete_solution = decode_solution(
-    rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho, rmp_U, 
-    rmp_complete_solution
-  )
+  if "rmp" in solution and rmp_complete_solution is not None:
+    rmp_x = solution["rmp"]["x"]
+    rmp_y = solution["rmp"]["y"]
+    rmp_z = solution["rmp"]["z"]
+    rmp_xi = solution["rmp"]["xi"]
+    rmp_rho = solution["rmp"]["rho"]
+    rmp_U = solution["rmp"]["U"]
+    rmp_r = solution["rmp"]["r"]
+    rmp_complete_solution = decode_solution(
+      rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho, rmp_U, 
+      rmp_complete_solution
+    )
   # centralized objective
   obj = compute_centralized_objective(sp_data, sp_x, sp_y, sp_z)
   return sp_complete_solution, rmp_complete_solution, obj
