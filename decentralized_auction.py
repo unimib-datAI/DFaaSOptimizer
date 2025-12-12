@@ -315,7 +315,7 @@ def run(
       e = datetime.now()
       if verbose > 1:
         print(
-          f"    compute_residual_capacity: DONE ",
+          f"        compute_residual_capacity: DONE ",
           f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
           f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})", 
           file = log_stream, 
@@ -342,8 +342,7 @@ def run(
       e = datetime.now()
       if verbose > 1:
         print(
-          f"    define_bids: DONE ",
-          f"; runtime = {(e - s).total_seconds()})", 
+          f"        define_bids: DONE; runtime = {(e - s).total_seconds()})", 
           file = log_stream, 
           flush = True
         )
@@ -357,8 +356,7 @@ def run(
         e = datetime.now()
         if verbose > 1:
           print(
-            f"    evaluate_bids: DONE ",
-            f"; runtime = {(e - s).total_seconds()})", 
+            f"        evaluate_bids: DONE; runtime = {(e - s).total_seconds()})", 
             file = log_stream, 
             flush = True
           )
@@ -523,7 +521,7 @@ def run(
     solution_folder
   )
   # save objective function values
-  pd.DataFrame(obj_dict["LSPr_final"], columns = ["FaaS-MACrO"]).to_csv(
+  pd.DataFrame(obj_dict["LSPr_final"], columns = ["FaaS-MADeA"]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index = False
   )
   # save models termination condition
