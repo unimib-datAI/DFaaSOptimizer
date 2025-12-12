@@ -83,20 +83,23 @@ def invert_count(original_dict: dict) -> pd.DataFrame:
   return df
 
 def load_models_results(
-    solution_folder: str, models: list, plot_all_history: bool = False
+    solution_folder: str, 
+    models_keys: list, 
+    models_names: list, 
+    plot_all_history: bool = False
   ) -> Tuple[dict, dict, dict, dict]:
   all_models_local_count = {"by_node": {}, "by_function": {}}
   all_models_fwd_count = {"by_node": {}, "by_function": {}}
   all_models_rej_count = {"by_node": {}, "by_function": {}}
   all_models_replicas = {"by_node": {}, "by_function": {}}
   all_models_ping_pong = {}
-  for model_name in models:
+  for model_key, model_name in zip(models_keys, models_names):
     if os.path.exists(
-        os.path.join(solution_folder, f"{model_name}_solution.csv")
+        os.path.join(solution_folder, f"{model_key}_solution.csv")
       ):
       # load solution
       solution, replicas, detailed_fwd_sol, utilization, obj = load_solution(
-        solution_folder, model_name
+        solution_folder, model_key
       )
       if plot_all_history:
         # load input requests
@@ -111,13 +114,11 @@ def load_models_results(
           utilization, 
           replicas, 
           pd.read_csv(
-            os.path.join(solution_folder, f"{model_name}_offloaded.csv")
+            os.path.join(solution_folder, f"{model_key}_offloaded.csv")
           ), 
           obj, 
-          os.path.join(solution_folder, f"{model_name}.png")
+          os.path.join(solution_folder, f"{model_key}.png")
         )
-      if model_name == "LSP":
-        model_name = "FaaS-MACrO"
       # count locally-processed requests per node/class
       local_cols = solution.columns.str.endswith("_loc")
       all_models_local_count = count_subcols(
