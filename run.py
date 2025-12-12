@@ -2,6 +2,7 @@ from logs_postprocessing import parse_log_file, get_faasmacro_runtime
 from run_centralized_model import load_configuration
 from run_centralized_model import run as run_centralized
 from run_faasmacro import run as run_iterations
+from decentralized_auction import run as run_auction
 from postprocessing import load_models_results
 from utilities import reconcile_paths
 
@@ -25,7 +26,7 @@ def parse_arguments() -> argparse.Namespace:
   Parse input arguments
   """
   parser: argparse.ArgumentParser = argparse.ArgumentParser(
-    description = "Run LMM and/or FaaS-MACrO on multiple experiments", 
+    description = "Run LMM, FaaS-MACrO and/or FaaS-MADeA on multiple experiments", 
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
   )
   parser.add_argument(
@@ -41,22 +42,19 @@ def parse_arguments() -> argparse.Namespace:
     default = 3
   )
   parser.add_argument(
-    "--run_centralized_only",
-    default = False,
-    action = "store_true"
-  )
-  parser.add_argument(
-    "--run_faasmacro_only",
-    default = False,
-    action = "store_true"
+    "--methods",
+    type = str,
+    nargs = "+",
+    choices = [
+      "centralized", 
+      "faas-macro", 
+      "faas-madea", 
+      "generate_only"
+    ],
+    required = True
   )
   parser.add_argument(
     "--postprocessing_only",
-    default = False,
-    action = "store_true"
-  )
-  parser.add_argument(
-    "--generate_only",
     default = False,
     action = "store_true"
   )
@@ -168,7 +166,7 @@ def load_termination_condition(
           c = f"reached time limit ({c2})"
         criterion.append(c)
         iteration.append(int(i))
-        deviation.append(float(d))
+        deviation.append(float(d) if d != "None" else d)
         best_it.append(int(b) if b is not None else b)
       tc.drop("0", axis = "columns", inplace = True)
       tc["criterion"] = criterion
@@ -180,13 +178,17 @@ def load_termination_condition(
   return tc
 
 
-def merge_sol_dict(c_res: dict, i_res: dict) -> pd.DataFrame:
-  res = c_res["tot"].join(i_res["tot"])
+def merge_sol_dict(results_list: list) -> pd.DataFrame:
+  res = results_list[0]["tot"]
+  for r in results_list[1:]:
+    res = res.join(r["tot"])
   res["time"] = "tot"
-  for key in c_res:
+  for key in results_list[0]:
     if key != "tot":
       time = int(key.split(" ")[-1])
-      df = c_res[key].join(i_res[key])
+      df = results_list[0][key]
+      for r in results_list[1:]:
+        df = df.join(r[key])
       df["time"] = time
       res = pd.concat([res, df])
   return res
@@ -205,7 +207,8 @@ def plot_total_count(df: pd.DataFrame, plot_filename: str):
 def results_postprocessing(
     solution_folders: dict, 
     base_folder: str,
-    loop_over: str
+    loop_over: str,
+    methods: list
   ):
   # prepare folder to store plots
   plot_folder = os.path.join(base_folder, "postprocessing")
@@ -213,111 +216,127 @@ def results_postprocessing(
   all_obj_values = pd.DataFrame()
   all_rej_values = pd.DataFrame()
   all_runtime_values = pd.DataFrame()
-  all_i_tc = pd.DataFrame()
+  all_tc = pd.DataFrame()
   ping_pong_list = []
   # loop over experiments
-  for exp_description_tuple, c_folder, i_folder in zip(
+  for tokens in zip(
       solution_folders["experiments_list"], 
-      solution_folders["centralized"],
-      solution_folders["faas-macro"]
+      *[solution_folders[m] for m in methods]
     ):
+    exp_description_tuple = tokens[0]
     print(f"Postprocessing exp: {exp_description_tuple}")
     # prepare folder to store results
     exp_description = "_".join([str(s) for s in exp_description_tuple])
     exp_plot_folder = os.path.join(plot_folder, exp_description)
     os.makedirs(exp_plot_folder, exist_ok = True)
-    # convert relative to absolute paths
-    abs_c_folder = reconcile_paths(base_solution_folder, c_folder)
-    abs_i_folder = reconcile_paths(base_solution_folder, i_folder)
-    # local_count, fwd_count, rej_count, replicas, ping_pong
-    if c_folder is not None and i_folder is not None:
-      # load results
-      c_res = load_models_results(abs_c_folder, ["LoadManagementModel"])
-      i_res = load_models_results(abs_i_folder, ["LSP"])
-      if len(c_res[0]["by_function"]) > 0 and len(i_res[0]["by_function"]) > 0:
-        # check ping-pong problems
-        if len(c_res[-1]["LoadManagementModel"]) > 0:
-          ping_pong_list.append([exp_description, "centralized", c_folder])
-        if len(i_res[-1]["FaaS-MACrO"]) > 0:
-          ping_pong_list.append([exp_description, "faas-macro", i_folder])
-        # merge solutions
-        local_count = merge_sol_dict(
-          c_res[0]["by_function"], i_res[0]["by_function"]
+    # convert relative to absolute paths and load results
+    abs_folders = []
+    results = []
+    found_methods = []
+    for method, method_folder in zip(methods, tokens[1:]):
+      if method_folder is not None:
+        abs_folders.append(
+          reconcile_paths(base_solution_folder, method_folder)
         )
-        fwd_count = merge_sol_dict(
-          c_res[1]["by_function"], i_res[1]["by_function"]
+        # -- load results
+        # ---- local_count, fwd_count, rej_count, replicas, ping_pong
+        mkey = "LoadManagementModel" if method == "centralized" else "LSP"
+        mname = "LoadManagementModel" if method == "centralized" else (
+          "FaaS-MACrO" if method == "faasmacro" else "FaaS-MADeA"
         )
-        rej_count = merge_sol_dict(
-          c_res[2]["by_function"], i_res[2]["by_function"]
-        )
-        # plot
-        plot_total_count(
-          local_count, os.path.join(exp_plot_folder, "loc_by_function.png")
-        )
-        plot_total_count(
-          fwd_count, os.path.join(exp_plot_folder, "fwd_by_function.png")
-        )
-        plot_total_count(
-          rej_count, os.path.join(exp_plot_folder, "rej_by_function.png")
-        )
-        # save
-        local_count.to_csv(os.path.join(exp_plot_folder, "loc_by_function.csv"))
-        fwd_count.to_csv(os.path.join(exp_plot_folder, "fwd_by_function.csv"))
-        rej_count.to_csv(os.path.join(exp_plot_folder, "rej_by_function.csv"))
-        # objective function value
-        c_obj = load_obj_value(abs_c_folder)
-        i_obj = load_obj_value(abs_i_folder)
-        obj = c_obj.join(i_obj)
-        # total rejections
-        all_rej = rej_count.groupby("time").sum()
-        all_req = (
-          local_count.groupby("time").sum() + fwd_count.groupby("time").sum()
-        ) + all_rej
-        all_rej = all_rej / all_req * 100
-        all_rej.rename(columns = {"FaaS-MACrO": "FaaS-MACrO"}, inplace = True)
-        # plot
+        results.append(load_models_results(abs_folders[-1], [mkey], [mname]))
+        # -- check ping-pong problems
+        if len(results[-1][-1][mname]) > 0:
+          ping_pong_list.append([exp_description, method, method_folder])
+        found_methods.append(mname)
+    # merge solutions
+    if len(results) > 0:
+      local_count = merge_sol_dict(
+        [res[0]["by_function"] for res in results]
+      )
+      fwd_count = merge_sol_dict(
+        [res[1]["by_function"] for res in results]
+      )
+      rej_count = merge_sol_dict(
+        [res[2]["by_function"] for res in results]
+      )
+      # plot
+      plot_total_count(
+        local_count, os.path.join(exp_plot_folder, "loc_by_function.png")
+      )
+      plot_total_count(
+        fwd_count, os.path.join(exp_plot_folder, "fwd_by_function.png")
+      )
+      plot_total_count(
+        rej_count, os.path.join(exp_plot_folder, "rej_by_function.png")
+      )
+      # save
+      local_count.to_csv(os.path.join(exp_plot_folder, "loc_by_function.csv"))
+      fwd_count.to_csv(os.path.join(exp_plot_folder, "fwd_by_function.csv"))
+      rej_count.to_csv(os.path.join(exp_plot_folder, "rej_by_function.csv"))
+      # total rejections
+      all_rej = rej_count.groupby("time").sum()
+      all_req = (
+        local_count.groupby("time").sum() + fwd_count.groupby("time").sum()
+      ) + all_rej
+      all_rej = all_rej / all_req * 100
+      # objective function value
+      obj = load_obj_value(abs_folders[0])
+      for af in abs_folders[1:]:
+        obj = obj.join(load_obj_value(af))
+      # plot
+      _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
+      obj.plot(marker = ".", grid = True, ax = axs[0])
+      all_rej.drop("tot").plot(marker = ".", grid = True, ax = axs[1])
+      axs[0].set_xlabel("Control time period $t$")
+      axs[1].set_xlabel("Control time period $t$")
+      axs[0].set_ylabel("Objective function value")
+      axs[1].set_ylabel("Total percentage of rejections")
+      plt.savefig(
+        os.path.join(exp_plot_folder, "obj.png"),
+        dpi = 300,
+        format = "png",
+        bbox_inches = "tight"
+      )
+      plt.close()
+      # compute deviation
+      if "LoadManagementModel" in found_methods and len(found_methods) > 1:
+        for mname in found_methods:
+          if mname != "LoadManagementModel":
+            obj[f"dev_{mname}"] = (
+              obj[mname] - obj["LoadManagementModel"]
+            ) / obj["LoadManagementModel"] * 100
+            all_rej[f"dev_{mname}"] = (
+              all_rej[mname] - all_rej["LoadManagementModel"]
+            )
+        # -- plot deviation
         _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
-        obj.plot(marker = ".", grid = True, ax = axs[0])
-        all_rej.drop("tot").plot(marker = ".", grid = True, ax = axs[1])
-        axs[0].set_xlabel("Control time period $t$")
-        axs[1].set_xlabel("Control time period $t$")
-        axs[0].set_ylabel("Objective function value")
-        axs[1].set_ylabel("Total percentage of rejections")
-        plt.savefig(
-          os.path.join(exp_plot_folder, "obj.png"),
-          dpi = 300,
-          format = "png",
-          bbox_inches = "tight"
+        obj.loc[:,obj.columns.str.startswith("dev")].plot(
+          marker = ".", grid = True, ax = axs[0]
         )
-        plt.close()
-        # compute deviation
-        obj["dev"] = (
-          obj["FaaS-MACrO"] - obj["LoadManagementModel"]
-        ) / obj["LoadManagementModel"] * 100
-        all_rej["dev"] = (
-          all_rej["FaaS-MACrO"] - all_rej["LoadManagementModel"]
+        all_rej.loc[:,all_rej.columns.str.startswith("dev")].drop("tot").plot(
+          marker = ".", grid = True, ax = axs[1]
         )
-        # plot
-        _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
-        obj["dev"].plot(marker = ".", grid = True, ax = axs[0])
-        axs[0].axhline(
-          y = obj["dev"].mean(), 
-          color = mcolors.TABLEAU_COLORS["tab:red"],
-          linewidth = 2
-        )
-        all_rej["dev"].drop("tot").plot(marker = ".", grid = True, ax = axs[1])
-        axs[1].axhline(
-          y = all_rej["dev"].drop("tot").mean(), 
-          color = mcolors.TABLEAU_COLORS["tab:red"],
-          linewidth = 2
-        )
+        # -- add average deviation line(s)
+        for mname in found_methods:
+          if mname != "LoadManagementModel":
+            axs[0].axhline(
+              y = obj[f"dev_{mname}"].mean(), 
+              # color = mcolors.TABLEAU_COLORS["tab:red"],
+              linewidth = 2
+            )
+            axs[1].axhline(
+              y = all_rej[f"dev_{mname}"].drop("tot").mean(), 
+              color = mcolors.TABLEAU_COLORS["tab:red"],
+              linewidth = 2
+            )
         axs[0].set_xlabel("Control time period $t$")
         axs[1].set_xlabel("Control time period $t$")
         axs[0].set_ylabel(
-          "Objective function deviation ((FaaS-MACrO - LMM) / LMM )[%]"
+          "Objective function deviation ((other - LMM) / LMM )[%]"
         )
         axs[1].set_ylabel(
-          "Percentage rejections deviation (FaaS-MACrO - LMM) [%]"
+          "Percentage rejections deviation (other - LMM) [%]"
         )
         plt.savefig(
           os.path.join(exp_plot_folder, "obj_deviation.png"),
@@ -326,95 +345,117 @@ def results_postprocessing(
           bbox_inches = "tight"
         )
         plt.close()
-        # save
-        obj.to_csv(os.path.join(exp_plot_folder, "obj.csv"), index = False)
-        # merge
-        obj["time"] = obj.index
-        obj[loop_over] = exp_description_tuple[0]
-        obj["seed"] = exp_description_tuple[1]
-        all_obj_values = pd.concat([all_obj_values, obj], ignore_index = True)
-        #
-        all_rej.drop("tot", inplace = True)
-        all_rej["time"] = all_rej.index
-        all_rej[loop_over] = exp_description_tuple[0]
-        all_rej["seed"] = exp_description_tuple[1]
-        all_rej_values = pd.concat(
-          [all_rej_values, all_rej], ignore_index = True
-        )
-        # termination condition
-        i_tc = load_termination_condition(abs_i_folder)
-        _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (20,5))
-        i_tc.plot(
-          x = "time",
-          y = "iteration",
-          marker = ".",
-          grid = True,
-          ax = axs[0]
-        )
-        if not i_tc["best_iteration"].isnull().all():
-          i_tc.plot(
+      # save
+      obj.to_csv(os.path.join(exp_plot_folder, "obj.csv"), index = False)
+      # merge
+      obj["time"] = obj.index
+      obj[loop_over] = exp_description_tuple[0]
+      obj["seed"] = exp_description_tuple[1]
+      all_obj_values = pd.concat([all_obj_values, obj], ignore_index = True)
+      #
+      all_rej.drop("tot", inplace = True)
+      all_rej["time"] = all_rej.index
+      all_rej[loop_over] = exp_description_tuple[0]
+      all_rej["seed"] = exp_description_tuple[1]
+      all_rej_values = pd.concat(
+        [all_rej_values, all_rej], ignore_index = True
+      )
+      # termination condition
+      for mname, af in zip(found_methods, abs_folders):
+        if mname != "LoadManagementModel":
+          tc = load_termination_condition(af)
+          _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (20,5))
+          tc.plot(
             x = "time",
-            y = "best_iteration",
+            y = "iteration",
             marker = ".",
-            color = mcolors.TABLEAU_COLORS["tab:orange"],
             grid = True,
             ax = axs[0]
           )
-        i_tc["criterion"].value_counts().plot.bar(
-          rot = 0,
-          grid = True,
-          ax = axs[1]
-        )
-        axs[0].set_xlabel("Control time period $t$")
-        axs[0].set_ylabel("Number of iterations")
-        axs[1].set_xlabel(None)
-        plt.savefig(
-          os.path.join(exp_plot_folder, "iterations.png"),
-          dpi = 300,
-          format = "png",
-          bbox_inches = "tight"
-        )
-        plt.close()
-        # -- merge
-        i_tc[loop_over] = exp_description_tuple[0]
-        i_tc["seed"] = exp_description_tuple[1]
-        all_i_tc = pd.concat([all_i_tc, i_tc], ignore_index = True)
+          if not tc["best_iteration"].isnull().all():
+            tc.plot(
+              x = "time",
+              y = "best_iteration",
+              marker = ".",
+              color = mcolors.TABLEAU_COLORS["tab:orange"],
+              grid = True,
+              ax = axs[0]
+            )
+          tc["criterion"].value_counts().plot.bar(
+            rot = 0,
+            grid = True,
+            ax = axs[1]
+          )
+          axs[0].set_xlabel("Control time period $t$")
+          axs[0].set_ylabel("Number of iterations")
+          axs[1].set_xlabel(None)
+          plt.savefig(
+            os.path.join(exp_plot_folder, f"iterations_{mname}.png"),
+            dpi = 300,
+            format = "png",
+            bbox_inches = "tight"
+          )
+          plt.close()
+          # -- merge
+          tc["method"] = mname
+          tc[loop_over] = exp_description_tuple[0]
+          tc["seed"] = exp_description_tuple[1]
+          all_tc = pd.concat([all_tc, tc], ignore_index = True)
     # runtime
-    c_runtime = pd.DataFrame()
-    i_runtime = pd.DataFrame()
-    if abs_c_folder is not None and os.path.exists(
-        os.path.join(abs_c_folder, "runtime.csv")
-      ):
-      c_runtime = pd.read_csv(os.path.join(abs_c_folder, "runtime.csv"))
-    if abs_i_folder is not None:
-      logs_df, _ = parse_log_file(
-        abs_i_folder, 
-        exp_description, 
-        pd.DataFrame(), 
-        {}, 
-        int(exp_description_tuple[0])
-      )
-      i_runtime = get_faasmacro_runtime(logs_df, exp_plot_folder)
+    runtimes = {}
+    for mname, af in zip(found_methods, abs_folders):
+      if os.path.exists(os.path.join(af, "runtime.csv")):
+        runtimes[mname] = pd.read_csv(os.path.join(af, "runtime.csv"))
+      else:
+        if mname != "LoadManagementModel":
+          logs_df, _ = parse_log_file(
+            af, 
+            exp_description, 
+            pd.DataFrame(), 
+            {}, 
+            int(exp_description_tuple[0]),
+            mname
+          )
+          runtimes[mname] = get_faasmacro_runtime(logs_df, exp_plot_folder)
     # plot runtime comparison
-    if len(c_runtime) > 0 and len(i_runtime) > 0:
-      runtime_comparison = pd.DataFrame({
-        "LoadManagementModel": c_runtime["LoadManagementModel"],
-        "FaaS-MACrO": i_runtime["tot"],
-        "iteration": i_tc["iteration"],
-        "best_iteration": i_tc["best_iteration"],
-      })
+    if "LoadManagementModel" in found_methods and len(runtimes) > 1:
+      runtime_comparison = {
+        "LoadManagementModel": runtimes[
+          "LoadManagementModel"
+        ]["LoadManagementModel"].tolist()
+      }
+      for mname in found_methods:
+        if mname != "LoadManagementModel":
+          runtime_comparison[mname] = runtimes[mname]["tot"].tolist()
+          runtime_comparison[f"iteration_{mname}"] = tc[
+            tc["method"] == mname
+          ]["iteration"].tolist()
+          runtime_comparison[f"best_iteration_{mname}"] = tc[
+            tc["method"] == mname
+          ]["best_iteration"].tolist()
+      runtime_comparison = pd.DataFrame(runtime_comparison)
+      # -- compute deviation
+      for mname in found_methods:
+        if mname != "LoadManagementModel":
+          runtime_comparison[f"dev_{mname}"] = (
+              runtime_comparison[mname] / runtime_comparison["LoadManagementModel"]
+            )
+      # -- plot
       _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (12,8))
-      runtime_comparison.plot(grid = True, marker = ".", ax = axs[0])
-      runtime_comparison["dev"] = (
-        runtime_comparison["FaaS-MACrO"] / runtime_comparison["LoadManagementModel"]
-      )
-      runtime_comparison["dev"].plot(
+      runtime_comparison.loc[
+        :,~runtime_comparison.columns.str.contains("iteration")
+      ].plot(grid = True, marker = ".", ax = axs[0])
+      runtime_comparison.loc[
+        :,runtime_comparison.columns.str.startswith("dev")
+      ].plot(
         grid = True, marker = ".", ax = axs[1]
       )
-      axs[1].axhline(
-        y = runtime_comparison["dev"].mean(),
-        color = mcolors.TABLEAU_COLORS["tab:red"]
-      )
+      for mname in found_methods:
+        if mname != "LoadManagementModel":
+          axs[1].axhline(
+            y = runtime_comparison[f"dev_{mname}"].mean(),
+            # color = mcolors.TABLEAU_COLORS["tab:red"]
+          )
       axs[0].set_ylabel("Runtime [s]", fontsize = 14)
       axs[1].set_ylabel("Runtime deviation [x]", fontsize = 14)
       plt.savefig(
@@ -443,7 +484,7 @@ def results_postprocessing(
     all_runtime_values.to_csv(
       os.path.join(plot_folder, "runtime.csv"), index = False
     )
-    all_i_tc.to_csv(
+    all_tc.to_csv(
       os.path.join(plot_folder, "i_termination_condition.csv"), index = False
     )
     # -- plot
@@ -452,7 +493,7 @@ def results_postprocessing(
       rtvs = all_runtime_values[
         all_runtime_values[loop_over] == exp_value
       ].copy(deep = True)
-      i_tc = all_i_tc[all_i_tc[loop_over] == exp_value]
+      i_tc = all_tc[all_tc[loop_over] == exp_value]
       fig, axs = plt.subplots(
         nrows = 2, ncols = 2, figsize = (12, 8), sharex = True,
         gridspec_kw = {"hspace": 0.02}
@@ -465,262 +506,220 @@ def results_postprocessing(
         rej = rejs[rejs["seed"] == seed]
         rtv = rtvs[rtvs["seed"] == seed]
         # deviation
-        obj.plot(
-          x = "time", 
-          y = "dev", 
-          ax = axs[0,1], 
-          color = mcolors.TABLEAU_COLORS["tab:green"], 
-          linewidth = 1, 
-          marker = ".", 
-          grid = True,
-          legend = False
-        )
-        rej.plot(
-          x = "time", 
-          y = "dev", 
-          ax = axs[1,1], 
-          color = mcolors.TABLEAU_COLORS["tab:green"], 
-          linewidth = 1, 
-          marker = ".", 
-          grid = True,
-          legend = False
-        )
-        rtv.plot(
-          x = "time", 
-          y = "dev", 
-          ax = axs2[1], 
-          color = mcolors.TABLEAU_COLORS["tab:green"], 
-          linewidth = 1, 
-          marker = ".", 
-          grid = True,
-          legend = False
-        )
-        if not rtv["best_iteration"].isnull().all():
-          rtv.plot(
+        for mname, method_color in zip(
+            found_methods, [
+              mcolors.TABLEAU_COLORS["tab:blue"],
+              mcolors.TABLEAU_COLORS["tab:orange"],
+              mcolors.TABLEAU_COLORS["tab:purple"]
+            ]
+          ):
+          if mname != "LoadManagementModel":
+            obj.plot(
+              x = "time", 
+              y = f"dev_{mname}", 
+              ax = axs[0,1], 
+              color = method_color, 
+              linewidth = 1, 
+              marker = ".", 
+              grid = True,
+              legend = False
+            )
+            rej.plot(
+              x = "time", 
+              y = f"dev_{mname}", 
+              ax = axs[1,1], 
+              color = method_color, 
+              linewidth = 1, 
+              marker = ".", 
+              grid = True,
+              legend = False
+            )
+            rtv.plot(
+              x = "time", 
+              y = f"dev_{mname}", 
+              ax = axs2[1], 
+              color = method_color, 
+              linewidth = 1, 
+              marker = ".", 
+              grid = True,
+              legend = False
+            )
+            if not rtv[f"best_iteration_{mname}"].isnull().all():
+              rtv.plot(
+                x = "time", 
+                y = f"best_iteration_{mname}", 
+                ax = axs2[2], 
+                color = method_color, 
+                linewidth = 1, 
+                marker = ".", 
+                grid = True,
+                legend = False
+              )
+            rtv.plot(
+              x = "time", 
+              y = f"iteration_{mname}", 
+              ax = axs2[2], 
+              color = method_color, 
+              linewidth = 1, 
+              linestyle = "dashed",
+              marker = ".", 
+              grid = True,
+              legend = False
+            )
+          # method
+          obj.plot(
             x = "time", 
-            y = "best_iteration", 
-            ax = axs2[2], 
-            color = mcolors.TABLEAU_COLORS["tab:pink"], 
-            linewidth = 1, 
-            marker = ".", 
+            y = mname, 
+            ax = axs[0,0], 
+            color = method_color, 
+            linewidth = 1,
             grid = True,
             legend = False
           )
-        rtv.plot(
-          x = "time", 
-          y = "iteration", 
-          ax = axs2[2], 
-          color = mcolors.TABLEAU_COLORS["tab:pink"], 
-          linewidth = 1, 
-          linestyle = "dashed",
-          marker = ".", 
-          grid = True,
-          legend = False
-        )
-        # centralized
-        obj.plot(
-          x = "time", 
-          y = "LoadManagementModel", 
-          ax = axs[0,0], 
-          color = mcolors.TABLEAU_COLORS["tab:blue"], 
-          linewidth = 1,
-          grid = True,
-          legend = False
-        )
-        rej.plot(
-          x = "time", 
-          y = "LoadManagementModel", 
-          ax = axs[1,0], 
-          color = mcolors.TABLEAU_COLORS["tab:blue"], 
-          linewidth = 1,
-          grid = True,
-          legend = False
-        )
-        rtv.plot(
-          x = "time", 
-          y = "LoadManagementModel", 
-          ax = axs2[0], 
-          color = mcolors.TABLEAU_COLORS["tab:blue"], 
-          linewidth = 1,
-          grid = True,
-          legend = False
-        )
-        # FaaS-MACrO
-        obj.plot(
-          x = "time", 
-          y = "FaaS-MACrO", 
-          ax = axs[0,0], 
-          color = mcolors.TABLEAU_COLORS["tab:orange"], 
-          linewidth = 1,
-          grid = True,
-          legend = False
-        )
-        rej.plot(
-          x = "time", 
-          y = "FaaS-MACrO", 
-          ax = axs[1,0], 
-          color = mcolors.TABLEAU_COLORS["tab:orange"], 
-          linewidth = 1,
-          grid = True,
-          legend = False
-        )
-        rtv.plot(
-          x = "time", 
-          y = "FaaS-MACrO", 
-          ax = axs2[0], 
-          color = mcolors.TABLEAU_COLORS["tab:orange"], 
-          linewidth = 1,
-          grid = True,
-          legend = False
-        )
+          rej.plot(
+            x = "time", 
+            y = mname, 
+            ax = axs[1,0], 
+            color = method_color, 
+            linewidth = 1,
+            grid = True,
+            legend = False
+          )
+          rtv.plot(
+            x = "time", 
+            y = mname, 
+            ax = axs2[0], 
+            color = method_color, 
+            linewidth = 1,
+            grid = True,
+            legend = False
+          )
       fig3, axs3 = plt.subplots(
         nrows = 2, ncols = 1, figsize = (12, 6), sharex = True,
         gridspec_kw = {"hspace": 0.02}
       )
       rtvs["idx"] = rtvs.index
-      rtvs.plot.scatter(
-        x = "idx",
-        y = "LoadManagementModel",
-        ax = axs3[0],
-        c = mcolors.TABLEAU_COLORS["tab:blue"],
-        grid = True,
-        label = "LoadManagementModel"
-      )
-      rtvs.plot.scatter(
-        x = "idx",
-        y = "FaaS-MACrO",
-        ax = axs3[0],
-        c = mcolors.TABLEAU_COLORS["tab:orange"],
-        grid = True,
-        label = "FaaS-MACrO"
-      )
-      if "dev" in rtvs:
+      for mname, method_color in zip(
+          found_methods, [
+            mcolors.TABLEAU_COLORS["tab:blue"],
+            mcolors.TABLEAU_COLORS["tab:orange"],
+            mcolors.TABLEAU_COLORS["tab:purple"]
+          ]
+        ):
         rtvs.plot.scatter(
           x = "idx",
-          y = "dev",
-          ax = axs3[1],
-          c = mcolors.TABLEAU_COLORS["tab:green"],
-          grid = True
+          y = mname,
+          ax = axs3[0],
+          c = method_color,
+          grid = True,
+          label = mname
         )
+        if f"dev_{mname}" in rtvs:
+          rtvs.plot.scatter(
+            x = "idx",
+            y = f"dev_{mname}",
+            ax = axs3[1],
+            c = method_color,
+            grid = True
+          )
       # average
       avg = objs.groupby("time").mean(numeric_only = True)
       avg_rej = rejs.groupby("time").mean(numeric_only = True)
       avg_rtv = rtvs.groupby("time").mean(numeric_only = True)
       # -- deviation
-      avg.plot(
-        y = "dev",
-        ax = axs[0,1],
-        color = mcolors.TABLEAU_COLORS["tab:red"],
-        linewidth = 2,
-        marker = ".", 
-        grid = True,
-        label = "Average deviation ((FaaS-MACrO - LMM) / LMM) [%]"
-      )
-      avg_rej.plot(
-        y = "dev",
-        ax = axs[1,1],
-        color = mcolors.TABLEAU_COLORS["tab:red"],
-        linewidth = 2,
-        marker = ".", 
-        grid = True,
-        label = "Average deviation (FaaS-MACrO - LMM) [%]"
-      )
-      if "dev" in avg_rtv:
-        avg_rtv.plot(
-          y = "dev",
-          ax = axs2[1],
-          color = mcolors.TABLEAU_COLORS["tab:red"],
-          linewidth = 2,
-          marker = ".", 
-          grid = True,
-          label = "Average deviation (FaaS-MACrO / LMM) [x]"
-        )
-      if "best_iteration" in avg_rtv:
-        avg_rtv.plot(
-          y = "best_iteration",
-          ax = axs2[2],
-          color = "black",
-          linewidth = 2,
-          marker = ".", 
-          grid = True,
-          label = "Best iteration"
-        )
-      avg_rtv.plot(
-        y = "iteration",
-        ax = axs2[2],
-        color = "black",
-        linewidth = 1,
-        linestyle = "dashed",
-        marker = ".", 
-        grid = True,
-        label = "# iterations"
-      )
-      # -- centralized
-      avg.plot(
-        y = "LoadManagementModel",
-        ax = axs[0,0],
-        color = mcolors.TABLEAU_COLORS["tab:blue"],
-        linewidth = 2,
-        grid = True,
-        label = "Average LMM"
-      )
-      avg_rej.plot(
-        y = "LoadManagementModel",
-        ax = axs[1,0],
-        color = mcolors.TABLEAU_COLORS["tab:blue"],
-        linewidth = 2,
-        grid = True,
-        label = "Average LMM"
-      )
-      avg_rtv.plot(
-        y = "LoadManagementModel",
-        ax = axs2[0],
-        color = mcolors.TABLEAU_COLORS["tab:blue"],
-        linewidth = 2,
-        grid = True,
-        label = "Average LMM"
-      )
-      axs3[0].axhline(
-        y = rtvs["LoadManagementModel"].mean(),
-        color = mcolors.TABLEAU_COLORS["tab:blue"],
-        linewidth = 2
-      )
-      # -- FaaS-MACrO
-      avg.plot(
-        y = "FaaS-MACrO",
-        ax = axs[0,0],
-        color = mcolors.TABLEAU_COLORS["tab:orange"],
-        linewidth = 2,
-        grid = True,
-        label = "Average FaaS-MACrO"
-      )
-      avg_rej.plot(
-        y = "FaaS-MACrO",
-        ax = axs[1,0],
-        color = mcolors.TABLEAU_COLORS["tab:orange"],
-        linewidth = 2,
-        grid = True,
-        label = "Average FaaS-MACrO"
-      )
-      if "FaaS-MACrO" in avg_rtv:
-        avg_rtv.plot(
-          y = "FaaS-MACrO",
-          ax = axs2[0],
-          color = mcolors.TABLEAU_COLORS["tab:orange"],
+      for mname, method_color in zip(
+          found_methods, [
+            mcolors.TABLEAU_COLORS["tab:blue"],
+            mcolors.TABLEAU_COLORS["tab:orange"],
+            mcolors.TABLEAU_COLORS["tab:purple"]
+          ]
+        ):
+        if mname != "LoadManagementModel":
+          avg.plot(
+            y = f"dev_{mname}",
+            ax = axs[0,1],
+            color = method_color,
+            linewidth = 2,
+            marker = ".", 
+            grid = True,
+            label = f"Average deviation (({mname} - LMM) / LMM) [%]"
+          )
+          avg_rej.plot(
+            y = f"dev_{mname}",
+            ax = axs[1,1],
+            color = method_color,
+            linewidth = 2,
+            marker = ".", 
+            grid = True,
+            label = f"Average deviation ({mname} - LMM) [%]"
+          )
+          if "dev" in avg_rtv:
+            avg_rtv.plot(
+              y = f"dev_{mname}",
+              ax = axs2[1],
+              color = method_color,
+              linewidth = 2,
+              marker = ".", 
+              grid = True,
+              label = f"Average deviation ({mname} / LMM) [x]"
+            )
+          if f"best_iteration_{mname}" in avg_rtv:
+            avg_rtv.plot(
+              y = f"best_iteration_{mname}",
+              ax = axs2[2],
+              color = "black",
+              linewidth = 2,
+              marker = ".", 
+              grid = True,
+              label = "Best iteration"
+            )
+          avg_rtv.plot(
+            y = f"iteration_{mname}",
+            ax = axs2[2],
+            color = "black",
+            linewidth = 1,
+            linestyle = "dashed",
+            marker = ".", 
+            grid = True,
+            label = "# iterations"
+          )
+        # -- method
+        avg.plot(
+          y = mname,
+          ax = axs[0,0],
+          color = method_color,
           linewidth = 2,
           grid = True,
-          label = "Average FaaS-MACrO"
+          label = f"Average {mname}"
         )
-        axs3[0].axhline(
-          y = rtvs["FaaS-MACrO"].mean(),
-          color = mcolors.TABLEAU_COLORS["tab:orange"],
-          linewidth = 2
+        avg_rej.plot(
+          y = mname,
+          ax = axs[1,0],
+          color = method_color,
+          linewidth = 2,
+          grid = True,
+          label = f"Average {mname}"
         )
-        axs3[1].axhline(
-          y = rtvs["dev"].mean(),
-          color = mcolors.TABLEAU_COLORS["tab:green"],
-          linewidth = 2
-        )
+        if mname in avg_rtv:
+          avg_rtv.plot(
+            y = mname,
+            ax = axs2[0],
+            color = method_color,
+            linewidth = 2,
+            grid = True,
+            label = f"Average {mname}"
+          )
+          axs3[0].axhline(
+            y = rtvs[mname].mean(),
+            color = method_color,
+            linewidth = 2
+          )
+          if f"dev_{mname}" in rtvs:
+            axs3[1].axhline(
+              y = rtvs[f"dev_{mname}"].mean(),
+              color = method_color,
+              linewidth = 2
+            )
       axs[1,0].set_xlabel("Control time period $t$")
       axs[1,1].set_xlabel("Control time period $t$")
       axs[0,0].set_ylabel("Objective function value")
@@ -772,9 +771,9 @@ def results_postprocessing(
       )
       plt.close()
   # termination condition
-  if "criterion" in all_i_tc:
+  if "criterion" in all_tc:
     _, ax = plt.subplots(figsize = (20,6))
-    all_i_tc["criterion"].value_counts(normalize = True).plot.bar(
+    all_tc["criterion"].value_counts(normalize = True).plot.bar(
       rot = 0,
       grid = True,
       ax = ax,
@@ -799,9 +798,7 @@ def run(
     base_config: dict, 
     base_solution_folder: str, 
     n_experiments: int, 
-    run_centralized_only: bool,
-    run_faasmacro_only: bool,
-    generate_only: bool,
+    methods: list,
     fix_r: bool,
     sp_parallelism: int,
     enable_plotting: bool,
@@ -812,11 +809,15 @@ def run(
   exp_values = base_config["limits"][loop_over]
   disable_plotting = not enable_plotting
   from_instances = base_config["limits"].get("path", None)
+  generate_only = "generate_only" in methods
   # generate list of experiments
   experiments_list = generate_experiments_list(exp_values, seed, n_experiments)
   # load list of already-run experiments (if any)
   solution_folders = {
-    "experiments_list": [], "centralized": [], "faas-macro": []
+    "experiments_list": [], 
+    "centralized": [], 
+    "faas-macro": [], 
+    "faas-madea": []
   }
   if os.path.exists(os.path.join(base_solution_folder, "experiments.json")):
     with open(
@@ -831,30 +832,38 @@ def run(
   # loop over the experiments list
   for exp_value, seed in tqdm(experiments_list):
     # check if the experiment is still to run
-    run_c = False
-    run_i = False
+    run_c = False # -- centralized
+    run_i = False # -- faasmacro
+    run_a = False # -- faasmadea
     experiment_idx = None
     try:
       experiment_idx = solution_folders["experiments_list"].index(
         [exp_value, seed]
       )
-      if not (run_faasmacro_only or generate_only) and ((
+      if (not generate_only and "centralized" in methods) and ((
           len(solution_folders["centralized"]) <= experiment_idx
         ) or (
           solution_folders["centralized"][experiment_idx] is None
         )):
         run_c = True
-      if not (run_centralized_only or generate_only) and ((
+      if (not generate_only and "faas-macro" in methods) and ((
           len(solution_folders["faas-macro"]) <= experiment_idx
         ) or (
           solution_folders["faas-macro"][experiment_idx] is None
         )):
         run_i = True
+      if (not generate_only and "faas-madea" in methods) and ((
+          len(solution_folders["faas-madea"]) <= experiment_idx
+        ) or (
+          solution_folders["faas-madea"][experiment_idx] is None
+        )):
+        run_a = True
     except ValueError:
-      run_c = True if not (run_faasmacro_only or generate_only) else False
-      run_i = True if not (run_centralized_only or generate_only) else False
+      run_c = "centralized" in methods
+      run_i = "faas-macro" in methods
+      run_a = "faas-madea" in methods
     # if the experiment is still to run...
-    if run_c or run_i or generate_only:
+    if run_c or run_i or run_a or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       config["limits"][loop_over].pop("values", None)
@@ -874,6 +883,10 @@ def run(
             ]
           elif "faas-macro" in old_instance_paths:
             old_exp_path = old_instance_paths["faas-macro"][
+              old_exp_idx
+            ]
+          elif "faas-madea" in old_instance_paths:
+            old_exp_path = old_instance_paths["faas-madea"][
               old_exp_idx
             ]
           config["limits"]["path"] = old_exp_path
@@ -905,6 +918,15 @@ def run(
           disable_plotting = disable_plotting
         )
         solution_folders["faas-macro"].append(i_folder)
+      # -- solve auction
+      if run_a:
+        a_folder = run_auction(
+          config, 
+          sp_parallelism,
+          log_on_file = log_on_file, 
+          disable_plotting = disable_plotting
+        )
+        solution_folders["faas-madea"].append(a_folder)
       # -- save info
       if experiment_idx is None:
         solution_folders["experiments_list"].append([exp_value, seed])
@@ -914,17 +936,17 @@ def run(
       ) as ost:
         ost.write(json.dumps(solution_folders, indent = 2))
   # immediate postprocessing
-  results_postprocessing(solution_folders, base_solution_folder, loop_over)
+  results_postprocessing(
+    solution_folders, base_solution_folder, loop_over, methods
+  )
 
 
 if __name__ == "__main__":
   args = parse_arguments()
   config_file = args.config
   n_experiments = args.n_experiments
-  run_centralized_only = args.run_centralized_only
-  run_faasmacro_only = args.run_faasmacro_only
+  methods = args.methods
   postprocessing_only = args.postprocessing_only
-  generate_only = args.generate_only
   postprocessing_list = args.postprocessing_list
   fix_r = args.fix_r
   sp_parallelism = args.sp_parallelism
@@ -943,9 +965,7 @@ if __name__ == "__main__":
       base_config, 
       base_solution_folder, 
       n_experiments, 
-      run_centralized_only,
-      run_faasmacro_only,
-      generate_only,
+      methods,
       fix_r,
       sp_parallelism,
       enable_plotting,
@@ -958,7 +978,9 @@ if __name__ == "__main__":
         os.path.join(base_solution_folder, "experiments.json"), "r"
       ) as ist:
         solution_folders = json.load(ist)
-      results_postprocessing(solution_folders, base_solution_folder, loop_over)
+      results_postprocessing(
+        solution_folders, base_solution_folder, loop_over, methods
+      )
     else:
       for foldername in os.listdir(base_solution_folder):
         if (
@@ -972,4 +994,4 @@ if __name__ == "__main__":
             os.path.join(bsf, "experiments.json"), "r"
           ) as ist:
             solution_folders = json.load(ist)
-          results_postprocessing(solution_folders, bsf, loop_over)
+          results_postprocessing(solution_folders, bsf, loop_over, methods)
