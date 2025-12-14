@@ -255,7 +255,7 @@ def extract_solution(
         xi[n2,n1,f] = y[n1,n2,f]
   # compute residual capacity
   rho = compute_residual_capacity(data, r)
-  return x, y, z, r, xi, omega, rho, solution["obj"]
+  return x, y, z, r, xi, omega, rho, solution.get("obj", np.nan)
 
 
 def generate_load_traces(
