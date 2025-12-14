@@ -64,8 +64,9 @@ def check_stopping_criteria(
     it: int,
     max_iterations: int,
     blackboard: np.array,
-    sp_omega: np.array,
+    omega: np.array,
     rmp_omega: np.array,
+    bids: pd.DataFrame,
     tolerance: float,
     total_runtime: float,
     time_limit: float
@@ -78,12 +79,15 @@ def check_stopping_criteria(
   elif (blackboard <= tolerance).all():
     stop = True
     why_stopping = "no capacity left"
-  elif (sp_omega <= tolerance).all():
+  elif (omega <= tolerance).all():
     stop = True
     why_stopping = "all load assigned"
   elif (rmp_omega <= tolerance).all():
     stop = True
     why_stopping = "load cannot be assigned"
+  elif len(bids) == 0:
+    stop = True
+    why_stopping = "no available or convenient sellers"
   elif total_runtime >= time_limit:
     stop = True
     why_stopping = f"reached time limit: {total_runtime} >= {time_limit}"
@@ -129,23 +133,26 @@ def define_bids(
     "i": [], "j": [], "f": [], "d": [], "b": [], "utility": [], "weight": []
   }
   for i,f in zip(potential_buyers, functions_to_share):
-    # identify potential sellers
+    # identify potential sellers (neighbors with residual capacity for 
+    # function f)
     potential_sellers = np.nonzero(neighborhood[i,:])[0]
+    potential_sellers = set(potential_sellers).intersection(
+      set(np.nonzero(blackboard[:,f])[0])
+    )
+    # -- loop over potential sellers
     utility = []
     candidate_sellers = []
     for j in potential_sellers:
-      # -- check residual capacity
-      if blackboard[j,f] > 0:
-        # -- compute utility
-        ut = (  
-          data[None]["beta"][(i+1,j+1,f+1)] - 
-          p[j,f] - 
-          auction_options["latency_weight"] * latency[i,j] - 
-          auction_options["fairness_weight"] * fairness[i,f]
-        )
-        if ut > 0:
-          utility.append(ut)
-          candidate_sellers.append(j)
+      # -- compute utility
+      ut = (  
+        data[None]["beta"][(i+1,j+1,f+1)] - 
+        p[j,f] - 
+        auction_options["latency_weight"] * latency[i,j] - 
+        auction_options["fairness_weight"] * fairness[i,f]
+      )
+      if ut > 0:
+        utility.append(ut)
+        candidate_sellers.append(j)
     # compute weights and define bids
     if len(utility) > 0:
       utility = np.array(utility)
@@ -304,6 +311,7 @@ def run(
     best_it_so_far = -1
     best_centralized_it = -1
     y = np.zeros((Nn,Nn,Nf))
+    omega = sp_omega
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
@@ -329,7 +337,7 @@ def run(
       # buyers define their bids
       s = datetime.now()
       bids = define_bids(
-        sp_omega, 
+        omega, 
         blackboard, 
         p, 
         sp_data, 
@@ -388,7 +396,7 @@ def run(
           )
         # -- update solution
         sp_x, _, sp_r, sp_rho = spr_sol
-        sp_omega -= rmp_omega
+        omega = sp_omega - rmp_omega
       # merge solutions and compute the centralized objective value
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt, 
@@ -425,8 +433,9 @@ def run(
         it,
         max_iterations,
         blackboard,
-        sp_omega,
+        omega,
         rmp_omega,
+        bids,
         tolerance,
         total_runtime,
         time_limit
@@ -542,13 +551,10 @@ def run(
 
 
 if __name__ == "__main__":
-  # args = parse_arguments()
-  # config_file = args.config
-  # parallelism = args.parallelism
-  # disable_plotting = args.disable_plotting
-  config_file = "manual_config.json"
-  parallelism = 0
-  disable_plotting = False
+  args = parse_arguments()
+  config_file = args.config
+  parallelism = args.parallelism
+  disable_plotting = args.disable_plotting
   # load configuration file
   config = load_configuration(config_file)
   # run
