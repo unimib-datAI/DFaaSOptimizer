@@ -1,4 +1,3 @@
-from pyomo.util.infeasible import log_infeasible_constraints
 from pyomo.opt.results import SolverStatus
 from pyomo.opt import TerminationCondition
 from pyomo.contrib.iis import write_iis
@@ -68,7 +67,11 @@ class BaseAbstractModel():
       # get objective function value
       solution["obj"] = pyo.value(instance.OBJ)
     else:
-      _ = write_iis(instance, "infeas.ilp", "gurobi")
+      try:
+        _ = write_iis(instance, "infeas.ilp", "gurobi")
+      except RuntimeError:
+        with open(f"{solution['termination_condition']}.err", "w") as ost:
+          instance.pprint(ostream = ost)
     return solution
 
 
