@@ -311,7 +311,7 @@ def run(
     best_it_so_far = -1
     best_centralized_it = -1
     y = np.zeros((Nn,Nn,Nf))
-    omega = sp_omega
+    omega = deepcopy(sp_omega)
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
