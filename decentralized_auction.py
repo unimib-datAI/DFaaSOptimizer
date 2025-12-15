@@ -396,7 +396,19 @@ def run(
           )
         # -- update solution
         sp_x, _, sp_r, sp_rho = spr_sol
-        omega = sp_omega - rmp_omega
+        for i in range(Nn):
+          for f in range(Nf):
+            omega[i,f] = sp_omega[i,f] - rmp_omega[i,f]
+            if abs(omega[i,f]) < tolerance:
+              omega[i,f] = 0.0
+        if verbose > 1:
+          print(
+            f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
+            f"omega = {omega.tolist()}; x: {sp_x.tolist()}; "
+            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()})", 
+            file = log_stream, 
+            flush = True
+          )
       # merge solutions and compute the centralized objective value
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt, 
