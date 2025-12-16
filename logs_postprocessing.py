@@ -8,7 +8,7 @@ import os
 
 
 def get_faasmacro_runtime(
-    logs_df: pd.DataFrame, plot_folder: str
+    logs_df: pd.DataFrame, plot_folder: str, method: str = ""
   ) -> pd.DataFrame:
   all_total_runtime = pd.DataFrame()
   for exp, data in logs_df.groupby("exp"):
@@ -86,7 +86,7 @@ def get_faasmacro_runtime(
     axs[-1].set_xlabel("Control time period $t$", fontsize = fontsize)
     # axs[-1].set_xlabel("Experiment", fontsize = fontsize)
     plt.savefig(
-      os.path.join(plot_folder, "runtime.png"),
+      os.path.join(plot_folder, f"runtime_{method}.png"),
       dpi = 300,
       format = "png",
       bbox_inches = "tight"
