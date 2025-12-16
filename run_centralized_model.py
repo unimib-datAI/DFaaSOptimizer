@@ -5,7 +5,7 @@ from load_generator import LoadGenerator
 from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
 from postprocessing import plot_history
 
-from networkx import draw_networkx, kamada_kawai_layout
+from networkx import draw_networkx, kamada_kawai_layout, Graph
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -349,7 +349,7 @@ def init_problem(
     max_steps: int, 
     seed: int, 
     solution_folder: str
-  ) -> Tuple[dict, dict, list]:
+  ) -> Tuple[dict, dict, list, Graph]:
   # generate base instance data
   rng = np.random.default_rng(seed = seed)
   base_instance_data, load_limits, graph = generate_data(
@@ -387,7 +387,7 @@ def init_problem(
     bbox_inches = "tight"
   )
   plt.close()
-  return base_instance_data, input_requests_traces, load_limits[0].keys()
+  return base_instance_data,input_requests_traces,load_limits[0].keys(),graph
 
 
 def join_complete_solution(
@@ -569,7 +569,7 @@ def run(
   # initialize models
   models = [LoadManagementModel()]
   # generate base instance data and load traces
-  base_instance_data, input_requests_traces, agents = init_problem(
+  base_instance_data, input_requests_traces, agents, _ = init_problem(
     limits, trace_type, max_steps, seed, solution_folder
   )
   Nn = base_instance_data[None]["Nn"][None]

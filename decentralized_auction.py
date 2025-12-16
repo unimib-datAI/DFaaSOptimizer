@@ -18,6 +18,7 @@ from run_faasmacro import (
 from utilities import load_configuration
 from sp import LSP, LSPr
 
+from networkx import adjacency_matrix
 from datetime import datetime
 from copy import deepcopy
 from typing import Tuple
@@ -298,7 +299,7 @@ def run(
   if log_on_file:
     log_stream = open(os.path.join(solution_folder, "out.log"), "w")
   # generate base instance data and load traces
-  base_instance_data, input_requests_traces, agents = init_problem(
+  base_instance_data, input_requests_traces, agents, graph = init_problem(
     limits, trace_type, max_steps, seed, solution_folder
   )
   Nn = base_instance_data[None]["Nn"][None]
@@ -307,6 +308,7 @@ def run(
   neighborhood = neigh_dict_to_matrix(
     base_instance_data[None]["neighborhood"], Nn
   )
+  latency = adjacency_matrix(graph, weight = "network_latency")
   # loop over time
   ub = (
     max_run_time + run_time_step
@@ -391,9 +393,9 @@ def run(
         neighborhood, 
         sp_rho,
         auction_options, 
-        np.zeros((Nn,Nn)), 
+        latency,
         fairness,
-        np.zeros((Nn,Nf))
+        np.zeros((Nn,Nn))
       )
       e = datetime.now()
       if verbose > 1:
@@ -402,6 +404,8 @@ def run(
           file = log_stream, 
           flush = True
         )
+        if verbose > 2:
+          print(bids, file = log_stream, flush = True)
       total_runtime += (e - s).total_seconds()
       # sellers accept/reject bids
       if len(bids) > 0:
@@ -412,9 +416,9 @@ def run(
         e = datetime.now()
         if verbose > 1:
           print(
-            f"        evaluate_bids: DONE; runtime = {(e - s).total_seconds()})", 
-            file = log_stream, 
-            flush = True
+           f"        evaluate_bids: DONE; runtime = {(e - s).total_seconds()})", 
+           file = log_stream, 
+           flush = True
           )
         total_runtime += (e - s).total_seconds()
         # update effective load, number of replicas and fairness matrix
@@ -439,8 +443,8 @@ def run(
         total_runtime += spr_runtime
         if verbose > 1:
           print(
-            f"        solve 'restricted problem': DONE ({spr_tc}; obj: {spr_obj}"
-            f"; runtime = {spr_runtime})", 
+            f"        solve 'restricted problem': DONE ({spr_tc}; "
+            f"obj: {spr_obj}; runtime = {spr_runtime})", 
             file = log_stream, 
             flush = True
           )
