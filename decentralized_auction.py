@@ -362,6 +362,7 @@ def run(
     best_centralized_it = -1
     y = np.zeros((Nn,Nn,Nf))
     omega = deepcopy(sp_omega)
+    fairness = np.zeros((Nn,Nf))
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
@@ -391,7 +392,7 @@ def run(
         sp_rho,
         auction_options, 
         np.zeros((Nn,Nn)), 
-        np.zeros((Nn,Nf)),
+        fairness,
         np.zeros((Nn,Nf))
       )
       e = datetime.now()
@@ -416,12 +417,14 @@ def run(
             flush = True
           )
         total_runtime += (e - s).total_seconds()
-        # update effective load and number of replicas
+        # update effective load, number of replicas and fairness matrix
         y += auction_y
         rmp_omega = np.zeros((Nn,Nf))
         for n in range(Nn):
           for f in range(Nf):
             rmp_omega[n,f] = y[n,:,f].sum()
+            if rmp_omega[n,f] > 0:
+              fairness[n,f] += 1
         # -- solve "restricted problem"
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, 
