@@ -237,6 +237,11 @@ def results_postprocessing(
     abs_folders = []
     results = []
     found_methods = []
+    method_colors = [
+      mcolors.TABLEAU_COLORS["tab:blue"],
+      mcolors.TABLEAU_COLORS["tab:orange"],
+      mcolors.TABLEAU_COLORS["tab:red"]
+    ]
     for method, method_folder in zip(methods, tokens[1:]):
       if method_folder is not None:
         abs_folders.append(
@@ -316,22 +321,22 @@ def results_postprocessing(
         # -- plot deviation
         _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
         obj.loc[:,obj.columns.str.startswith("dev")].plot(
-          marker = ".", grid = True, ax = axs[0]
+          marker = ".", grid = True, ax = axs[0], color = method_colors[1:]
         )
         all_rej.loc[:,all_rej.columns.str.startswith("dev")].drop("tot").plot(
-          marker = ".", grid = True, ax = axs[1]
+          marker = ".", grid = True, ax = axs[1], color = method_colors[1:]
         )
         # -- add average deviation line(s)
-        for mname in found_methods:
+        for mname, method_color in zip(found_methods, method_colors):
           if mname != "LoadManagementModel":
             axs[0].axhline(
               y = obj[f"dev_{mname}"].mean(), 
-              # color = mcolors.TABLEAU_COLORS["tab:red"],
+              color = method_color,
               linewidth = 2
             )
             axs[1].axhline(
               y = all_rej[f"dev_{mname}"].drop("tot").mean(), 
-              color = mcolors.TABLEAU_COLORS["tab:red"],
+              color = method_color,
               linewidth = 2
             )
         axs[0].set_xlabel("Control time period $t$")
@@ -466,13 +471,13 @@ def results_postprocessing(
       runtime_comparison.loc[
         :,runtime_comparison.columns.str.startswith("dev")
       ].plot(
-        grid = True, marker = ".", ax = axs[1]
+        grid = True, marker = ".", ax = axs[1], color = method_colors[1:]
       )
-      for mname in found_methods:
+      for mname, method_color in zip(found_methods, method_colors):
         if mname != "LoadManagementModel":
           axs[1].axhline(
             y = runtime_comparison[f"dev_{mname}"].mean(),
-            # color = mcolors.TABLEAU_COLORS["tab:red"]
+            color = method_color
           )
       axs[0].set_ylabel("Runtime [s]", fontsize = 14)
       axs[1].set_ylabel("Runtime deviation [x]", fontsize = 14)
@@ -524,13 +529,7 @@ def results_postprocessing(
         rej = rejs[rejs["seed"] == seed]
         rtv = rtvs[rtvs["seed"] == seed]
         # deviation
-        for mname, method_color in zip(
-            found_methods, [
-              mcolors.TABLEAU_COLORS["tab:blue"],
-              mcolors.TABLEAU_COLORS["tab:orange"],
-              mcolors.TABLEAU_COLORS["tab:purple"]
-            ]
-          ):
+        for mname, method_color in zip(found_methods, method_colors):
           if mname != "LoadManagementModel":
             obj.plot(
               x = "time", 
@@ -617,13 +616,7 @@ def results_postprocessing(
         gridspec_kw = {"hspace": 0.02}
       )
       rtvs["idx"] = rtvs.index
-      for mname, method_color in zip(
-          found_methods, [
-            mcolors.TABLEAU_COLORS["tab:blue"],
-            mcolors.TABLEAU_COLORS["tab:orange"],
-            mcolors.TABLEAU_COLORS["tab:purple"]
-          ]
-        ):
+      for mname, method_color in zip(found_methods, method_colors):
         rtvs.plot.scatter(
           x = "idx",
           y = mname,
@@ -645,13 +638,7 @@ def results_postprocessing(
       avg_rej = rejs.groupby("time").mean(numeric_only = True)
       avg_rtv = rtvs.groupby("time").mean(numeric_only = True)
       # -- deviation
-      for mname, method_color in zip(
-          found_methods, [
-            mcolors.TABLEAU_COLORS["tab:blue"],
-            mcolors.TABLEAU_COLORS["tab:orange"],
-            mcolors.TABLEAU_COLORS["tab:purple"]
-          ]
-        ):
+      for mname, method_color in zip(found_methods, method_colors):
         if mname != "LoadManagementModel":
           avg.plot(
             y = f"dev_{mname}",
