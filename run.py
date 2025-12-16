@@ -178,17 +178,21 @@ def load_termination_condition(
   return tc
 
 
-def merge_sol_dict(results_list: list) -> pd.DataFrame:
-  res = results_list[0]["tot"]
-  for r in results_list[1:]:
-    res = res.join(r["tot"])
+def merge_sol_dict(results_list: list, methods_names: list) -> pd.DataFrame:
+  res = results_list[0]["tot"].rename(
+    columns = {"tot": f"tot_{methods_names[0]}"}
+  )
+  for r,m in zip(results_list[1:], methods_names[1:]):
+    res = res.join(r["tot"], rsuffix = f"_{m}")
   res["time"] = "tot"
   for key in results_list[0]:
     if key != "tot":
       time = int(key.split(" ")[-1])
-      df = results_list[0][key]
-      for r in results_list[1:]:
-        df = df.join(r[key])
+      df = results_list[0][key].rename(
+        columns = {key: f"{key}_{methods_names[0]}"}
+      )
+      for r,m in zip(results_list[1:], methods_names[1:]):
+        df = df.join(r[key], rsuffix = f"_{m}")
       df["time"] = time
       res = pd.concat([res, df])
   return res
@@ -242,7 +246,7 @@ def results_postprocessing(
         # ---- local_count, fwd_count, rej_count, replicas, ping_pong
         mkey = "LoadManagementModel" if method == "centralized" else "LSP"
         mname = "LoadManagementModel" if method == "centralized" else (
-          "FaaS-MACrO" if method == "faasmacro" else "FaaS-MADeA"
+          "FaaS-MACrO" if method == "faas-macro" else "FaaS-MADeA"
         )
         results.append(load_models_results(abs_folders[-1], [mkey], [mname]))
         # -- check ping-pong problems
@@ -252,13 +256,13 @@ def results_postprocessing(
     # merge solutions
     if len(results) > 0:
       local_count = merge_sol_dict(
-        [res[0]["by_function"] for res in results]
+        [res[0]["by_function"] for res in results], found_methods
       )
       fwd_count = merge_sol_dict(
-        [res[1]["by_function"] for res in results]
+        [res[1]["by_function"] for res in results], found_methods
       )
       rej_count = merge_sol_dict(
-        [res[2]["by_function"] for res in results]
+        [res[2]["by_function"] for res in results], found_methods
       )
       # plot
       plot_total_count(
@@ -416,7 +420,9 @@ def results_postprocessing(
             int(exp_description_tuple[0]),
             mname
           )
-          runtimes[mname] = get_faasmacro_runtime(logs_df, exp_plot_folder)
+          runtimes[mname] = get_faasmacro_runtime(
+            logs_df, exp_plot_folder, mname
+          )
     # plot runtime comparison
     if "LoadManagementModel" in found_methods and len(runtimes) > 1:
       runtime_comparison = {
@@ -427,11 +433,23 @@ def results_postprocessing(
       for mname in found_methods:
         if mname != "LoadManagementModel":
           runtime_comparison[mname] = runtimes[mname]["tot"].tolist()
-          runtime_comparison[f"iteration_{mname}"] = tc[
-            tc["method"] == mname
+          runtime_comparison[f"iteration_{mname}"] = all_tc[
+            (
+              all_tc["method"] == mname
+            ) & (
+              all_tc[loop_over] == exp_description_tuple[0]
+            ) & (
+              all_tc["seed"] == exp_description_tuple[1]
+            )
           ]["iteration"].tolist()
-          runtime_comparison[f"best_iteration_{mname}"] = tc[
-            tc["method"] == mname
+          runtime_comparison[f"best_iteration_{mname}"] = all_tc[
+            (
+              all_tc["method"] == mname
+            ) & (
+              all_tc[loop_over] == exp_description_tuple[0]
+            ) & (
+              all_tc["seed"] == exp_description_tuple[1]
+            )
           ]["best_iteration"].tolist()
       runtime_comparison = pd.DataFrame(runtime_comparison)
       # -- compute deviation
