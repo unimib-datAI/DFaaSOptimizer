@@ -67,6 +67,7 @@ def check_stopping_criteria(
     omega: np.array,
     rmp_omega: np.array,
     bids: pd.DataFrame,
+    memory_bids: pd.DataFrame,
     tolerance: float,
     total_runtime: float,
     time_limit: float
@@ -85,7 +86,7 @@ def check_stopping_criteria(
   elif (rmp_omega <= tolerance).all():
     stop = True
     why_stopping = "load cannot be assigned"
-  elif len(bids) == 0:
+  elif len(bids) == 0 and len(memory_bids) == 0:
     stop = True
     why_stopping = "no available or convenient sellers"
   elif total_runtime >= time_limit:
@@ -122,27 +123,37 @@ def define_bids(
     p: np.array, 
     data: dict,
     neighborhood: np.array,
+    rho: np.array,
     auction_options: dict,
     latency: np.array,
     fairness: np.array,
     delta: np.array
-  ) -> pd.DataFrame:
+  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
   # loop over agents and functions
   potential_buyers, functions_to_share = np.nonzero(omega)
   bids = {
     "i": [], "j": [], "f": [], "d": [], "b": [], "utility": [], "weight": []
   }
+  memory_bids = {
+    "i": [], "j": [], "f": []
+  }
   for i,f in zip(potential_buyers, functions_to_share):
-    # identify potential sellers (neighbors with residual capacity for 
-    # function f)
-    potential_sellers = np.nonzero(neighborhood[i,:])[0]
-    potential_sellers = set(potential_sellers).intersection(
+    # identify potential sellers
+    potential_sellers = set(np.nonzero(neighborhood[i,:])[0])
+    # -- capacity sellers are neighbors with residual computing capacity 
+    # for function f
+    potential_capacity_sellers = potential_sellers.intersection(
       set(np.nonzero(blackboard[:,f])[0])
+    )
+    # -- memory sellers are neighbors with residual memory capacity to 
+    # instantiate new replicas
+    potential_memory_sellers = potential_sellers.intersection(
+      set(np.nonzero(rho)[0])
     )
     # -- loop over potential sellers
     utility = []
     candidate_sellers = []
-    for j in potential_sellers:
+    for j in potential_capacity_sellers:
       # -- compute utility
       ut = (  
         data[None]["beta"][(i+1,j+1,f+1)] - 
@@ -167,7 +178,13 @@ def define_bids(
         bids["b"].append(b)
         bids["utility"].append(utility[idx])
         bids["weight"].append(w)
-  return pd.DataFrame(bids)
+    else:
+      # if the problem is missing computing capacity, ask for new replicas
+      for j in potential_memory_sellers - potential_capacity_sellers:
+        memory_bids["i"].append(i)
+        memory_bids["j"].append(j)
+        memory_bids["f"].append(f)
+  return pd.DataFrame(bids), pd.DataFrame(memory_bids)
 
 
 def evaluate_bids(
@@ -207,6 +224,41 @@ def evaluate_bids(
     else:
       p[j,f] *= (1 - auction_options["zeta"])
   return y, p
+
+
+def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
+  neighborhood = np.zeros((Nn,Nn))
+  for n1 in range(Nn):
+    for n2 in range(Nn):
+      if n1 != n2 and neighborhood_dict[(n1+1,n2+1)]:
+        neighborhood[n1,n2] = 1
+  return neighborhood
+
+
+def start_additional_replicas(
+    memory_bids: pd.DataFrame, 
+    r: np.array,
+    data: dict,
+    rho: np.array
+  ) -> Tuple[np.array, np.array]:
+  # loop over sellers
+  additional_replicas = np.zeros(r.shape)
+  residual_capacity = deepcopy(rho)
+  for j, bids_for_j in memory_bids.groupby("j"):
+    if rho[j] > 0:
+      # count the fraction that each function requires
+      fractions = bids_for_j["f"].value_counts(normalize = True)
+      # assign new replicas proportionally to this fraction
+      for f, frac in fractions.items():
+        # -- check memory requirement
+        ram_f = data[None]["memory_requirement"][f+1]
+        # -- determine the maximum number of replicas that fit in the 
+        # assignable fraction of the residual memory capacity
+        a = int((residual_capacity[j] * frac) // ram_f)
+        # -- update
+        residual_capacity[j] -= int(ram_f * a)
+        additional_replicas[j,f] = a
+  return additional_replicas, residual_capacity
 
 
 def run(
@@ -252,11 +304,9 @@ def run(
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
   # -- save neighborhood matrix
-  neighborhood = np.zeros((Nn,Nn))
-  for n1 in range(Nn):
-    for n2 in range(Nn):
-      if n1 != n2 and base_instance_data[None]["neighborhood"][(n1+1,n2+1)]:
-        neighborhood[n1,n2] = 1
+  neighborhood = neigh_dict_to_matrix(
+    base_instance_data[None]["neighborhood"], Nn
+  )
   # loop over time
   ub = (
     max_run_time + run_time_step
@@ -330,18 +380,15 @@ def run(
           flush = True
         )
       total_runtime += (e - s).total_seconds()
-      # # update neighborhood given the nodes residual memory capacity
-      # neighborhood = update_neighborhood(
-      #   data[None]["neighborhood"], sp_rho, sp_omega
-      # )
       # buyers define their bids
       s = datetime.now()
-      bids = define_bids(
+      bids, memory_bids = define_bids(
         omega, 
         blackboard, 
         p, 
         sp_data, 
         neighborhood, 
+        sp_rho,
         auction_options, 
         np.zeros((Nn,Nn)), 
         np.zeros((Nn,Nf)),
@@ -409,6 +456,21 @@ def run(
             file = log_stream, 
             flush = True
           )
+      else:
+        # tentatively start additional replicas
+        s = datetime.now()
+        a, sp_rho = start_additional_replicas(
+          memory_bids, sp_r, sp_data, sp_rho
+        )
+        sp_r += a
+        e = datetime.now()
+        print(
+          f"        additional replicas started: DONE (a = {a.tolist()}; "
+          f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})", 
+          file = log_stream, 
+          flush = True
+        )
+        total_runtime += (e - s).total_seconds()
       # merge solutions and compute the centralized objective value
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt, 
@@ -448,6 +510,7 @@ def run(
         omega,
         rmp_omega,
         bids,
+        memory_bids,
         tolerance,
         total_runtime,
         time_limit
