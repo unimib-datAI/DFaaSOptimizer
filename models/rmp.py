@@ -1,4 +1,4 @@
-from model import BaseLoadManagementModel, PYO_VAR_TYPE
+from models.model import BaseLoadManagementModel, PYO_VAR_TYPE
 
 import pyomo.environ as pyo
 
@@ -30,6 +30,12 @@ class RMPAbstractModel(BaseLoadManagementModel):
       self.model.N, self.model.F, 
       domain = pyo.NonNegativeIntegers, default = 0
     )
+
+
+class RMPCentralized(RMPAbstractModel):
+  def __init__(self):
+    super().__init__()
+    self.name = "RMPCentralized"
     ###########################################################################
     # Problem variables
     ###########################################################################
@@ -51,7 +57,7 @@ class RMPAbstractModel(BaseLoadManagementModel):
     return model.y[n,m,f] <= model.incoming_load[n,f] * model.neighborhood[n,m]
 
 
-class LRMP(RMPAbstractModel):
+class LRMP(RMPCentralized):
   def __init__(self):
     super().__init__()
     self.name = "LRMP"

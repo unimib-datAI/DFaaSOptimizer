@@ -1,4 +1,4 @@
-from model import BaseLoadManagementModel, PYO_VAR_TYPE
+from models.model import BaseLoadManagementModel, PYO_VAR_TYPE
 
 import pyomo.environ as pyo
 
