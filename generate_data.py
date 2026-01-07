@@ -210,32 +210,61 @@ def generate_weights(
     alpha = [
       generate_random_float(rng, limits["weights"]["alpha"]) for _ in range(Nf)
     ]
-    b = [
-      alpha[f] * generate_random_float(
-        rng, limits["weights"]["beta_multiplier"]
-      ) for f in range(Nf)
-    ]
-    g = [
-      generate_random_float(
-        rng, limits["weights"]["gamma"]
-      ) for _ in range(Nf)
-    ]
-    d = [
-      b[f] * generate_random_float(
-        rng, limits["weights"]["delta_multiplier"]
-      ) for f in range(Nf)
-    ]
     beta = np.zeros((Nn,Nn,Nf))
     gamma = np.zeros((Nn,Nf))
     delta = np.zeros((Nn,Nf))
-    for n1 in range(Nn - 1):
-      gamma[n1,:] = g
-      delta[n1,:] = d
-      for n2 in range(n1, Nn):
-        beta[n1,n2,:] = b
-        beta[n2,n1,:] = b
-    gamma[Nn-1,:] = g
-    delta[Nn-1,:] = d
+    if limits["weights"].get("type", "homogeneous") == "homogeneous":
+      b = [
+        alpha[f] * generate_random_float(
+          rng, limits["weights"]["beta_multiplier"]
+        ) for f in range(Nf)
+      ]
+      g = [
+        generate_random_float(
+          rng, limits["weights"]["gamma"]
+        ) for _ in range(Nf)
+      ]
+      d = [
+        b[f] * generate_random_float(
+          rng, limits["weights"]["delta_multiplier"]
+        ) for f in range(Nf)
+      ]
+      for n1 in range(Nn - 1):
+        gamma[n1,:] = g
+        delta[n1,:] = d
+        for n2 in range(n1, Nn):
+          beta[n1,n2,:] = b
+          beta[n2,n1,:] = b
+      gamma[Nn-1,:] = g
+      delta[Nn-1,:] = d
+    else:
+      for n1 in range(Nn - 1):
+        g = [
+          generate_random_float(
+            rng, limits["weights"]["gamma"]
+          ) for _ in range(Nf)
+        ]
+        gamma[n1,:] = g
+        for n2 in range(n1, Nn):
+          b = [
+            alpha[f] * generate_random_float(
+              rng, limits["weights"]["beta_multiplier"]
+            ) for f in range(Nf)
+          ]
+          beta[n1,n2,:] = b
+          beta[n2,n1,:] = b
+        d = [
+          beta[n1,:,f].mean() * generate_random_float(
+            rng, limits["weights"]["delta_multiplier"]
+          ) for f in range(Nf)
+        ]
+        delta[n1,:] = d
+      gamma[Nn-1,:] = g
+      delta[Nn-1,:] = [
+        beta[Nn-1,:,f].mean() * generate_random_float(
+          rng, limits["weights"]["delta_multiplier"]
+        ) for f in range(Nf)
+      ]
   else:
     # -- local execution
     alpha = [
