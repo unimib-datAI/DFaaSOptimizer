@@ -14,8 +14,8 @@ from utilities import load_configuration
 from generate_data import update_data
 from postprocessing import load_solution, plot_history
 
-from rmp import RMPAbstractModel, LRMP
-from sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, LSPr_fixedr
+from models.rmp import RMPAbstractModel, LRMP
+from models.sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, LSPr_fixedr
 from heuristic_coordinator import GreedyCoordinator
 
 import multiprocessing as mpp

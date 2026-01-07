@@ -16,7 +16,7 @@ from run_faasmacro import (
   solve_subproblem
 )
 from utilities import load_configuration
-from sp import LSP, LSPr
+from models.sp import LSP, LSPr
 
 from networkx import adjacency_matrix
 from datetime import datetime

@@ -2,8 +2,12 @@ from utilities import delete_tuples, NpEncoder, load_configuration
 from utilities import float_to_int, load_requests_traces
 from generate_data import generate_data, update_data
 from load_generator import LoadGenerator
-from model import BaseLoadManagementModel, LoadManagementModel, PYO_VAR_TYPE
 from postprocessing import plot_history
+from models.model import (
+  BaseLoadManagementModel, 
+  LoadManagementModel, 
+  PYO_VAR_TYPE
+)
 
 from networkx import draw_networkx, kamada_kawai_layout, Graph
 from matplotlib import colors as mcolors
