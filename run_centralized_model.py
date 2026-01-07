@@ -208,6 +208,8 @@ def extract_solution(
     y = np.array(
       list(data[None]["y_bar"].values()), dtype = VAR_TYPE
     ).reshape((Nn, -1, Nf))
+  elif "d" in solution:
+    y = np.array(solution["d"], dtype = VAR_TYPE).reshape((Nn, -1, Nf))
   # -- rejections
   if "z" in solution:
     z = np.array(solution["z"], dtype = VAR_TYPE).reshape((Nn, Nf))
@@ -243,7 +245,7 @@ def extract_solution(
   if "omega" in solution:
     omega = np.array(solution["omega"], dtype = VAR_TYPE).reshape((Nn, -1))
   else:
-    if "y" in solution:
+    if "y" in solution or "d" in solution:
       for n in range(Nn):
         for f in range(Nf):
           omega[n,f] = y[n,:,f].sum()

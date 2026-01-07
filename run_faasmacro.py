@@ -275,7 +275,7 @@ def compute_social_welfare(
     spr_data, agents_sol
   )
   return (
-    list(spr_sol[:-3]), # x, omega, r, rho
+    list(spr_sol[:-3]), # x, y, omega, r, rho
     spr_sol[-3]["tot"], # obj
     spr_sol[-2]["tot"], # termination condition
     spr_sol[-1]["tot"]  # runtime
@@ -374,10 +374,14 @@ def init_parallel_worker(
 
 def merge_agents_solutions(
     data: dict, agents_sol: dict, approx_tol: float = 1e-6
-  ) -> Tuple[np.array, np.array, np.array, np.array, dict, dict]:
+  ) -> Tuple[
+    np.array, np.array, np.array, np.array, np.array, np.array, dict, dict
+  ]:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
   x = np.zeros((Nn,Nf))
+  y = np.zeros((Nn,Nn,Nf))
+  z = np.zeros((Nn,Nf))
   omega = np.zeros((Nn,Nf))
   r = np.zeros((Nn,Nf))
   rho = np.zeros((Nn,))
@@ -396,11 +400,15 @@ def merge_agents_solutions(
   for agent, agent_solution in agents_sol.items():
     temp_data["indices"] = [agent]
     # -- variables
-    a_x, _, _, a_r, _, a_omega, a_rho, a_obj = extract_solution(
+    a_x, a_y, a_z, a_r, _, a_omega, a_rho, a_obj = extract_solution(
       temp_data, agent_solution, approx_tol = approx_tol
     )
     if a_x is not None:
       x[agent,:] = a_x
+    if a_y is not None:
+      y[agent,:,:] = a_y
+    if a_z is not None:
+      z[agent,:] = a_z
     if a_r is not None:
       r[agent,:] = a_r
     if a_omega is not None:
@@ -419,23 +427,24 @@ def merge_agents_solutions(
   obj_dict["tot"] = sum(list(obj_dict.values()))
   tc_dict["tot"] = "-".join(tc_dict.values())
   runtime_dict["tot"] = sum(list(runtime_dict.values())) / len(agents_sol)
-  return x, omega, r, rho, obj_dict, tc_dict, runtime_dict
+  return x, y, z, omega, r, rho, obj_dict, tc_dict, runtime_dict
 
 
-def solve_master_problem(
-    base_instance_data: dict, 
-    rmp1: RMPAbstractModel, 
-    solver_name: str, 
-    solver_options: dict, 
-    sp_solution: Tuple
-  ):
+def prepare_master_data(base_instance_data: dict, sp_solution: Tuple) -> dict:
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
-  # prepare data
-  sp_x, sp_omega, sp_r, sp_rho = sp_solution
+  sp_x, sp_y, sp_z, sp_omega, sp_r, _ = sp_solution
   rmp_data = deepcopy(base_instance_data)
   rmp_data[None]["x_bar"] = {
     (n+1,f+1): max(sp_x[n,f], 0) for n in range(Nn) for f in range(Nf)
+  }
+  rmp_data[None]["d_bar"] = {
+    (n1+1,n2+1,f+1): max(sp_y[n1,n2,f], 0) for n1 in range(Nn) \
+                                            for n2 in range(Nn) \
+                                              for f in range(Nf)
+  }
+  rmp_data[None]["z_bar"] = {
+    (n+1,f+1): max(sp_z[n,f], 0) for n in range(Nn) for f in range(Nf)
   }
   rmp_data[None]["r_bar"] = {
     (n+1,f+1): max(sp_r[n,f], 0) for n in range(Nn) for f in range(Nf)
@@ -445,6 +454,18 @@ def solve_master_problem(
       for n in range(Nn) \
         for f in range(Nf)
   }
+  return rmp_data
+
+
+def solve_master_problem(
+    base_instance_data: dict, 
+    rmp1: RMPAbstractModel, 
+    solver_name: str, 
+    solver_options: dict, 
+    sp_solution: Tuple
+  ):
+  # prepare data
+  rmp_data = prepare_master_data(base_instance_data, sp_solution)
   # solve
   rmp_solution = {}
   if "sorting_rule" not in solver_options:
@@ -453,7 +474,7 @@ def solve_master_problem(
   else:
     reduced_solver_options = deepcopy(solver_options)
     GC = GreedyCoordinator()
-    rmp_instance = {**rmp_data, "sp_rho": sp_rho}
+    rmp_instance = {**rmp_data, "sp_rho": sp_solution[-1]}
     rmp_solution = GC.solve(rmp_instance, reduced_solver_options)
     _ = reduced_solver_options.pop("sorting_rule")
     # check if the greedy solution should be provided as starting point to the 
@@ -475,7 +496,17 @@ def solve_master_problem(
   )
   rmp_U = compute_utilization(rmp_data, rmp_solution)
   return (
-    rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_omega, rmp_rho, rmp_U, obj, tc, runtime
+    rmp_x, 
+    rmp_y, 
+    rmp_z, 
+    rmp_r, 
+    rmp_xi, 
+    rmp_omega, 
+    rmp_rho, 
+    rmp_U, 
+    obj, 
+    tc, 
+    runtime
   )
 
 
@@ -531,17 +562,29 @@ def solve_subproblem(
         sp_instance, solver_options, solver_name
       )
   # merge solutions
-  sp_x, sp_omega, sp_r, sp_rho, obj, tc, runtime = merge_agents_solutions(
+  (
+    sp_x, 
+    sp_y, 
+    sp_z, 
+    sp_omega, 
+    sp_r, 
+    sp_rho, 
+    obj, 
+    tc, 
+    runtime
+  ) = merge_agents_solutions(
     sp_data, agents_sol, approx_tol=solver_options.get("FeasibilityTol", 1e-6)
   )
   sp_solution = {
     "x": sp_x, 
-    "y": np.zeros((Nn,Nn,Nf)), 
+    "y": sp_y, 
     "r": sp_r, 
     "obj": obj["tot"]
   }
   sp_U = compute_utilization(sp_data, sp_solution)
-  return sp_data, sp_x, sp_omega, sp_r, sp_rho, sp_U, obj, tc, runtime
+  return (
+    sp_data, sp_x, sp_y, sp_z, sp_omega, sp_r, sp_rho, sp_U, obj, tc, runtime
+  )
 
 
 def update_neighborhood(
@@ -735,7 +778,17 @@ def run(
       s = datetime.now()
       # solve sub-problem
       (
-        sp_data, sp_x, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
+        sp_data, 
+        sp_x, 
+        sp_y, 
+        sp_z, 
+        sp_omega, 
+        sp_r, 
+        sp_rho, 
+        sp_U, 
+        obj, 
+        tc, 
+        sp_runtime
       ) = solve_subproblem(
         sp_data, 
         agents, 
@@ -780,7 +833,7 @@ def run(
         rmp, 
         solver_name, 
         coordinator_options, 
-        (sp_x, sp_omega, sp_r, sp_rho)
+        (sp_x, sp_y, sp_z, sp_omega, sp_r, sp_rho)
       )
       obj_dict["LRMP"][it].append(obj)
       tc_dict["LRMP"][it].append(tc)
