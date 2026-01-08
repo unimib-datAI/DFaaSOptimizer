@@ -416,12 +416,15 @@ def run(
         total_runtime += (e - s).total_seconds()
         # update effective load, number of replicas and fairness matrix
         y = np.zeros((Nn,Nn,Nf))
+        z = sp_z
         rmp_omega = np.zeros((Nn,Nf))
         for n1 in range(Nn):
           for n2 in range(Nn):
             for f in range(Nf):
               y[n1,n2,f] = rmp_xi[n2,n1,f]
               rmp_omega[n1,f] += y[n1,n2,f]
+              if y[n1,n2,f] < sp_y[n1,n2,f]:
+                z[n1,f] += (sp_y[n1,n2,f] - y[n1,n2,f])
             if rmp_omega[n,f] > 0:
               fairness[n,f] += 1
         r = sp_r + rmp_r
@@ -449,7 +452,7 @@ def run(
         "sp": {
           "x":    sp_x,
           "y":    y,
-          "z":    sp_z,
+          "z":    z,
           "r":    r,
           "xi":   rmp_xi,
           "rho":  sp_rho,
@@ -458,7 +461,7 @@ def run(
         "rmp": {
           "x":    sp_x,
           "y":    y,
-          "z":    sp_z,
+          "z":    z,
           "r":    r,
           "xi":   rmp_xi,
           "rho":  rmp_rho,
