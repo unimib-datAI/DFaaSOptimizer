@@ -67,6 +67,8 @@ def check_stopping_criteria(
     it: int,
     max_iterations: int,
     blackboard: np.array,
+    sp_omega: np.array,
+    rmp_omega: np.array,
     sp_y: np.array,
     tolerance: float,
     total_runtime: float,
@@ -80,6 +82,9 @@ def check_stopping_criteria(
   elif (blackboard <= tolerance).all():
     stop = True
     why_stopping = "no capacity left"
+  elif (abs(sp_omega - rmp_omega) <= tolerance).all():
+    stop = True
+    why_stopping = "local solution is feasible"
   elif (sp_y <= tolerance).all():
     stop = True
     why_stopping = "all load assigned"
@@ -333,7 +338,7 @@ def run(
       e = datetime.now()
       if verbose > 1:
         print(
-          f"    sp: DONE ",
+          f"        sp: DONE ",
           f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})", 
           file = log_stream, 
           flush = True
@@ -376,6 +381,11 @@ def run(
           print(delta, file = log_stream, flush = True)
       total_runtime += (e - s).total_seconds()
       # sellers accept/reject bids
+      y = np.zeros((Nn,Nn,Nf))
+      z = deepcopy(sp_z)
+      rmp_omega = np.zeros((Nn,Nf))
+      r = deepcopy(sp_r)
+      rmp_xi = np.zeros((Nn,Nn,Nf))
       if (sp_y > 0).any():
         rmp_data = prepare_master_data(
           data, (sp_x, sp_y, sp_z, sp_omega, sp_r, sp_rho)
@@ -415,9 +425,6 @@ def run(
           )
         total_runtime += (e - s).total_seconds()
         # update effective load, number of replicas and fairness matrix
-        y = np.zeros((Nn,Nn,Nf))
-        z = sp_z
-        rmp_omega = np.zeros((Nn,Nf))
         for n1 in range(Nn):
           for n2 in range(Nn):
             for f in range(Nf):
@@ -427,7 +434,7 @@ def run(
                 z[n1,f] += (sp_y[n1,n2,f] - y[n1,n2,f])
             if rmp_omega[n,f] > 0:
               fairness[n,f] += 1
-        r = sp_r + rmp_r
+        r += rmp_r
         # -- check utilization
         u = compute_utilization(
           sp_data, 
@@ -469,7 +476,7 @@ def run(
         }
       }
       cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
       )
       # update best solution so far
       if cobj > best_centralized_cost:
@@ -488,6 +495,8 @@ def run(
         it,
         max_iterations,
         blackboard,
+        sp_omega,
+        rmp_omega,
         sp_y,
         tolerance,
         total_runtime,
