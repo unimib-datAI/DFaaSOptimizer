@@ -293,9 +293,14 @@ def generate_weights(
           data_size[f] / cloud_bandwidth
         )
         for n2 in range(n1 + 1, Nn):
-          beta[n1,n2,f] = alpha[f] + graph.edges[n1,n2]["network_latency"] + (
-            data_size[f] / graph.edges[n1,n2]["edge_bandwidth"]
-          )
+          # -- if the edge exists, compute the price based on network latency
+          if graph.has_edge(n1,n2):
+            beta[n1,n2,f] = alpha[f] + graph.edges[n1,n2]["network_latency"] + (
+              data_size[f] / graph.edges[n1,n2]["edge_bandwidth"]
+            )
+          else:
+            # -- otherwise, assign -1
+            beta[n1,n2,f] = -1
           beta[n2,n1,f] = beta[n1,n2,f]
           max_price = max(max_price, beta[n2,n1,f])
     gamma[Nn - 1,f] = generate_random_float(
@@ -311,9 +316,12 @@ def generate_weights(
       for f in range(Nf):
         gamma[n1,f] = (gamma[n1,f] - min_g) / (max_g - min_g)
         for n2 in range(n1 + 1, Nn):
-          beta[n1,n2,f] = 1 - (
-            (beta[n1,n2,f] - min_price) / (max_price - min_price)
-          )
+          if beta[n1,n2,f] > 0:
+            beta[n1,n2,f] = 1 - (
+              (beta[n1,n2,f] - min_price) / (max_price - min_price)
+            )
+          else:
+            beta[n1,n2,f] = 0
           beta[n2,n1,f] = beta[n1,n2,f]
     gamma[Nn - 1,f] = (gamma[Nn - 1,f] - min_g) / (max_g - min_g)
     delta = beta.mean(axis = 1)
