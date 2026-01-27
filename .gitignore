@@ -1,5 +1,5 @@
-# Configuration file
-config.json
+# Configuration files
+config_files/*
 
 # Data and solution files
 solutions/*

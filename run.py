@@ -33,7 +33,7 @@ def parse_arguments() -> argparse.Namespace:
     "-c", "--config",
     help = "Configuration file",
     type = str,
-    default = "config.json"
+    default = "config_files/config.json"
   )
   parser.add_argument(
     "--n_experiments",

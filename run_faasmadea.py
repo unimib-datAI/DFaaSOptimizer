@@ -44,7 +44,7 @@ def parse_arguments() -> argparse.Namespace:
     "-c", "--config",
     help = "Configuration file",
     type = str,
-    default = "manual_config.json"
+    default = "config_files/manual_config.json"
   )
   parser.add_argument(
     "-j", "--parallelism",
