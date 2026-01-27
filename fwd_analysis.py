@@ -1,9 +1,12 @@
 from run_centralized_model import encode_solution
+from utilities import load_requests_traces
 from postprocessing import load_solution
+from load_generator import LoadGenerator
 
 import matplotlib.pyplot as plt
 from typing import Tuple
 import pandas as pd
+import numpy as np
 import json
 import os
 
@@ -95,10 +98,35 @@ def filter_traces(
   return only_local, with_offloading, with_reject
 
 
+def plot_filtered_traces(
+    solution_folder, only_local, with_offloading, with_reject
+  ):
+  traces, mt, Mt, ts  = load_requests_traces(solution_folder)
+  for f, f_traces in traces.items():
+    # f_traces_array = {
+    #   a: np.array(tr)[with_offloading] for a, tr in f_traces.items()
+    # }
+    f_traces_array = {
+      a: np.empty_like(np.array(tr)) for a, tr in f_traces.items()
+    }
+    for a in f_traces_array:
+      v = np.array(f_traces[a])
+      last_valid = np.maximum.accumulate(
+        np.where(
+          np.isin(np.arange(len(v)), with_offloading),
+          np.arange(len(v)),
+          -1
+        )
+      )
+      f_traces_array[a] = v[last_valid]
+    LoadGenerator.plot_input_load(
+      f_traces_array, 
+      plot_filename = os.path.join(solution_folder, "load", f"f{f}_fwd.png")
+    )
+
+
 if __name__ == "__main__":
-  # solution_folder = "solutions/ping_pong/yes/2025-09-11_12-05-46.869888"
-  # solution_folder = "solutions/ping_pong/no/2025-09-12_09-12-30.151586"
-  solution_folder = "solutions/2024_RussoRusso/2025-09-22_16-19-27.715510"
+  solution_folder = "solutions/for_dfaas_instances/2026-01-27_12-07-13.163152"
   model_name = "LoadManagementModel"
   all_local, all_sentrecv, all_rej = count_requests(
     solution_folder, model_name
@@ -117,6 +145,9 @@ if __name__ == "__main__":
         indent = 2
       )
     )
+  plot_filtered_traces(
+    solution_folder, only_local, with_offloading, with_reject
+  )
   # plot all
   t = 0
   all_sentrecv[all_sentrecv["t"] == t][["sent","recv"]].plot.bar(logy = True)
