@@ -77,14 +77,46 @@ def count_requests(
   return all_local, all_sentrecv, all_rej
 
 
+def filter_traces(
+    all_sentrecv: pd.DataFrame, all_rej: pd.DataFrame
+  ) -> Tuple[list, list]:
+  only_local = []
+  with_offloading = []
+  with_reject = []
+  sentrecv_sum = all_sentrecv.groupby("t")["sent"].sum()
+  reject_sum = all_rej.groupby("t")["all"].sum()
+  for t, s, r in zip(sentrecv_sum.index, sentrecv_sum, reject_sum):
+    if s <= 0.0 and r <= 0.0:
+      only_local.append(t)
+    elif r > 0.0:
+      with_reject.append(t)
+    else:
+      with_offloading.append(t)
+  return only_local, with_offloading, with_reject
+
+
 if __name__ == "__main__":
   # solution_folder = "solutions/ping_pong/yes/2025-09-11_12-05-46.869888"
   # solution_folder = "solutions/ping_pong/no/2025-09-12_09-12-30.151586"
-  solution_folder = "solutions/manual_greedyprod/2025-09-12_12-30-58.367556"
-  model_name = "LSP"
+  solution_folder = "solutions/2024_RussoRusso/2025-09-22_16-19-27.715510"
+  model_name = "LoadManagementModel"
   all_local, all_sentrecv, all_rej = count_requests(
     solution_folder, model_name
   )
+  only_local,with_offloading,with_reject = filter_traces(all_sentrecv, all_rej)
+  with open(
+      os.path.join(solution_folder, "load", "trace_filtered.json"), "w"
+    ) as ost:
+    ost.write(
+      json.dumps(
+        {
+          "only_local": only_local, 
+          "with_offloading": with_offloading,
+          "with_reject": with_reject
+        }, 
+        indent = 2
+      )
+    )
   # plot all
   t = 0
   all_sentrecv[all_sentrecv["t"] == t][["sent","recv"]].plot.bar(logy = True)
