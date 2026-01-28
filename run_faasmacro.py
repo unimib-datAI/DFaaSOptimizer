@@ -275,7 +275,7 @@ def compute_social_welfare(
     spr_data, agents_sol
   )
   return (
-    list(spr_sol[:-3]), # x, y, omega, r, rho
+    list(spr_sol[:-3]), # x, y, z, omega, r, rho
     spr_sol[-3]["tot"], # obj
     spr_sol[-2]["tot"], # termination condition
     spr_sol[-1]["tot"]  # runtime
@@ -890,14 +890,14 @@ def run(
         parallelism
       )
       total_runtime += spr_runtime
-      # -- rejection cost
-      rej_cost = 0
-      for n in range(Nn):
-        for f in range(Nf):
-          diff = sp_omega[n,f] - rmp_omega[n,f]
-          if diff > 0:
-            rej_cost += diff * sp_data[None]["gamma"][(n+1,f+1)]
-      spr_obj += rej_cost
+      # # -- rejection cost
+      # rej_cost = 0
+      # for n in range(Nn):
+      #   for f in range(Nf):
+      #     diff = sp_omega[n,f] - rmp_omega[n,f]
+      #     if diff > 0:
+      #       rej_cost += diff * sp_data[None]["gamma"][(n+1,f+1)]
+      # spr_obj += rej_cost
       # update social welfare
       social_welfare = min(social_welfare, spr_obj)
       current_sw_queue.append(social_welfare)

@@ -21,11 +21,19 @@ class SPAbstractModel(BaseLoadManagementModel):
     self.model.delta = pyo.Param(
       self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.9
     )
+    self.model.gamma = pyo.Param(
+      self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.1
+    )
     ###########################################################################
     # Problem variables
     ###########################################################################
     # number of enqueued requests
     self.model.x = pyo.Var(
+      self.model.F, 
+      domain = PYO_VAR_TYPE
+    )
+    # number of rejected requests
+    self.model.z = pyo.Var(
       self.model.F, 
       domain = PYO_VAR_TYPE
     )
@@ -80,7 +88,9 @@ class LSP(SPAbstractModel):
   
   @staticmethod
   def no_traffic_loss(model, f):
-    return model.x[f] + model.omega[f] == model.incoming_load[model.whoami,f]
+    return (
+      model.x[f] + model.omega[f] + model.z[f]
+    ) == model.incoming_load[model.whoami,f]
   
   @staticmethod
   def utilization_equilibrium(model, f):
@@ -110,7 +120,8 @@ class LSP(SPAbstractModel):
       sum(
         (
           model.alpha[model.whoami,f] * model.x[f] + 
-          model.delta[model.whoami,f] * model.omega[f]
+          model.delta[model.whoami,f] * model.omega[f] -
+          model.gamma[model.whoami,f] * model.z[f]
         ) / model.incoming_load[model.whoami,f] for f in model.F
       )
     ) + sum(
@@ -159,7 +170,7 @@ class LSPr(SPAbstractModel):
   @staticmethod
   def no_traffic_loss(model, f):
     return (
-      model.x[f] + model.omega_bar[model.whoami,f]
+      model.x[f] + model.omega_bar[model.whoami,f] + model.z[f]
     ) <= model.incoming_load[model.whoami,f]
   
   @staticmethod
@@ -190,7 +201,8 @@ class LSPr(SPAbstractModel):
       sum(
         (
           model.alpha[model.whoami,f] * model.x[f] + 
-          model.delta[model.whoami,f] * model.omega_bar[model.whoami,f]
+          model.delta[model.whoami,f] * model.omega_bar[model.whoami,f] -
+          model.gamma[model.whoami,f] * model.z[f]
         ) / model.incoming_load[model.whoami,f] for f in model.F
       )
     )
