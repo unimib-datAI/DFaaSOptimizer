@@ -22,9 +22,10 @@ class BuyerNodeModel(SPAbstractModel):
       self.model.N, self.model.N, self.model.F, 
       within = pyo.Reals, default = 0.9
     )
-    self.model.gamma = pyo.Param(
+    # residual computing capacity
+    self.model.c = pyo.Param(
       self.model.N, self.model.F, 
-      within = pyo.NonNegativeReals, default = 0.8
+      within = PYO_VAR_TYPE, default = 0.0
     )
     ###########################################################################
     # Problem variables
@@ -32,11 +33,6 @@ class BuyerNodeModel(SPAbstractModel):
     # number of forwarded requests
     self.model.d = pyo.Var(
       self.model.N, self.model.F, 
-      domain = PYO_VAR_TYPE
-    )
-    # number of rejected requests
-    self.model.z = pyo.Var(
-      self.model.F, 
       domain = PYO_VAR_TYPE
     )
     ###########################################################################
@@ -74,7 +70,7 @@ class BuyerNodeModel(SPAbstractModel):
   @staticmethod
   def offload_only_to_neighbors(model, m, f):
     return model.d[m,f] <= (
-      model.incoming_load[model.whoami,f] * model.neighborhood[model.whoami,m]
+      model.c[m,f] * model.neighborhood[model.whoami,m]
     )
   
   @staticmethod

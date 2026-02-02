@@ -299,6 +299,9 @@ def run(
     best_it_so_far = -1
     best_centralized_it = -1
     fairness = np.zeros((Nn,Nf))
+    blackboard = np.array([
+      [loadt[n+1,f+1] for f in range(Nf)] for n in range(Nn)
+    ])
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
@@ -312,6 +315,16 @@ def run(
         (n1+1,n2+1,f+1): utilities[n1,n2,f] for n1 in range(Nn) \
                                               for n2 in range(Nn) \
                                                 for f in range(Nf)
+      }
+      if verbose > 2:
+        print(
+          f"        compute utilities: DONE ({utilities})",
+          file = log_stream, 
+          flush = True
+        )
+      # -- residual computing capacity
+      sp_data[None]["c"] = {
+        (n+1,f+1): blackboard[n,f] for n in range(Nn) for f in range(Nf)
       }
       # -- solve
       s = datetime.now()
@@ -386,6 +399,8 @@ def run(
       rmp_omega = np.zeros((Nn,Nf))
       r = deepcopy(sp_r)
       rmp_xi = np.zeros((Nn,Nn,Nf))
+      u = sp_U
+      rmp_rho = sp_rho
       if (sp_y > 0).any():
         rmp_data = prepare_master_data(
           data, (sp_x, sp_y, sp_z, sp_omega, sp_r, sp_rho)
@@ -613,13 +628,10 @@ def run(
 
 
 if __name__ == "__main__":
-  # args = parse_arguments()
-  # config_file = args.config
-  # parallelism = args.parallelism
-  # disable_plotting = args.disable_plotting
-  config_file = "config.json"
-  parallelism = 0
-  disable_plotting = False
+  args = parse_arguments()
+  config_file = args.config
+  parallelism = args.parallelism
+  disable_plotting = args.disable_plotting
   # load configuration file
   config = load_configuration(config_file)
   # run
