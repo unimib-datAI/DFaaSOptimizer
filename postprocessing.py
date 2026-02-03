@@ -168,7 +168,9 @@ def load_models_results(
 
 def load_solution(
     solution_folder: str, model_name: str
-  ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+  ) -> Tuple[
+    pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame
+  ]:
   solution = pd.read_csv(
     os.path.join(solution_folder, f"{model_name}_solution.csv")
   )
