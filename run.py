@@ -2,7 +2,7 @@ from logs_postprocessing import parse_log_file, get_faasmacro_runtime
 from run_centralized_model import load_configuration
 from run_centralized_model import run as run_centralized
 from run_faasmacro import run as run_iterations
-from decentralized_auction import run as run_auction
+from run_faasmadea import run as run_auction
 from postprocessing import load_models_results
 from utilities import reconcile_paths
 
@@ -26,7 +26,7 @@ def parse_arguments() -> argparse.Namespace:
   Parse input arguments
   """
   parser: argparse.ArgumentParser = argparse.ArgumentParser(
-    description = "Run LMM, FaaS-MACrO and/or FaaS-MADeA on multiple experiments", 
+    description="Run LMM, FaaS-MACrO and/or FaaS-MADeA on multiple experiments", 
     formatter_class = argparse.ArgumentDefaultsHelpFormatter
   )
   parser.add_argument(
@@ -47,6 +47,7 @@ def parse_arguments() -> argparse.Namespace:
     nargs = "+",
     choices = [
       "centralized", 
+      "faas-macro-v0", 
       "faas-macro", 
       "faas-madea", 
       "generate_only"
@@ -67,8 +68,8 @@ def parse_arguments() -> argparse.Namespace:
   )
   parser.add_argument(
     "--fix_r",
-    help = "True to fix the number of replicas in FaaS-MACrO according to "
-          "the optimal centralized solution",
+    help = "True to fix the number of replicas in FaaS-MACrO and/or "
+           "FaaS-MADeA according to the optimal centralized solution",
     default = False,
     action = "store_true"
   )
@@ -249,9 +250,13 @@ def results_postprocessing(
         )
         # -- load results
         # ---- local_count, fwd_count, rej_count, replicas, ping_pong
-        mkey = "LoadManagementModel" if method == "centralized" else "LSP"
+        mkey = "LoadManagementModel" if method == "centralized" else (
+          "LSP" if method.startswith("faas-macro") else "LSPc"
+        )
         mname = "LoadManagementModel" if method == "centralized" else (
-          "FaaS-MACrO" if method == "faas-macro" else "FaaS-MADeA"
+          "FaaS-MACrO" if method == "faas-macro" else (
+            "FaaS-MACrO(v0)" if method == "faas-macro-v0" else "FaaS-MADeA"
+          )
         )
         results.append(load_models_results(abs_folders[-1], [mkey], [mname]))
         # -- check ping-pong problems
@@ -291,8 +296,11 @@ def results_postprocessing(
       all_rej = all_rej / all_req * 100
       # objective function value
       obj = load_obj_value(abs_folders[0])
-      for af in abs_folders[1:]:
-        obj = obj.join(load_obj_value(af))
+      obj.columns = [found_methods[0]]
+      for af, mname in zip(abs_folders[1:], found_methods[1:]):
+        temp = load_obj_value(af)
+        temp.columns = [mname]
+        obj = obj.join(temp)
       # plot
       _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
       obj.plot(marker = ".", grid = True, ax = axs[0])
@@ -822,6 +830,7 @@ def run(
     "experiments_list": [], 
     "centralized": [], 
     "faas-macro": [], 
+    "faas-macro-v0": [], 
     "faas-madea": []
   }
   if os.path.exists(os.path.join(base_solution_folder, "experiments.json")):
@@ -839,6 +848,7 @@ def run(
     # check if the experiment is still to run
     run_c = False # -- centralized
     run_i = False # -- faasmacro
+    run_i_v0 = False # -- faasmacro (v0)
     run_a = False # -- faasmadea
     experiment_idx = None
     try:
@@ -857,6 +867,12 @@ def run(
           solution_folders["faas-macro"][experiment_idx] is None
         )):
         run_i = True
+      if (not generate_only and "faas-macro-v0" in methods) and ((
+          len(solution_folders["faas-macro-v0"]) <= experiment_idx
+        ) or (
+          solution_folders["faas-macro-v0"][experiment_idx] is None
+        )):
+        run_i_v0 = True
       if (not generate_only and "faas-madea" in methods) and ((
           len(solution_folders["faas-madea"]) <= experiment_idx
         ) or (
@@ -866,9 +882,10 @@ def run(
     except ValueError:
       run_c = "centralized" in methods
       run_i = "faas-macro" in methods
+      run_i_v0 = "faas-macro-v0" in methods
       run_a = "faas-madea" in methods
     # if the experiment is still to run...
-    if run_c or run_i or run_a or generate_only:
+    if run_c or run_i or run_i_v0 or run_a or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       config["limits"][loop_over].pop("values", None)
@@ -888,6 +905,10 @@ def run(
             ]
           elif "faas-macro" in old_instance_paths:
             old_exp_path = old_instance_paths["faas-macro"][
+              old_exp_idx
+            ]
+          elif "faas-macro-v0" in old_instance_paths:
+            old_exp_path = old_instance_paths["faas-macro-v0"][
               old_exp_idx
             ]
           elif "faas-madea" in old_instance_paths:
@@ -912,9 +933,19 @@ def run(
       else:
         if experiment_idx is not None:
           c_folder = solution_folders["centralized"][experiment_idx]
-      # -- solve iterative model
+      # -- solve iterative model (v0)
       if fix_r:
         config["opt_solution_folder"] = c_folder
+      if run_i_v0:
+        i_folder_v0 = run_iterations(
+          config, 
+          sp_parallelism,
+          log_on_file = log_on_file, 
+          disable_plotting = disable_plotting,
+          v0 = True
+        )
+        solution_folders["faas-macro-v0"].append(i_folder_v0)
+      # -- solve iterative model
       if run_i:
         i_folder = run_iterations(
           config, 
