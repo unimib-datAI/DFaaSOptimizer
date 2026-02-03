@@ -420,7 +420,9 @@ def run(
         for m in np.nonzero(sp_y[n,:,f])[0]:
           idx = np.where(incr_util==m)[0][0]
           if idx > 0:
-            delta[n,m,f] = utilities[n,m,f] - utilities[n,idx-1,f]
+            delta[n,m,f] = utilities[n,m,f] - utilities[
+              n,incr_util[idx-1],f
+            ]
           delta[n,m,f] += auction_options["epsilon"]
       e = datetime.now()
       if verbose > 1:
