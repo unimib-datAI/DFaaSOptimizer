@@ -334,6 +334,10 @@ def find_best_iterations(
     ) as istream:
     data = json.load(istream)
     Nn = int(data["None"]["Nn"]["None"])
+  # check the method to consider
+  method_name = "faas-macro" if os.path.exists(
+      os.path.join(experiment_folder, "LSP_solution.csv")
+    ) else "faas-madea"
   # parse logs file
   exp = os.path.basename(experiment_folder)
   logs_df, best_sol_df = parse_log_file(
@@ -341,7 +345,8 @@ def find_best_iterations(
     exp,
     pd.DataFrame(),
     {"social_welfare": pd.DataFrame(), "centralized": pd.DataFrame()},
-    Nn
+    Nn,
+    method_name = method_name
   )
   best_sol_df["social_welfare"] = add_time(
     best_sol_df["social_welfare"], logs_df
@@ -360,49 +365,53 @@ def find_best_iterations(
   # plot
   _, axs = plt.subplots(nrows = 2, ncols = 1, figsize=(20,12), sharex = True)
   last_it = [0]
-  for t, data in best_sol_df["social_welfare"].groupby("time"):
-    data["x"] = data["best_solution_it"] + last_it[-1]
-    data.plot(
-      x = "x",
-      y = "obj",
-      ax = axs[0],
-      grid = True,
-      marker = ".",
-      markersize = 10,
-      linewidth = 2,
-      # label = f"t = {t}"
-      label = None,
-      legend = False
-    )
-    axs[0].axvline(
-      x = last_it[-1],
-      linestyle = "dotted",
-      linewidth = 1,
-      color = "k"
-    )
-    last_it.append(last_it[-1] + data["best_solution_it"].max())
+  if len(best_sol_df["social_welfare"]) > 0:
+    for t, data in best_sol_df["social_welfare"].groupby("time"):
+      data["x"] = data["best_solution_it"] + last_it[-1]
+      data.plot(
+        x = "x",
+        y = "obj",
+        ax = axs[0],
+        grid = True,
+        marker = ".",
+        markersize = 10,
+        linewidth = 2,
+        # label = f"t = {t}"
+        label = None,
+        legend = False
+      )
+      axs[0].axvline(
+        x = last_it[-1],
+        linestyle = "dotted",
+        linewidth = 1,
+        color = "k"
+      )
+      last_it.append(last_it[-1] + data["best_solution_it"].max())
   idx = 0
-  for t, data in best_sol_df["centralized"].groupby("time"):
-    data["x"] = data["best_solution_it"] + last_it[idx]
-    data.plot(
-      x = "x",
-      y = "obj",
-      ax = axs[1],
-      grid = True,
-      marker = ".",
-      markersize = 10,
-      linewidth = 2,
-      # label = f"t = {t}"
-      label = None,
-      legend = False
-    )
-    axs[1].axvline(
-      x = last_it[idx],
-      linestyle = "dotted",
-      linewidth = 1,
-      color = "k"
-    )
-    idx += 1
+  if len(best_sol_df["centralized"]) > 0:
+    for t, data in best_sol_df["centralized"].groupby("time"):
+      data["x"] = data["best_solution_it"] + last_it[idx]
+      data.plot(
+        x = "x",
+        y = "obj",
+        ax = axs[1],
+        grid = True,
+        marker = ".",
+        markersize = 10,
+        linewidth = 2,
+        # label = f"t = {t}"
+        label = None,
+        legend = False
+      )
+      axs[1].axvline(
+        x = last_it[idx],
+        linestyle = "dotted",
+        linewidth = 1,
+        color = "k"
+      )
+      if len(best_sol_df["social_welfare"]) == 0:
+        last_it.append(last_it[-1] + data["best_solution_it"].max())
+      idx += 1
   plt.savefig(
     os.path.join(output_folder, "best_solution_obj.png"),
     dpi = 300,
@@ -423,7 +432,10 @@ def main(base_folder: str, milestones: list):
   for foldername in os.listdir(base_folder):
     experiment_folder = os.path.join(base_folder, foldername)
     if os.path.isdir(experiment_folder) and not foldername.startswith("."):
-      if "LSP_solution.csv" in os.listdir(experiment_folder):
+      if (
+          "LSP_solution.csv" in os.listdir(experiment_folder) or 
+            "LSPc_solution.csv" in os.listdir(experiment_folder)
+        ):
         print(foldername)
         sw, cobj = find_best_iterations(experiment_folder)
         by_social_welfare = pd.concat(
