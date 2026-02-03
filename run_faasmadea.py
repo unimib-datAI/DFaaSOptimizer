@@ -1,7 +1,9 @@
+from postprocessing import load_solution
 from run_centralized_model import (
   init_complete_solution,
   join_complete_solution,
   compute_utilization,
+  encode_solution,
   get_current_load, 
   save_checkpoint,
   save_solution,
@@ -18,7 +20,11 @@ from run_faasmacro import (
   solve_subproblem
 )
 from utilities import load_configuration
-from models.auction_models import SellerNodeModel, BuyerNodeModel
+from models.auction_models import (
+  SellerNodeModel, 
+  BuyerNodeModel, 
+  BuyerNodeModel_fixedr
+)
 
 from networkx import adjacency_matrix
 from datetime import datetime
@@ -261,6 +267,12 @@ def run(
   )
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
+  # load globally-optimal solution (if provided)
+  opt_solution, opt_replicas, opt_detailed_fwd = None, None, None
+  if "opt_solution_folder" in config:
+    opt_solution, opt_replicas, opt_detailed_fwd, _, _ = load_solution(
+      config["opt_solution_folder"], "LoadManagementModel"
+    )
   # -- save neighborhood matrix
   neighborhood = data_dict_to_matrix(
     base_instance_data[None]["neighborhood"], Nn
@@ -268,7 +280,7 @@ def run(
   latency = adjacency_matrix(graph, weight = "network_latency")
   # define models
   seller = SellerNodeModel()
-  buyer = BuyerNodeModel()
+  buyer = BuyerNodeModel() if opt_solution is None else BuyerNodeModel_fixedr()
   # loop over time
   ub = (
     max_run_time + run_time_step
@@ -307,6 +319,33 @@ def run(
         print(f"    it = {it}", file = log_stream, flush = True)
       # local planning
       sp_data = deepcopy(data)
+      # -- extract optimal solution (if provided)
+      if opt_solution is not None:
+        opt_x, _, _, _, _ = encode_solution(
+          Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
+        )
+        opt_r_for_x = np.zeros((Nn,Nf))
+        sp_data[None]["r_bar"] = {}
+        for n in range(Nn):
+          for f in range(Nf):
+            opt_r_for_x[n,f] = sp_data[None][
+              "demand"
+            ][(n+1,f+1)] * opt_x[n,f] / sp_data[None]["max_utilization"][f+1]
+            if np.floor(opt_r_for_x[n,f]) > 0 and (
+                (opt_r_for_x[n,f] / np.floor(opt_r_for_x[n,f]) - 1) > 1e-6
+              ):
+              sp_data[None]["r_bar"][(n+1,f+1)] = int(
+                np.ceil(opt_r_for_x[n,f])
+              )
+            else:
+              if int(np.floor(opt_r_for_x[n,f])) == 0 and (
+                  opt_r_for_x[n,f] > 1e-6
+                ):
+                sp_data[None]["r_bar"][(n+1,f+1)] = int(
+                  np.ceil(opt_r_for_x[n,f])
+                )
+              else:
+                sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r_for_x[n,f])
       # -- compute utility
       utilities = compute_utility(
         p, sp_data, auction_options, latency, fairness
@@ -628,10 +667,13 @@ def run(
 
 
 if __name__ == "__main__":
-  args = parse_arguments()
-  config_file = args.config
-  parallelism = args.parallelism
-  disable_plotting = args.disable_plotting
+  # args = parse_arguments()
+  # config_file = args.config
+  # parallelism = args.parallelism
+  # disable_plotting = args.disable_plotting
+  config_file = "config_files/config.json"
+  parallelism = 0
+  disable_plotting = False
   # load configuration file
   config = load_configuration(config_file)
   # run
