@@ -182,7 +182,8 @@ def compute_progressive_deviation(
     obj_df: pd.DataFrame, milestones: list, output_folder: str
   ):
   progressive_dev = pd.DataFrame()
-  for _, vals in obj_df.groupby(["exp", "Nn", "time"]):
+  for _, vals in obj_df.groupby(["method", "exp", "Nn", "time"]):
+    print(vals)
     dev = []
     for idx in range(1, len(vals)):
       dev.append(
@@ -192,7 +193,10 @@ def compute_progressive_deviation(
       )
     dev_df = vals.iloc[1:].copy(deep = True)
     dev_df["dev"] = dev
-    progressive_dev = pd.concat([progressive_dev, dev_df], ignore_index = True)
+    progressive_dev = pd.concat(
+      [progressive_dev, dev_df.reset_index()], 
+      ignore_index = True
+    )
   # match experiment name with description (if available)
   if os.path.exists(os.path.join(output_folder, "../experiments.json")):
     experiments = {}
@@ -206,7 +210,16 @@ def compute_progressive_deviation(
       ):
       exp_description_match[os.path.basename(exp)] = {
         "Nn": int(exp_description_tuple[0]),
-        "seed": int(exp_description_tuple[-1])
+        "seed": int(exp_description_tuple[-1]),
+        "method": "faas-macro"
+      }
+    for exp, exp_description_tuple in zip(
+        experiments["faas-madea"], experiments["experiments_list"]
+      ):
+      exp_description_match[os.path.basename(exp)] = {
+        "Nn": int(exp_description_tuple[0]),
+        "seed": int(exp_description_tuple[-1]),
+        "method": "faas-madea"
       }
     # -- add match info
     progressive_dev["seed"] = [
@@ -419,6 +432,9 @@ def find_best_iterations(
     bbox_inches = "tight"
   )
   plt.close()
+  # add method name
+  best_sol_df["social_welfare"]["method"] = method_name
+  best_sol_df["centralized"]["method"] = method_name
   return best_sol_df["social_welfare"], best_sol_df["centralized"]
 
 
@@ -445,8 +461,12 @@ def main(base_folder: str, milestones: list):
           [by_centralized_objective, cobj], ignore_index = True
         )
   # analyze final result
-  last_by_sw = by_social_welfare.groupby(["exp", "Nn", "time"]).last()
-  last_by_cobj = by_centralized_objective.groupby(["exp", "Nn", "time"]).last()
+  last_by_sw = by_social_welfare.groupby(
+    ["method", "exp", "Nn", "time"]
+  ).last()
+  last_by_cobj = by_centralized_objective.groupby(
+    ["method", "exp", "Nn", "time"]
+  ).last()
   analyze_final_results(last_by_sw, last_by_cobj, output_folder)
   # compute progressive deviation
   compute_progressive_deviation(
