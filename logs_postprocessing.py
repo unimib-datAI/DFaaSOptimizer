@@ -343,6 +343,188 @@ def parse_faasmadea_log_file(
     if lines[row_idx].startswith("t = "):
       t = int(parse.parse("t = {}\n", lines[row_idx])[0])
       t_row_idx = row_idx + 1
+      # loop over iterations
+      df = {
+        "exp": [],
+        "time": [],
+        "iteration": [],
+        "define_bids_runtime": [],
+        "evaluate_bids_runtime": [],
+        "sp_runtime": []
+      }
+      n_iterations = 0
+      while t_row_idx < len(lines) and not (
+          lines[t_row_idx].startswith("t = ") or
+            lines[t_row_idx].startswith("All solutions saved")
+        ):
+        if lines[t_row_idx].startswith("    it = "):
+          n_iterations += 1
+          it = parse.parse("    it = {}\n", lines[t_row_idx])[0]
+          it = int(it)
+          # loop over iteration info
+          it_row_idx = t_row_idx + 1
+          while it_row_idx < len(lines) and not (
+              lines[it_row_idx].startswith("    it = ") or 
+                lines[it_row_idx].startswith("t = ") or
+                  lines[it_row_idx].startswith("    TOTAL RUNTIME")
+            ):
+            # load sp info
+            if "sp" in lines[it_row_idx]:
+              sp_runtime = None
+              if "runtime" in lines[t_row_idx]:
+                _, _, sp_runtime = parse.parse(
+                  "        sp: DONE  ({}; obj = {}; runtime = {})\n", 
+                  lines[t_row_idx]
+                )
+              df["sp_runtime"].append(float(runtime) if sp_runtime else None)
+            elif "define_bids" in lines[it_row_idx]:
+              runtime = None
+              if "runtime" in lines[it_row_idx]:
+                runtime = parse.parse(
+                  "        define_bids: DONE; runtime = {})\n",
+                  lines[it_row_idx]
+                )[0]
+              df["define_bids_runtime"].append(
+                float(runtime) if runtime else None
+              )
+            elif "evaluate_bids" in lines[it_row_idx]:
+              runtime = None
+              if "runtime" in lines[it_row_idx]:
+                runtime = parse.parse(
+                  "        evaluate_bids: DONE; runtime = {})\n",
+                  lines[it_row_idx]
+                )[0]
+              df["evaluate_bids_runtime"].append(
+                float(runtime) if runtime else None
+              )
+            elif (
+                "check_stopping_criteria" in lines[it_row_idx] and 
+                  "wallclock" in lines[it_row_idx]
+              ):
+              _, trt, wct, _, _ = parse.parse(
+                "        check_stopping_criteria: DONE (runtime = {}; total runtime = {}; wallclock: {}) --> stop? {} ({})\n",
+                lines[it_row_idx]
+              )
+              if "measured_total_time" not in df:
+                df["measured_total_time"] = []
+              if "wallclock_time" not in df:
+                df["wallclock_time"] = []
+              df["measured_total_time"].append(float(trt))
+              df["wallclock_time"].append(float(wct))
+              n_iterations -= 1
+            elif "best solution updated" in lines[it_row_idx]:
+              best_solution_df["social_welfare"]["exp"].append(exp)
+              best_solution_df["social_welfare"]["time"].append(t)
+              best_solution_df["social_welfare"]["best_solution_it"].append(it)
+              best_solution_df["social_welfare"]["obj"].append(
+                float(parse.parse(
+                  "        best solution updated; obj = {}\n",
+                  lines[it_row_idx]
+                )[0])
+              )
+              best_solution_df["social_welfare"]["Nn"].append(Nn)
+            elif "best centralized solution updated" in lines[it_row_idx]:
+              best_solution_df["centralized"]["exp"].append(exp)
+              best_solution_df["centralized"]["time"].append(t)
+              best_solution_df["centralized"]["best_solution_it"].append(it)
+              best_solution_df["centralized"]["obj"].append(
+                float(parse.parse(
+                  "        best centralized solution updated; obj = {}\n",
+                  lines[it_row_idx]
+                )[0])
+              )
+              best_solution_df["centralized"]["Nn"].append(Nn)
+            it_row_idx += 1
+          # save iteration info
+          df["iteration"].append(it)
+          df["time"].append(t)
+          df["exp"].append(exp)
+          # move to the next iteration
+          t_row_idx = it_row_idx
+          # if the iterations are finished, save info on total runtime and 
+          # wallclock time
+          if (
+              it_row_idx < len(lines) and 
+                lines[it_row_idx].startswith("    TOTAL RUNTIME")
+            ):
+            trt, wct = parse.parse(
+              "    TOTAL RUNTIME [s] = {} (wallclock: {})\n", lines[it_row_idx]
+            )
+            if "measured_total_time" not in df:
+              df["measured_total_time"] = []
+            if "wallclock_time" not in df:
+              df["wallclock_time"] = []
+            df["measured_total_time"] += [float(trt)] * n_iterations
+            df["wallclock_time"] += [float(wct)] * n_iterations
+            t_row_idx += 1
+            n_iterations = 0
+      # add number of nodes
+      df["Nn"] = [Nn] * len(df["exp"])
+      # correct potential issues in array lengths
+      ndef = len(df["define_bids_runtime"])
+      neval = len(df["evaluate_bids_runtime"])
+      if neval < ndef:
+        df["evaluate_bids_runtime"] += [None] * (ndef - neval)
+      # merge and move to the next time step
+      logs_df = pd.concat(
+        [logs_df, pd.DataFrame(df)], ignore_index = True
+      )
+      row_idx = t_row_idx
+      if (
+          t_row_idx < len(lines) and 
+            lines[t_row_idx].startswith("All solutions saved")
+        ):
+        row_idx += 1
+  best_solution_df["social_welfare"] = pd.concat(
+    [
+      best_sol_df.get("social_welfare", pd.DataFrame()), 
+      pd.DataFrame(best_solution_df["social_welfare"])
+    ],
+    ignore_index = True
+  )
+  best_solution_df["centralized"] = pd.concat(
+    [
+      best_sol_df.get("centralized", pd.DataFrame()), 
+      pd.DataFrame(best_solution_df["centralized"])
+    ],
+    ignore_index = True
+  )
+  return logs_df, best_solution_df
+
+def parse_faasmadea0_log_file(
+    complete_path: str, 
+    exp: str, 
+    logs_df: pd.DataFrame, 
+    best_sol_df: pd.DataFrame, 
+    Nn: int
+  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+  # open log file
+  lines = []
+  with open(os.path.join(complete_path, "out.log"), "r") as istream:
+    lines = istream.readlines()
+  # loop over lines
+  row_idx = 0
+  best_solution_df = {
+    "social_welfare": {
+      "exp": [],
+      "time": [],
+      "best_solution_it": [],
+      "obj": [],
+      "Nn": []
+    },
+    "centralized": {
+      "exp": [],
+      "time": [],
+      "best_solution_it": [],
+      "obj": [],
+      "Nn": []
+    }
+  }
+  while row_idx < len(lines):
+    # look for next time step
+    if lines[row_idx].startswith("t = "):
+      t = int(parse.parse("t = {}\n", lines[row_idx])[0])
+      t_row_idx = row_idx + 1
       # load sp info
       sp_runtime = None
       if "sp" in lines[t_row_idx] and "runtime" in lines[t_row_idx]:
