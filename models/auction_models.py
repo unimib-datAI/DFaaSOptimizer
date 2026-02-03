@@ -22,6 +22,9 @@ class BuyerNodeModel(SPAbstractModel):
       self.model.N, self.model.N, self.model.F, 
       within = pyo.Reals, default = 0.9
     )
+    self.model.gamma = pyo.Param(
+      self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.1
+    )
     # residual computing capacity
     self.model.c = pyo.Param(
       self.model.N, self.model.F, 
@@ -33,6 +36,11 @@ class BuyerNodeModel(SPAbstractModel):
     # number of forwarded requests
     self.model.d = pyo.Var(
       self.model.N, self.model.F, 
+      domain = PYO_VAR_TYPE
+    )
+    # number of rejected requests
+    self.model.z = pyo.Var(
+      self.model.F, 
       domain = PYO_VAR_TYPE
     )
     ###########################################################################
@@ -194,3 +202,31 @@ class SellerNodeModel(RMPAbstractModel):
         model.beta[n,model.whoami,f] * model.d[n,f] for n in model.N
       ) for f in model.F
     )
+
+
+##############################################################################
+# TEMPORARILY FIX r
+##############################################################################
+
+class BuyerNodeModel_fixedr(BuyerNodeModel):
+  def __init__(self):
+    super().__init__()
+    self.name = "BuyerNodeModel_fixedr"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # objective function weights
+    self.model.r_bar = pyo.Param(
+      self.model.N, self.model.F, 
+      within = pyo.NonNegativeIntegers, default = 0
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.fix_r = pyo.Constraint(
+      self.model.F, rule = self.fix_r
+    )
+  
+  @staticmethod
+  def fix_r(model, f):
+    return model.r[f] == model.r_bar[model.whoami,f]

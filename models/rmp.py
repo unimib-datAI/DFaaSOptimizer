@@ -18,7 +18,7 @@ class RMPAbstractModel(BaseLoadManagementModel):
     # objective function weights
     self.model.beta = pyo.Param(
       self.model.N, self.model.N, self.model.F, 
-      within = pyo.NonNegativeReals, default = 0.9
+      within = pyo.Reals, default = 0.9
     )
     # number of enqueued requests
     self.model.x_bar = pyo.Param(

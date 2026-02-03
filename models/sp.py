@@ -21,19 +21,11 @@ class SPAbstractModel(BaseLoadManagementModel):
     self.model.delta = pyo.Param(
       self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.9
     )
-    self.model.gamma = pyo.Param(
-      self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.1
-    )
     ###########################################################################
     # Problem variables
     ###########################################################################
     # number of enqueued requests
     self.model.x = pyo.Var(
-      self.model.F, 
-      domain = PYO_VAR_TYPE
-    )
-    # number of rejected requests
-    self.model.z = pyo.Var(
       self.model.F, 
       domain = PYO_VAR_TYPE
     )
@@ -44,10 +36,10 @@ class SPAbstractModel(BaseLoadManagementModel):
     )
 
 
-class LSP(SPAbstractModel):
+class LSP_v0(SPAbstractModel):
   def __init__(self):
     super().__init__()
-    self.name = "LSP"
+    self.name = "LSP_v0"
     ###########################################################################
     # Problem parameters
     ###########################################################################
@@ -67,8 +59,8 @@ class LSP(SPAbstractModel):
     ###########################################################################
     # Constraints
     ###########################################################################
-    self.model.no_traffic_loss = pyo.Constraint(
-      self.model.F, rule = self.no_traffic_loss
+    self.model.no_traffic_loss_v0 = pyo.Constraint(
+      self.model.F, rule = self.no_traffic_loss_v0
     )
     self.model.utilization_equilibrium = pyo.Constraint(
       self.model.F, rule = self.utilization_equilibrium
@@ -83,13 +75,13 @@ class LSP(SPAbstractModel):
     # Objective function
     ###########################################################################
     self.model.OBJ = pyo.Objective(
-      rule = self.minimize_processing_cost
+      rule = self.minimize_processing_cost_v0
     )
   
   @staticmethod
-  def no_traffic_loss(model, f):
+  def no_traffic_loss_v0(model, f):
     return (
-      model.x[f] + model.omega[f] + model.z[f]
+      model.x[f] + model.omega[f]
     ) == model.incoming_load[model.whoami,f]
   
   @staticmethod
@@ -115,6 +107,57 @@ class LSP(SPAbstractModel):
     ) <= model.memory_capacity[model.whoami]
   
   @staticmethod
+  def minimize_processing_cost_v0(model):
+    return - (
+      sum(
+        (
+          model.alpha[model.whoami,f] * model.x[f] + 
+          model.delta[model.whoami,f] * model.omega[f]
+        ) / model.incoming_load[model.whoami,f] for f in model.F
+      )
+    ) + sum(
+      model.pi[f] * model.omega[f] / model.incoming_load[model.whoami,f] for f in model.F
+    )
+
+class LSP(LSP_v0):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSP"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # objective function weights
+    self.model.gamma = pyo.Param(
+      self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.1
+    )
+    ###########################################################################
+    # Problem variables
+    ###########################################################################
+    # number of rejected requests
+    self.model.z = pyo.Var(
+      self.model.F, 
+      domain = PYO_VAR_TYPE
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.no_traffic_loss = pyo.Constraint(
+      self.model.F, rule = self.no_traffic_loss
+    )
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.model.OBJ = pyo.Objective(
+      rule = self.minimize_processing_cost
+    )
+  
+  @staticmethod
+  def no_traffic_loss(model, f):
+    return (
+      model.x[f] + model.omega[f] + model.z[f]
+    ) == model.incoming_load[model.whoami,f]
+  
+  @staticmethod
   def minimize_processing_cost(model):
     return - (
       sum(
@@ -129,10 +172,10 @@ class LSP(SPAbstractModel):
     )
 
 
-class LSPr(SPAbstractModel):
+class LSPr_v0(SPAbstractModel):
   def __init__(self):
     super().__init__()
-    self.name = "LSPr"
+    self.name = "LSPr_v0"
     ###########################################################################
     # Problem parameters
     ###########################################################################
@@ -148,8 +191,8 @@ class LSPr(SPAbstractModel):
     ###########################################################################
     # Constraints
     ###########################################################################
-    self.model.no_traffic_loss = pyo.Constraint(
-      self.model.F, rule = self.no_traffic_loss
+    self.model.no_traffic_loss_v0 = pyo.Constraint(
+      self.model.F, rule = self.no_traffic_loss_v0
     )
     self.model.utilization_equilibrium = pyo.Constraint(
       self.model.F, rule = self.utilization_equilibrium
@@ -164,13 +207,13 @@ class LSPr(SPAbstractModel):
     # Objective function
     ###########################################################################
     self.model.OBJ = pyo.Objective(
-      rule = self.minimize_processing_cost
+      rule = self.minimize_processing_cost_v0
     )
   
   @staticmethod
-  def no_traffic_loss(model, f):
+  def no_traffic_loss_v0(model, f):
     return (
-      model.x[f] + model.omega_bar[model.whoami,f] + model.z[f]
+      model.x[f] + model.omega_bar[model.whoami,f]
     ) <= model.incoming_load[model.whoami,f]
   
   @staticmethod
@@ -196,6 +239,55 @@ class LSPr(SPAbstractModel):
     ) <= model.memory_capacity[model.whoami]
   
   @staticmethod
+  def minimize_processing_cost_v0(model):
+    return - (
+      sum(
+        (
+          model.alpha[model.whoami,f] * model.x[f] + 
+          model.delta[model.whoami,f] * model.omega_bar[model.whoami,f]
+        ) / model.incoming_load[model.whoami,f] for f in model.F
+      )
+    )
+
+class LSPr(LSPr_v0):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSPr"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # objective function weights
+    self.model.gamma = pyo.Param(
+      self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.1
+    )
+    ###########################################################################
+    # Problem variables
+    ###########################################################################
+    # number of rejected requests
+    self.model.z = pyo.Var(
+      self.model.F, 
+      domain = PYO_VAR_TYPE
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.no_traffic_loss = pyo.Constraint(
+      self.model.F, rule = self.no_traffic_loss
+    )
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.model.OBJ = pyo.Objective(
+      rule = self.minimize_processing_cost
+    )
+  
+  @staticmethod
+  def no_traffic_loss(model, f):
+    return (
+      model.x[f] + model.omega_bar[model.whoami,f] + model.z[f]
+    ) <= model.incoming_load[model.whoami,f]
+  
+  @staticmethod
   def minimize_processing_cost(model):
     return - (
       sum(
@@ -212,6 +304,29 @@ class LSPr(SPAbstractModel):
 # TEMPORARILY FIX r
 ##############################################################################
 
+class LSP_fixedr_v0(LSP_v0):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSP_fixedr_v0"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # number of assigned replicas
+    self.model.r_bar = pyo.Param(
+      self.model.N, self.model.F, 
+      within = pyo.NonNegativeIntegers, default = 0
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.fix_r = pyo.Constraint(
+      self.model.F, rule = self.fix_r
+    )
+  
+  @staticmethod
+  def fix_r(model, f):
+    return model.r[f] == model.r_bar[model.whoami,f]
+
 class LSP_fixedr(LSP):
   def __init__(self):
     super().__init__()
@@ -219,7 +334,7 @@ class LSP_fixedr(LSP):
     ###########################################################################
     # Problem parameters
     ###########################################################################
-    # objective function weights
+    # number of assigned replicas
     self.model.r_bar = pyo.Param(
       self.model.N, self.model.F, 
       within = pyo.NonNegativeIntegers, default = 0
