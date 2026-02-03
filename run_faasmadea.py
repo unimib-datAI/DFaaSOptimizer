@@ -298,7 +298,7 @@ def run(
     data = update_data(base_instance_data, {"incoming_load": loadt})
     # define target operating point and initial prices
     u0 = np.ones((Nn,Nf)) * 0.7
-    p = np.zeros((Nn,Nn,Nf))
+    p = np.ones((Nn,Nn,Nf)) * 0.01
     # loop over iterations
     total_runtime = 0
     ss = datetime.now()
@@ -509,7 +509,11 @@ def run(
         for i in range(Nn):
           for j in range(Nn):
             for f in range(Nf):
-              p[i,j,f] += max(0, auction_options["eta"] * (u[j,f] - u0[j,f]))
+              p[i,j,f] += (
+                delta[i,j,f] + max(
+                  0, auction_options["eta"] * (u[j,f] - u0[j,f])
+                )
+              )
       # merge solutions and compute the centralized objective value
       csol = {
         "sp": {
@@ -582,7 +586,7 @@ def run(
         #   None
         # )
         spc_complete_solution, _, objc = decode_solutions(
-          sp_data, 
+          data, 
           best_centralized_solution, 
           spc_complete_solution, 
           None
@@ -673,7 +677,8 @@ if __name__ == "__main__":
   # config_file = args.config
   # parallelism = args.parallelism
   # disable_plotting = args.disable_plotting
-  config_file = "config_files/config.json"
+  # config_file = "config_files/config.json"
+  config_file = "solutions/newmadea3f/2026-02-03_12-19-00.034689/config.json"
   parallelism = 0
   disable_plotting = False
   # load configuration file
