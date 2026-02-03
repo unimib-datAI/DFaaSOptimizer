@@ -15,7 +15,15 @@ from generate_data import update_data
 from postprocessing import load_solution, plot_history
 
 from models.rmp import RMPAbstractModel, LRMP
-from models.sp import SPAbstractModel, LSP, LSPr, LSP_fixedr, LSPr_fixedr
+from models.sp import (
+  SPAbstractModel, 
+  LSP, 
+  LSPr, 
+  LSP_fixedr, 
+  LSP_v0,
+  LSPr_v0,
+  LSP_fixedr_v0 
+)
 from heuristic_coordinator import GreedyCoordinator
 
 import multiprocessing as mpp
@@ -636,7 +644,8 @@ def run(
     config: dict, 
     parallelism: int,
     log_on_file: bool = False, 
-    disable_plotting: bool = False
+    disable_plotting: bool = False,
+    v0: bool = False
   ):
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
@@ -717,8 +726,12 @@ def run(
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
     # loop over SP/RMP
-    sp = LSP() if opt_solution is None else LSP_fixedr()
-    spr = LSPr()# if opt_solution is None else LSPr_fixedr()
+    sp = None
+    if v0:
+      sp = LSP_v0() if opt_solution is None else LSP_fixedr_v0()
+    else:
+      sp = LSP() if opt_solution is None else LSP_fixedr()
+    spr = LSPr_v0() if v0 else LSPr()
     rmp = LRMP()
     sp_data = deepcopy(data)
     rmp_data = deepcopy(data)
