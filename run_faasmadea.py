@@ -475,11 +475,11 @@ def run(
         e = datetime.now()
         if verbose > 1:
           print(
-           f"        evaluate_bids: DONE; runtime = {(e - s).total_seconds()})", 
+           f"        evaluate_bids: DONE; runtime = {rmp_runtime['tot']})", 
            file = log_stream, 
            flush = True
           )
-        total_runtime += (e - s).total_seconds()
+        total_runtime += rmp_runtime['tot']
         # update effective load, number of replicas and fairness matrix
         for n1 in range(Nn):
           for n2 in range(Nn):
