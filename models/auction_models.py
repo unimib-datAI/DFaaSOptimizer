@@ -230,3 +230,27 @@ class BuyerNodeModel_fixedr(BuyerNodeModel):
   @staticmethod
   def fix_r(model, f):
     return model.r[f] == model.r_bar[model.whoami,f]
+  
+  @staticmethod
+  def utilization_equilibrium2(model, f):
+    return pyo.Constraint.Feasible
+
+
+class SellerNodeModel_fixedr(SellerNodeModel):
+  def __init__(self):
+    super().__init__()
+    self.name = "SellerNodeModel_fixedr"
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.fixed_r = pyo.Constraint(
+      self.model.F, rule = self.fixed_r
+    )
+  
+  @staticmethod
+  def fixed_r(model, f):
+    return model.r[f] == 0
+  
+  @staticmethod
+  def utilization_equilibrium2(model, f):
+    return pyo.Constraint.Feasible
