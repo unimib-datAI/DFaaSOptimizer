@@ -241,7 +241,9 @@ def results_postprocessing(
     method_colors = [
       mcolors.TABLEAU_COLORS["tab:blue"],
       mcolors.TABLEAU_COLORS["tab:orange"],
-      mcolors.TABLEAU_COLORS["tab:red"]
+      mcolors.TABLEAU_COLORS["tab:red"],
+      mcolors.TABLEAU_COLORS["tab:green"],
+      mcolors.TABLEAU_COLORS["tab:pink"]
     ]
     for method, method_folder in zip(methods, tokens[1:]):
       if method_folder is not None:
@@ -504,7 +506,7 @@ def results_postprocessing(
         [all_runtime_values, runtime_comparison], ignore_index = True
       )
   # cumulative plot
-  if len(all_obj_values) > 0:
+  if len(all_obj_values) > 0 and len(all_runtime_values) > 0:
     # -- save
     all_obj_values.to_csv(
       os.path.join(plot_folder, "obj.csv"), index = False
@@ -680,7 +682,7 @@ def results_postprocessing(
             avg_rtv.plot(
               y = f"best_iteration_{mname}",
               ax = axs2[2],
-              color = "black",
+              color = method_color,
               linewidth = 2,
               marker = ".", 
               grid = True,
@@ -689,7 +691,7 @@ def results_postprocessing(
           avg_rtv.plot(
             y = f"iteration_{mname}",
             ax = axs2[2],
-            color = "black",
+            color = method_color,
             linewidth = 1,
             linestyle = "dashed",
             marker = ".", 
