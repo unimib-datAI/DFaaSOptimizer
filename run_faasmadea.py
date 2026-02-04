@@ -321,31 +321,13 @@ def run(
       sp_data = deepcopy(data)
       # -- extract optimal solution (if provided)
       if opt_solution is not None:
-        opt_x, _, _, _, _ = encode_solution(
+        _, _, _, opt_r, _ = encode_solution(
           Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
         )
-        opt_r_for_x = np.zeros((Nn,Nf))
         sp_data[None]["r_bar"] = {}
         for n in range(Nn):
           for f in range(Nf):
-            opt_r_for_x[n,f] = sp_data[None][
-              "demand"
-            ][(n+1,f+1)] * opt_x[n,f] / sp_data[None]["max_utilization"][f+1]
-            if np.floor(opt_r_for_x[n,f]) > 0 and (
-                (opt_r_for_x[n,f] / np.floor(opt_r_for_x[n,f]) - 1) > 1e-6
-              ):
-              sp_data[None]["r_bar"][(n+1,f+1)] = int(
-                np.ceil(opt_r_for_x[n,f])
-              )
-            else:
-              if int(np.floor(opt_r_for_x[n,f])) == 0 and (
-                  opt_r_for_x[n,f] > 1e-6
-                ):
-                sp_data[None]["r_bar"][(n+1,f+1)] = int(
-                  np.ceil(opt_r_for_x[n,f])
-                )
-              else:
-                sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r_for_x[n,f])
+            sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r[n,f])
       # -- compute utility
       utilities = compute_utility(
         p, sp_data, auction_options, latency, fairness
@@ -475,7 +457,8 @@ def run(
         e = datetime.now()
         if verbose > 1:
           print(
-           f"        evaluate_bids: DONE; runtime = {rmp_runtime['tot']})", 
+           f"        evaluate_bids: DONE; obj = {rmp_obj}; "
+           f"runtime = {rmp_runtime['tot']})", 
            file = log_stream, 
            flush = True
           )
@@ -493,15 +476,20 @@ def run(
         r += rmp_r
         # -- check utilization
         u = compute_utilization(
-          sp_data, 
-          {"x": sp_x, "y": y, "r": r, "obj": None}
+          data, {"x": sp_x, "y": y, "r": r, "obj": None}
         )
         if verbose > 1:
           print(
-            f"        solution updated: DONE (auct_xi = {rmp_xi.tolist()}; "
-            f"omega = {rmp_omega.tolist()}; x: {sp_x.tolist()}; "
-            f"r = {r.tolist()}; rho = {rmp_rho.tolist()}; u = {u.tolist()}); "
-            f"z = {sp_z.tolist()}", 
+            "        solution updated: DONE ("
+            # f"\n\t\tauct_xi = {rmp_xi.tolist()}; "
+            # f"\n\t\tauct_y = {y.tolist()}; "
+            f"sp_omega = {sp_omega.tolist()}; "
+            f"rmp_omega = {rmp_omega.tolist()}; "
+            f"x = {sp_x.tolist()}; "
+            f"r = {r.tolist()}; "
+            f"rho = {rmp_rho.tolist()}; "
+            f"u = {u.tolist()}); "
+            f"z = {sp_z.tolist()})", 
             file = log_stream, 
             flush = True
           )
@@ -678,7 +666,7 @@ if __name__ == "__main__":
   # parallelism = args.parallelism
   # disable_plotting = args.disable_plotting
   # config_file = "config_files/config.json"
-  config_file = "solutions/newmadea3f/2026-02-03_12-19-00.034689/config.json"
+  config_file = "/Users/federicafilippini/Documents/GitHub/DFaaSOptimizer/solutions/newmadea_fixedr/2026-02-04_12-26-14.042782/config.json"
   parallelism = 0
   disable_plotting = False
   # load configuration file
