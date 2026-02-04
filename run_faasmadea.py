@@ -23,7 +23,8 @@ from utilities import load_configuration
 from models.auction_models import (
   SellerNodeModel, 
   BuyerNodeModel, 
-  BuyerNodeModel_fixedr
+  BuyerNodeModel_fixedr,
+  SellerNodeModel_fixedr
 )
 
 from networkx import adjacency_matrix
@@ -279,7 +280,7 @@ def run(
   )
   latency = adjacency_matrix(graph, weight = "network_latency")
   # define models
-  seller = SellerNodeModel()
+  seller = SellerNodeModel() if opt_solution is None else SellerNodeModel_fixedr()
   buyer = BuyerNodeModel() if opt_solution is None else BuyerNodeModel_fixedr()
   # loop over time
   ub = (
@@ -297,7 +298,7 @@ def run(
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
     # define target operating point and initial prices
-    u0 = np.ones((Nn,Nf)) * 0.7
+    u0 = np.ones((Nn,Nf)) * 0.8
     p = np.ones((Nn,Nn,Nf)) * 0.01
     # loop over iterations
     total_runtime = 0
@@ -471,6 +472,8 @@ def run(
               rmp_omega[n1,f] += y[n1,n2,f]
               if y[n1,n2,f] < sp_y[n1,n2,f]:
                 z[n1,f] += (sp_y[n1,n2,f] - y[n1,n2,f])
+              else:
+                delta[n1,n2,f] = 0.0
             if rmp_omega[n,f] > 0:
               fairness[n,f] += 1
         r += rmp_r
