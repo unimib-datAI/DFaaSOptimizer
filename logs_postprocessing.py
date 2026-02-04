@@ -223,10 +223,18 @@ def parse_faasmacro_log_file(
                 "check_stopping_criteria" in lines[it_row_idx] and 
                   "wallclock" in lines[it_row_idx]
               ):
-              _, trt, wct, _ = parse.parse(
-                "        check_stopping_criteria: DONE (runtime = {}; total runtime = {}; wallclock: {}) --> stop? {}\n",
-                lines[it_row_idx]
-              )
+              trt = None
+              wct = None
+              if "(runtime =" in lines[it_row_idx]:
+                _, trt, wct, _, _ = parse.parse(
+                  "        check_stopping_criteria: DONE (runtime = {}; total runtime = {}; wallclock: {}) --> stop? {} ({})\n",
+                  lines[it_row_idx]
+                )
+              else:
+                trt, wct, _, _ = parse.parse(
+                  "        check_stopping_criteria: DONE (total runtime = {}; wallclock: {}) --> stop? {} ({})\n",
+                  lines[it_row_idx]
+                )
               if "measured_total_time" not in df:
                 df["measured_total_time"] = []
               if "wallclock_time" not in df:

@@ -1011,13 +1011,21 @@ def run(
             f"(runtime = {(e - s).total_seconds()}; "
             f"total runtime = {total_runtime}; "
             f"wallclock: {(datetime.now() - ss).total_seconds()}) "
-            f"--> stop? {stop_searching}", 
+            f"--> stop? {stop_searching} ({why_stop_searching})", 
             file = log_stream, 
             flush = True
           )
       else:
         stop_searching = True
         why_stop_searching = "dev < 0"
+        print(
+          f"        check_stopping_criteria: DONE "
+          f"(total runtime = {total_runtime}; "
+          f"wallclock: {(datetime.now() - ss).total_seconds()}) "
+          f"--> stop? {stop_searching} ({why_stop_searching})", 
+          file = log_stream, 
+          flush = True
+        )
       # move to the next iteration OR update the complete solution
       if not stop_searching:
         it += 1
