@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from parse import parse
 import seaborn as sns
 import pandas as pd
+import numpy as np
 import argparse
 import os
 
@@ -51,7 +52,7 @@ def parse_arguments() -> argparse.Namespace:
     "--models",
     help = "List of model names",
     nargs = "*",
-    default = ["LoadManagementModel", "FaaS-MACrO"]
+    default = ["LoadManagementModel", "FaaS-MACrO", "FaaS-MADeA"]
   )
   parser.add_argument(
   "--filter_by",
@@ -194,9 +195,11 @@ def compare_results(
     if k in runtime:
       runtime.rename(columns = {k: "FaaS-MACrO"}, inplace = True)
   dev_plot_by_key(
-    obj, runtime, rej, key, key_label, postprocessing_folder
+    obj, runtime, rej, key, key_label, postprocessing_folder, models
   )
-  dev_barplot_by_key(obj, runtime, rej, key, key_label, postprocessing_folder)
+  dev_barplot_by_key(
+    obj, runtime, rej, key, key_label, postprocessing_folder, models
+  )
   plot_by_key(
     obj, 
     runtime, 
@@ -314,156 +317,172 @@ def dev_plot_by_key(
     rej: pd.DataFrame, 
     key: str,
     label: str,
-    plot_folder: str
+    plot_folder: str,
+    models: list
   ):
   nrows = 3 if rej is not None else 2
+  ncols = len(models) - 1
   f1, axs = plt.subplots(
-    nrows = nrows, ncols = 1, sharex = True, figsize = (8,6 * nrows), 
+    nrows = nrows, 
+    ncols = ncols, 
+    # sharex = True, 
+    figsize = (8 * ncols,6 * nrows), 
     gridspec_kw = {"hspace": 0.02}
   )
+  axs = np.atleast_2d(axs)
+  if ncols == 1:
+    axs = axs.T
   f2 = None
-  bplots = [None] * nrows
-  fontsize = 21
-  bplots[0] = (
-    "dev",
-    obj[[key, "dev"]].plot.box(
-      by = key,
-      grid = True,
-      ax = axs[0],
-      showmeans = True,
-      patch_artist = True,
-      meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-      return_type = "dict",
-      fontsize = fontsize
-    )
-  )
-  bplots[1] = (
-    "dev",
-    runtime[[key, "dev"]].plot.box(
-      by = key,
-      grid = True,
-      ax = axs[1],
-      showmeans = True,
-      patch_artist = True,
-      meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-      return_type = "dict",
-      fontsize = fontsize,
-      logy = True
-    )
-  )
-  # horizontal lines (for reference)
-  axs[0].axhline(
-    y = 0,
-    linestyle = "dashed",
-    linewidth = 2,
-    color = "k"
-  )
-  axs[1].axhline(
-    y = 1,
-    linestyle = "dashed",
-    linewidth = 2,
-    color = "k"
-  )
-  # axis properties
-  # -- y
-  axs[0].set_ylabel(
-    "Objective deviation\n((FaaS-MACrO - LMM) / LMM) [%]",
-    fontsize = fontsize
-  )
-  axs[0].set_title(None)
-  axs[1].set_ylabel(
-    "Runtime deviation\n(FaaS-MACrO / LMM) [x]",
-    fontsize = fontsize
-  )
-  axs[1].set_title(None)
-  if rej is not None:
-    bplots[2] = (
-      "dev",
-      rej[[key, "dev"]].plot.box(
-        by = key,
-        grid = True,
-        ax = axs[2],
-        showmeans = True,
-        patch_artist = True,
-        meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-        return_type = "dict",
-        fontsize = fontsize
-      )
-    )
-    axs[2].axhline(
-      y = 0,
-      linestyle = "dashed",
-      linewidth = 2,
-      color = "k"
-    )
-    axs[2].set_ylabel(
-      "Cloud offloading deviation\n(FaaS-MACrO - LMM) [%]",
-      fontsize = fontsize
-    )
-    axs[2].set_title(None)
-  # -- x
-  axs[-1].set_xlabel(
-    label,
-    fontsize = fontsize
-  )
   if "iteration" in runtime and "best_iteration" in runtime:
     f2, ax2 = plt.subplots(
-      nrows = 2, ncols = 1, sharex = True, figsize = (8,12),
+      nrows = 2, ncols = ncols, sharex = True, figsize = (8*ncols,12),
       gridspec_kw = {"hspace": 0.02}
     )
-    bplots += [None, None]
-    bplots[3] = (
-      "iteration",
-      runtime[[key, "iteration"]].plot.box(
-        by = key,
-        grid = True,
-        ax = ax2[0],
-        showmeans = True,
-        patch_artist = True,
-        meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-        return_type = "dict",
+    ax2 = np.atleast_2d(ax2)
+    if ncols == 1:
+      ax2 = axs.T
+  cidx = 0
+  for model in models:
+    if "FaaS-" in model:
+      bplots = [None] * nrows
+      fontsize = 21
+      bplots[0] = (
+        f"dev_{model}",
+        obj[[key, f"dev_{model}"]].plot.box(
+          by = key,
+          grid = True,
+          ax = axs[0,cidx],
+          showmeans = True,
+          patch_artist = True,
+          meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+          return_type = "dict",
+          fontsize = fontsize
+        )
+      )
+      bplots[1] = (
+        f"dev_{model}",
+        runtime[[key, f"dev_{model}"]].plot.box(
+          by = key,
+          grid = True,
+          ax = axs[1,cidx],
+          showmeans = True,
+          patch_artist = True,
+          meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+          return_type = "dict",
+          fontsize = fontsize,
+          logy = True
+        )
+      )
+      # horizontal lines (for reference)
+      axs[0,cidx].axhline(
+        y = 0,
+        linestyle = "dashed",
+        linewidth = 2,
+        color = "k"
+      )
+      axs[1,cidx].axhline(
+        y = 1,
+        linestyle = "dashed",
+        linewidth = 2,
+        color = "k"
+      )
+      # axis properties
+      # -- y
+      axs[0,cidx].set_ylabel(
+        f"Objective deviation\n(({model} - LMM) / LMM) [%]",
         fontsize = fontsize
       )
-    )
-    bplots[4] = (
-      "best_iteration",
-      runtime[[key, "best_iteration"]].plot.box(
-        by = key,
-        grid = True,
-        ax = ax2[1],
-        showmeans = True,
-        patch_artist = True,
-        meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
-        return_type = "dict",
+      axs[0,cidx].set_title(None)
+      axs[1,cidx].set_ylabel(
+        f"Runtime deviation\n({model} / LMM) [x]",
         fontsize = fontsize
       )
-    )
-    # axis properties
-    # -- y
-    ax2[0].set_ylabel(
-      "Number of iterations",
-      fontsize = fontsize
-    )
-    ax2[0].set_title(None)
-    ax2[1].set_ylabel(
-      "Best iteration",
-      fontsize = fontsize
-    )
-    ax2[1].set_title(None)
-    # -- x
-    ax2[1].set_xlabel(
-      label,
-      fontsize = fontsize
-    )
-  # colors
-  for (key, bplot) in bplots:
-    for patch in bplot[key]["boxes"]:
-      patch.set_facecolor(mcolors.CSS4_COLORS["lightskyblue"])
-    for median in bplot[key]['medians']:
-      median.set_color(mcolors.TABLEAU_COLORS["tab:orange"])
-    for mean in bplot[key]['means']:
-      mean.set_markerfacecolor(mcolors.TABLEAU_COLORS["tab:red"])
-      mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
+      axs[1,cidx].set_title(None)
+      if rej is not None:
+        bplots[2] = (
+          f"dev_{model}",
+          rej[[key, f"dev_{model}"]].plot.box(
+            by = key,
+            grid = True,
+            ax = axs[2,cidx],
+            showmeans = True,
+            patch_artist = True,
+            meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+            return_type = "dict",
+            fontsize = fontsize
+          )
+        )
+        axs[2,cidx].axhline(
+          y = 0,
+          linestyle = "dashed",
+          linewidth = 2,
+          color = "k"
+        )
+        axs[2,cidx].set_ylabel(
+          f"Cloud offloading deviation\n({model} - LMM) [%]",
+          fontsize = fontsize
+        )
+        axs[2,cidx].set_title(None)
+      # -- x
+      axs[-1,cidx].set_xlabel(
+        label,
+        fontsize = fontsize
+      )
+      if f2 is not None:
+        bplots += [None, None]
+        bplots[3] = (
+          "iteration",
+          runtime[[key, "iteration"]].plot.box(
+            by = key,
+            grid = True,
+            ax = ax2[0,cidx],
+            showmeans = True,
+            patch_artist = True,
+            meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+            return_type = "dict",
+            fontsize = fontsize
+          )
+        )
+        bplots[4] = (
+          "best_iteration",
+          runtime[[key, "best_iteration"]].plot.box(
+            by = key,
+            grid = True,
+            ax = ax2[1,cidx],
+            showmeans = True,
+            patch_artist = True,
+            meanprops = dict(color = mcolors.TABLEAU_COLORS["tab:red"]),
+            return_type = "dict",
+            fontsize = fontsize
+          )
+        )
+        # axis properties
+        # -- y
+        ax2[0,cidx].set_ylabel(
+          "Number of iterations",
+          fontsize = fontsize
+        )
+        ax2[0,cidx].set_title(None)
+        ax2[1,cidx].set_ylabel(
+          "Best iteration",
+          fontsize = fontsize
+        )
+        ax2[1,cidx].set_title(None)
+        # -- x
+        ax2[1,cidx].set_xlabel(
+          label,
+          fontsize = fontsize
+        )
+      # colors
+      for (bkey, bplot) in bplots:
+        for patch in bplot[bkey]["boxes"]:
+          patch.set_facecolor(mcolors.CSS4_COLORS["lightskyblue"])
+        for median in bplot[bkey]['medians']:
+          median.set_color(mcolors.TABLEAU_COLORS["tab:orange"])
+        for mean in bplot[bkey]['means']:
+          mean.set_markerfacecolor(mcolors.TABLEAU_COLORS["tab:red"])
+          mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
+      cidx += 1
   f1.savefig(
     os.path.join(plot_folder, "box.png"),
     dpi = 300,
@@ -489,6 +508,7 @@ def plot_by_key(
     label: str,
     plot_folder: str
   ):
+  models = sorted(models)
   nrows = 3 if rej is not None else 2
   ncols = len(models)
   _, axs = plt.subplots(
@@ -589,28 +609,30 @@ def plot_by_key(
   # -- title
   plt.setp(axs, title = None)
   # colors
-  colors = [
-    mcolors.CSS4_COLORS["lightgreen"],
-    mcolors.CSS4_COLORS["lightpink"]
-  ]
+  colors = {
+    "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
+    "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
+    "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"]
+  }
   for ridx, (keys, bplot) in enumerate(bplots):
-    for cidx, (key, color) in enumerate(zip(keys, colors)):
-      for patch in bplot[key]["boxes"]:
+    for cidx, bkey in enumerate(keys):
+      color = colors[bkey]
+      for patch in bplot[bkey]["boxes"]:
         patch.set_facecolor(color)
-      for median in bplot[key]['medians']:
+      for median in bplot[bkey]['medians']:
         median.set_color(mcolors.TABLEAU_COLORS["tab:orange"])
-      for mean in bplot[key]['means']:
+      for mean in bplot[bkey]['means']:
         mean.set_markerfacecolor(mcolors.TABLEAU_COLORS["tab:red"])
         mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
       # -- legend
       if ridx == 0:
         if ncols > 1:
           axs[0,cidx].legend(
-            [bplot[key]["boxes"][0]], [key], fontsize=fontsize
+            [bplot[bkey]["boxes"][0]], [bkey], fontsize=fontsize
           )
         else:
           axs[0].legend(
-            [bplot[key]["boxes"][0]], [key], fontsize=fontsize
+            [bplot[bkey]["boxes"][0]], [bkey], fontsize=fontsize
           )
   plt.savefig(
     os.path.join(plot_folder, "box_detailed.png"),
@@ -627,205 +649,107 @@ def dev_barplot_by_key(
     rej: pd.DataFrame, 
     key: str,
     label: str,
-    plot_folder: str
+    plot_folder: str,
+    models: list
   ):
-  nrows = 1
+  nrows = len(models) - 1
   ncols = 3 if rej is not None else 2
-  # f1, axs = plt.subplots(
-  #   nrows = nrows, ncols = ncols, figsize = (12 * ncols, 6 * nrows), 
-  #   gridspec_kw = {"wspace": 0.2}
-  # )
-  # bplots = [None] * ncols
   fontsize = 21
-  # bplots[0] = (
-  #   "dev",
-  #   sns.violinplot(
-  #     data = obj,#[[key, "dev"]],
-  #     x = key,
-  #     y = "dev",
-  #     ax = axs[0],
-  #     inner = "quart",
-  #     color = mcolors.CSS4_COLORS["lightskyblue"],
-  #     density_norm = "count"
-  #   )
-  # )
-  # bplots[1] = (
-  #   "dev",
-  #   sns.violinplot(
-  #     data = runtime,#[[key, "dev"]],
-  #     x = key,
-  #     y = "dev",
-  #     ax = axs[1],
-  #     log_scale = (False,True),
-  #     inner = "quart",
-  #     color = mcolors.CSS4_COLORS["lightskyblue"],
-  #     density_norm = "count"
-  #   )
-  # )
-  # if rej is not None:
-  #   bplots[2] = (
-  #     "dev",
-  #     sns.violinplot(
-  #       data = rej,#[[key, "dev"]],
-  #       x = key,
-  #       y = "dev",
-  #       ax = axs[2],
-  #       inner = "quart",
-  #       color = mcolors.CSS4_COLORS["lightskyblue"],
-  #       density_norm = "count"
-  #     )
-  #   )
-  # # horizontal lines (for reference)
-  # axs[0].axhline(
-  #   y = 0,
-  #   linestyle = "dashed",
-  #   linewidth = 2,
-  #   color = "k"
-  # )
-  # axs[1].axhline(
-  #   y = 1,
-  #   linestyle = "dashed",
-  #   linewidth = 2,
-  #   color = "k"
-  # )
-  # # axis properties
-  # # -- y
-  # axs[0].set_ylabel(
-  #   "Objective deviation\n((FaaS-MACrO - LMM) / LMM) [%]",
-  #   fontsize = fontsize
-  # )
-  # axs[1].set_ylabel(
-  #   "Runtime deviation\n(FaaS-MACrO / LMM) [x]",
-  #   fontsize = fontsize
-  # )
-  # if rej is not None:
-  #   axs[2].axhline(
-  #     y = 0,
-  #     linestyle = "dashed",
-  #     linewidth = 2,
-  #     color = "k"
-  #   )
-  #   axs[2].set_ylabel(
-  #     "Cloud offloading deviation\n(FaaS-MACrO - LMM) [%]",
-  #     fontsize = fontsize
-  #   )
-  # # -- common properties
-  # plt.setp(axs, title = None)
-  # for idx in range(len(axs)):
-  #   axs[idx].set_xlabel(
-  #     label,
-  #     fontsize = fontsize
-  #   )
-  #   axs[idx].grid(True)
-  #   axs[idx].set_xticks(
-  #     axs[idx].get_xticks(), 
-  #     axs[idx].get_xticklabels(), 
-  #     fontsize = fontsize
-  #   )
-  #   axs[idx].set_yticks(
-  #     axs[idx].get_yticks(), 
-  #     axs[idx].get_yticklabels(), 
-  #     fontsize = fontsize
-  #   )
-  #   axs[idx].legend(fontsize = fontsize)
-  # f1.savefig(
-  #   os.path.join(plot_folder, "violin.png"),
-  #   dpi = 300,
-  #   format = "png",
-  #   bbox_inches = "tight"
-  # )
-  # plt.close()
-  ##
   f2, axs2 = plt.subplots(
     nrows = nrows, ncols = ncols, figsize = (12 * ncols, 7 * nrows), 
     gridspec_kw = {"wspace": 0.2}
   )
-  group = obj.groupby(key)
-  data = pd.DataFrame({
-    key: list(group.groups.keys()),
-    "avg": group.mean()["dev"].values.tolist(),
-    "min": group.min()["dev"].values.tolist(),
-    "max": group.max()["dev"].values.tolist()
-  })
-  data.plot.bar(
-    x = key,
-    ax = axs2[0],
-    grid = True,
-    fontsize = fontsize,
-    rot = 0
-  )
-  group = runtime.groupby(key)
-  data = pd.DataFrame({
-    key: list(group.groups.keys()),
-    "avg": group.mean()["dev"].values.tolist(),
-    "min": group.min()["dev"].values.tolist(),
-    "max": group.max()["dev"].values.tolist()
-  })
-  data.plot.bar(
-    x = key,
-    ax = axs2[1],
-    grid = True,
-    fontsize = fontsize,
-    rot = 0,
-    logy = True
-  )
-  if ncols > 2:
-    group = rej.groupby(key)
-    data = pd.DataFrame({
-      key: list(group.groups.keys()),
-      "avg": group.mean()["dev"].values.tolist(),
-      "min": group.min()["dev"].values.tolist(),
-      "max": group.max()["dev"].values.tolist()
-    })
-    data.plot.bar(
-      x = key,
-      ax = axs2[2],
-      grid = True,
-      fontsize = fontsize,
-      rot = 0
-    )
-  # horizontal lines (for reference)
-  axs2[0].axhline(
-    y = 0,
-    linestyle = "dashed",
-    linewidth = 2,
-    color = "k"
-  )
-  axs2[1].axhline(
-    y = 1,
-    linestyle = "dashed",
-    linewidth = 2,
-    color = "k"
-  )
-  # axis properties
-  # -- y
-  axs2[0].set_ylabel(
-    "Objective deviation\n((FaaS-MACrO - LMM) / LMM) [%]",
-    fontsize = fontsize
-  )
-  axs2[1].set_ylabel(
-    "Runtime deviation\n(FaaS-MACrO / LMM) [x]",
-    fontsize = fontsize
-  )
-  if rej is not None:
-    axs2[2].axhline(
-      y = 0,
-      linestyle = "dashed",
-      linewidth = 2,
-      color = "k"
-    )
-    axs2[2].set_ylabel(
-      "Cloud offloading deviation\n(FaaS-MACrO - LMM) [%]",
-      fontsize = fontsize
-    )
-  # -- common properties
-  plt.setp(axs2, title = None)
-  for idx in range(len(axs2)):
-    axs2[idx].set_xlabel(
-      label,
-      fontsize = fontsize
-    )
-    axs2[idx].legend(fontsize = fontsize)
+  axs2 = np.atleast_2d(axs2)
+  ogroup = obj.groupby(key)
+  rgroup = runtime.groupby(key)
+  ridx = 0
+  for model in models:
+    if model.startswith("FaaS-"):
+      data = pd.DataFrame({
+        key: list(ogroup.groups.keys()),
+        "avg": ogroup.mean()[f"dev_{model}"].values.tolist(),
+        "min": ogroup.min()[f"dev_{model}"].values.tolist(),
+        "max": ogroup.max()[f"dev_{model}"].values.tolist()
+      })
+      data.plot.bar(
+        x = key,
+        ax = axs2[ridx,0],
+        grid = True,
+        fontsize = fontsize,
+        rot = 0
+      )
+      data = pd.DataFrame({
+        key: list(rgroup.groups.keys()),
+        "avg": rgroup.mean()[f"dev_{model}"].values.tolist(),
+        "min": rgroup.min()[f"dev_{model}"].values.tolist(),
+        "max": rgroup.max()[f"dev_{model}"].values.tolist()
+      })
+      data.plot.bar(
+        x = key,
+        ax = axs2[ridx,1],
+        grid = True,
+        fontsize = fontsize,
+        rot = 0,
+        logy = True
+      )
+      if ncols > 2:
+        group = rej.groupby(key)
+        data = pd.DataFrame({
+          key: list(group.groups.keys()),
+          "avg": group.mean()[f"dev_{model}"].values.tolist(),
+          "min": group.min()[f"dev_{model}"].values.tolist(),
+          "max": group.max()[f"dev_{model}"].values.tolist()
+        })
+        data.plot.bar(
+          x = key,
+          ax = axs2[ridx,2],
+          grid = True,
+          fontsize = fontsize,
+          rot = 0
+        )
+      # horizontal lines (for reference)
+      axs2[ridx,0].axhline(
+        y = 0,
+        linestyle = "dashed",
+        linewidth = 2,
+        color = "k"
+      )
+      axs2[ridx,1].axhline(
+        y = 1,
+        linestyle = "dashed",
+        linewidth = 2,
+        color = "k"
+      )
+      # axis properties
+      # -- y
+      axs2[ridx,0].set_ylabel(
+        f"Objective deviation\n(({model} - LMM) / LMM) [%]",
+        fontsize = fontsize
+      )
+      axs2[ridx,1].set_ylabel(
+        f"Runtime deviation\n({model} / LMM) [x]",
+        fontsize = fontsize
+      )
+      if rej is not None:
+        axs2[ridx,2].axhline(
+          y = 0,
+          linestyle = "dashed",
+          linewidth = 2,
+          color = "k"
+        )
+        axs2[ridx,2].set_ylabel(
+          f"Cloud offloading deviation\n({model} - LMM) [%]",
+          fontsize = fontsize
+        )
+      # -- common properties
+      plt.setp(axs2, title = None)
+      for idx in range(len(axs2)):
+        axs2[ridx,idx].set_xlabel(
+          label,
+          fontsize = fontsize
+        )
+        axs2[ridx,idx].legend(fontsize = fontsize)
+      ridx += 1
   f2.savefig(
     os.path.join(plot_folder, "bars.png"),
     dpi = 300,
@@ -844,6 +768,11 @@ def violinplot_by_key(
     label: str,
     plot_folder: str
   ):
+  colors = {
+    "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
+    "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
+    "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"]
+  }
   nrows = 1
   ncols = 3 if rej is not None else 2
   _, axs = plt.subplots(
@@ -871,10 +800,7 @@ def violinplot_by_key(
       split = True, 
       inner = "quart",
       ax = axs[0],
-      palette = {
-        models[0]: mcolors.CSS4_COLORS["lightgreen"],
-        models[1]: mcolors.CSS4_COLORS["lightpink"]
-      },
+      palette = colors,
       density_norm = "count"
     )
   )
@@ -896,10 +822,7 @@ def violinplot_by_key(
       inner = "quart",
       ax = axs[1],
       log_scale = (False, True),
-      palette = {
-        models[0]: mcolors.CSS4_COLORS["lightgreen"],
-        models[1]: mcolors.CSS4_COLORS["lightpink"]
-      },
+      palette = colors,
       density_norm = "count"
     )
   )
@@ -921,10 +844,7 @@ def violinplot_by_key(
         split = True, 
         inner = "quart",
         ax = axs[2],
-        palette = {
-          models[0]: mcolors.CSS4_COLORS["lightgreen"],
-          models[1]: mcolors.CSS4_COLORS["lightpink"]
-        },
+        palette = colors,
         density_norm = "count",
         cut = 0
       )
