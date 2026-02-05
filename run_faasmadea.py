@@ -379,21 +379,6 @@ def run(
           flush = True
         )
       total_runtime += sp_runtime["tot"]
-      # compute residual computational capacity
-      s = datetime.now()
-      capacity, blackboard, ell = compute_residual_capacity(
-        sp_x, np.zeros((Nn,Nn,Nf)), sp_r, sp_data
-      )
-      e = datetime.now()
-      if verbose > 1:
-        print(
-          f"        compute_residual_capacity: DONE ",
-          f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
-          f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})", 
-          file = log_stream, 
-          flush = True
-        )
-      total_runtime += (e - s).total_seconds()
       # buyers define their bids
       s = datetime.now()
       delta = np.zeros((Nn,Nn,Nf))
@@ -505,6 +490,21 @@ def run(
                   0, auction_options["eta"] * (u[j,f] - u0[j,f])
                 )
               )
+        # compute residual computational capacity
+        s = datetime.now()
+        capacity, blackboard, ell = compute_residual_capacity(
+          sp_x, np.zeros((Nn,Nn,Nf)), r, sp_data
+        )
+        e = datetime.now()
+        if verbose > 1:
+          print(
+            f"        compute_residual_capacity: DONE ",
+            f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
+            f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})", 
+            file = log_stream, 
+            flush = True
+          )
+        total_runtime += (e - s).total_seconds()
       # merge solutions and compute the centralized objective value
       csol = {
         "sp": {
