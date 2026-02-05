@@ -377,7 +377,7 @@ def parse_faasmadea_log_file(
                   lines[it_row_idx].startswith("    TOTAL RUNTIME")
             ):
             # load sp info
-            if "sp" in lines[it_row_idx]:
+            if "sp: DONE" in lines[it_row_idx]:
               sp_runtime = None
               if "runtime" in lines[t_row_idx]:
                 _, _, sp_runtime = parse.parse(
@@ -398,10 +398,10 @@ def parse_faasmadea_log_file(
             elif "evaluate_bids" in lines[it_row_idx]:
               runtime = None
               if "runtime" in lines[it_row_idx]:
-                runtime = parse.parse(
-                  "        evaluate_bids: DONE; runtime = {})\n",
+                _, runtime = parse.parse(
+                  "        evaluate_bids: DONE; obj = {}; runtime = {})\n",
                   lines[it_row_idx]
-                )[0]
+                )
               df["evaluate_bids_runtime"].append(
                 float(runtime) if runtime else None
               )
