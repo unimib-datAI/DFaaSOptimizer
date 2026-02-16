@@ -19,19 +19,20 @@ methods:
 
 ## Installation instructions
 
-We strongly recommend running the code in a dedicated Python virtual 
-environment. To create and activate the environment, run:
+This repository is configured as an `uv` project. To create a local
+environment and install dependencies, run:
 
 ```
-python3 -m venv .venv
-source .venv/bin/activate
+uv venv --python 3.10
+uv sync
 ```
 
-Then install the required dependencies in the new environment by running:
+Then run scripts through `uv`:
 
 ```
-pip install --upgrade pip
-pip install -r requirements.txt
+uv run run_centralized_model.py --help
+uv run run_faasmacro.py --help
+uv run run.py --help
 ```
 
 > [!NOTE]
@@ -56,7 +57,7 @@ Run LoadManagementModel (LMM)
 options:
   -h, --help            show this help message and exit
   -c CONFIG, --config CONFIG
-                        Configuration file (default: manual_config.json)
+                        Configuration file (default: config_files/manual_config.json)
   --disable_plotting    True to disable automatic plot generation for each 
                         experiment (default: False)
 ```
@@ -78,7 +79,7 @@ Run FaaS-MACrO
 options:
   -h, --help            show this help message and exit
   -c CONFIG, --config CONFIG
-                        Configuration file (default: manual_config.json)
+                        Configuration file (default: config_files/manual_config.json)
   -j PARALLELISM, --parallelism PARALLELISM
                         Number of parallel processes to start 
                         (-1: auto, 0: sequential) (default: -1)
@@ -114,7 +115,7 @@ Run LMM and/or FaaS-MACrO on multiple experiments
 options:
   -h, --help            show this help message and exit
   -c CONFIG, --config CONFIG
-                        Configuration file (default: config.json)
+                        Configuration file (default: config_files/config.json)
   --n_experiments N_EXPERIMENTS
                         Number of experiments to run for each 
                         configuration (default: 3)
@@ -624,7 +625,7 @@ values of the `loop_over` parameter are provided in a unique
 `postprocessing_folders`.
 
 ```
-python compare_results.py -i solutions/varyingN/light_load/3classes-0_10-greedy \
+uv run compare_results.py -i solutions/varyingN/light_load/3classes-0_10-greedy \
                           --run compare_results \
                           --loop_over Nn \
                           --loop_over_label "Number of agents"
@@ -635,7 +636,7 @@ values of the `loop_over` parameter are provided in different subfolders
 of `postprocessing_folders`.
 
 ```
-python compare_results.py -i solutions/varyingK \
+uv run compare_results.py -i solutions/varyingK \
                           -o solutions/varyingK/postprocessing_by_k \
                           --run compare_across_folders \
                           --loop_over k \
@@ -647,7 +648,7 @@ python compare_results.py -i solutions/varyingK \
 single model in variable conditions (identified by the `loop_over` parameter).
 
 ```
-python compare_results.py -i solutions/centralized \
+uv run compare_results.py -i solutions/centralized \
                           -o solutions/centralized/postprocessing_by_TL \
                           --run compare_single_model \
                           --loop_over TL \
