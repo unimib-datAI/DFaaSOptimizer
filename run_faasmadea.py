@@ -318,6 +318,8 @@ def run(
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
+      if t == 71 and it == 15:
+        print("here")
       # local planning
       sp_data = deepcopy(data)
       # -- extract optimal solution (if provided)
@@ -382,16 +384,28 @@ def run(
       # buyers define their bids
       s = datetime.now()
       delta = np.zeros((Nn,Nn,Nf))
-      for (n,f) in zip(*np.nonzero(sp_omega)):
-        utilities[n,n,f] = - sp_data[None]["gamma"][(n+1,f+1)]
-        incr_util = np.argsort(utilities[n,:,f])
-        for m in np.nonzero(sp_y[n,:,f])[0]:
-          idx = np.where(incr_util==m)[0][0]
-          if idx > 0:
-            delta[n,m,f] = utilities[n,m,f] - utilities[
-              n,incr_util[idx-1],f
-            ]
-          delta[n,m,f] += auction_options["epsilon"]
+      for n in range(Nn):
+        for f in range(Nf):
+          utilities[n,n,f] = - sp_data[None]["gamma"][(n+1,f+1)]
+          incr_util = np.argsort(utilities[n,:,f])
+          for m in range(Nn):
+            if m != n:
+              idx = np.where(incr_util==m)[0][0]
+              if idx > 0:
+                delta[n,m,f] = utilities[n,m,f] - utilities[
+                  n,incr_util[idx-1],f
+                ]
+              delta[n,m,f] += auction_options["epsilon"]
+      # for (n,f) in zip(*np.nonzero(sp_omega)):
+      #   utilities[n,n,f] = - sp_data[None]["gamma"][(n+1,f+1)]
+      #   incr_util = np.argsort(utilities[n,:,f])
+      #   for m in np.nonzero(sp_y[n,:,f])[0]:
+      #     idx = np.where(incr_util==m)[0][0]
+      #     if idx > 0:
+      #       delta[n,m,f] = utilities[n,m,f] - utilities[
+      #         n,incr_util[idx-1],f
+      #       ]
+      #     delta[n,m,f] += auction_options["epsilon"]
       e = datetime.now()
       if verbose > 1:
         print(
@@ -459,8 +473,8 @@ def run(
                 z[n1,f] += (sp_y[n1,n2,f] - y[n1,n2,f])
               else:
                 delta[n1,n2,f] = 0.0
-            if rmp_omega[n,f] > 0:
-              fairness[n,f] += 1
+            if rmp_omega[n1,f] > 0:
+              fairness[n1,f] += 1
         r += rmp_r
         # -- check utilization
         u = compute_utilization(
@@ -669,7 +683,7 @@ if __name__ == "__main__":
   # parallelism = args.parallelism
   # disable_plotting = args.disable_plotting
   # config_file = "config_files/config.json"
-  config_file = "/Users/federicafilippini/Documents/GitHub/DFaaSOptimizer/solutions/newmadea_fixedr/2026-02-04_12-26-14.042782/config.json"
+  config_file = "/Users/federicafilippini/Documents/GitHub/DFaaSOptimizer/solutions/newmadea_5f_freer_100iter/2026-02-05_09-19-16.174062/config.json"
   parallelism = 0
   disable_plotting = False
   # load configuration file
