@@ -139,7 +139,7 @@ def compute_utility(
       for f in range(Nf):
         utility[i,j,f] = (
           data[None]["beta"][(i+1,j+1,f+1)] - 
-          p[i,j,f] - 
+          p[j,f] - 
           auction_options["latency_weight"] * latency[i,j] - 
           auction_options["fairness_weight"] * fairness[i,f]
         )
@@ -299,7 +299,7 @@ def run(
     data = update_data(base_instance_data, {"incoming_load": loadt})
     # define target operating point and initial prices
     u0 = np.ones((Nn,Nf)) * 0.8
-    p = np.ones((Nn,Nn,Nf)) * 0.01
+    p = np.ones((Nn,Nf)) * 0.0
     # loop over iterations
     total_runtime = 0
     ss = datetime.now()
@@ -325,7 +325,7 @@ def run(
       # -- extract optimal solution (if provided)
       if opt_solution is not None:
         _, _, _, opt_r, _ = encode_solution(
-          Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
+          Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t-min_run_time
         )
         sp_data[None]["r_bar"] = {}
         for n in range(Nn):
@@ -429,9 +429,9 @@ def run(
           data, (sp_x, sp_y, sp_z, sp_omega, sp_r, sp_rho)
         )
         rmp_data[None]["beta"] = {
-          (n1+1,n2+1,f+1): p[n1,n2,f] + delta[n1,n2,f] for n1 in range(Nn) \
-                                                        for n2 in range(Nn) \
-                                                          for f in range(Nf)
+          (n1+1,n2+1,f+1): p[n2,f] + delta[n1,n2,f] for n1 in range(Nn) \
+                                                      for n2 in range(Nn) \
+                                                        for f in range(Nf)
         }
         s = datetime.now()
         (
@@ -464,15 +464,18 @@ def run(
           )
         total_runtime += rmp_runtime['tot']
         # update effective load, number of replicas and fairness matrix
+        new_p = deepcopy(p)
         for n1 in range(Nn):
           for n2 in range(Nn):
             for f in range(Nf):
-              y[n1,n2,f] = rmp_xi[n2,n1,f]
-              rmp_omega[n1,f] += y[n1,n2,f]
-              if y[n1,n2,f] < sp_y[n1,n2,f]:
-                z[n1,f] += (sp_y[n1,n2,f] - y[n1,n2,f])
-              else:
-                delta[n1,n2,f] = 0.0
+              if rmp_xi[n2,n1,f] > 0.0:
+                new_p[n2,f] = max(
+                  new_p[n2,f], rmp_data[None]["beta"][n1+1,n2+1,f+1]
+                )
+                y[n1,n2,f] = rmp_xi[n2,n1,f]
+                rmp_omega[n1,f] += y[n1,n2,f]
+                if y[n1,n2,f] < sp_y[n1,n2,f]:
+                  z[n1,f] += (sp_y[n1,n2,f] - y[n1,n2,f])
             if rmp_omega[n1,f] > 0:
               fairness[n1,f] += 1
         r += rmp_r
@@ -496,14 +499,13 @@ def run(
             flush = True
           )
         # update prices
-        for i in range(Nn):
-          for j in range(Nn):
-            for f in range(Nf):
-              p[i,j,f] += (
-                delta[i,j,f] + max(
-                  0, auction_options["eta"] * (u[j,f] - u0[j,f])
-                )
+        for j in range(Nn):
+          for f in range(Nf):
+            p[j,f] = (
+              new_p[j,f] + max(
+                0, auction_options["eta"] * (u[j,f] - u0[j,f])
               )
+            )
         # compute residual computational capacity
         s = datetime.now()
         capacity, blackboard, ell = compute_residual_capacity(
