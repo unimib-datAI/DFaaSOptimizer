@@ -279,3 +279,104 @@ class LoadManagementModel(BaseCentralizedModel):
         ) / model.incoming_load[n,f] for f in model.F
       ) for n in model.N
     )
+
+
+class SortOfKnapsack(BaseCentralizedModel):
+  """
+  max sum(alpha * x + sum(beta * y) - gamma * z)
+  """
+  def __init__(self):
+    super().__init__()
+    self.name = "SortOfKnapsack"
+    ###########################################################################
+    # Problem variables
+    ###########################################################################
+    # 1 if node i is fowarding any request of function f
+    self.model.i_sends_f = pyo.Var(
+      self.model.N, self.model.F, domain = pyo.Binary
+    )
+    # 1 if node i receives any request of function f
+    self.model.i_receives_f = pyo.Var(
+      self.model.N, self.model.F, domain = pyo.Binary
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.utilization_equilibrium = pyo.Constraint(
+      self.model.N, self.model.F, rule = self.utilization_equilibrium
+    )
+    self.model.utilization_equilibrium2 = pyo.Constraint(
+      self.model.N, self.model.F, rule = self.utilization_equilibrium2
+    )
+    self.model.residual_capacity = pyo.Constraint(
+      self.model.N, rule = self.residual_capacity
+    )
+    self.model.no_ping_pong1 = pyo.Constraint(
+      self.model.N, self.model.F, rule = self.no_ping_pong1
+    )
+    self.model.no_ping_pong2 = pyo.Constraint(
+      self.model.N, self.model.F, rule = self.no_ping_pong2
+    )
+    self.model.no_ping_pong3 = pyo.Constraint(
+      self.model.N, self.model.F, rule = self.no_ping_pong3
+    )
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.model.OBJ = pyo.Objective(
+      rule = self.maximize_processing, sense = pyo.maximize
+    )
+  
+  @staticmethod
+  def utilization_equilibrium(model, n, f):
+    return model.demand[n,f] * (
+      model.x[n,f] + sum(
+        model.y[m,n,f] for m in model.N
+      )
+    ) <= model.r[n,f] * model.max_utilization[f]
+  
+  @staticmethod
+  def utilization_equilibrium2(model, n, f):
+    return model.demand[n,f] * (
+      model.x[n,f] + sum(
+        model.y[m,n,f] for m in model.N
+      )
+    ) >= (model.r[n,f] - 1) * model.max_utilization[f]
+  
+  @staticmethod
+  def residual_capacity(model, n):
+    return sum(
+      model.memory_requirement[f] * model.demand[n,f] * (
+        model.x[n,f] + sum(model.y[m,n,f] for m in model.N)
+      ) / model.max_utilization[f] + model.memory_requirement[f] for f in model.F
+    ) <= model.memory_capacity[n]
+  
+  @staticmethod
+  def no_ping_pong1(model, n, f):
+    return sum(
+      model.y[n,m,f] for m in model.N
+    ) <= model.incoming_load[n,f] * model.i_sends_f[n,f]
+  
+  @staticmethod
+  def no_ping_pong2(model, n, f):
+    return sum(
+      model.y[m,n,f] for m in model.N
+    ) <= sum(
+      model.incoming_load[m,f] for m in model.N
+    ) * model.i_receives_f[n,f]
+  
+  @staticmethod
+  def no_ping_pong3(model, n, f):
+    return model.i_sends_f[n,f] + model.i_receives_f[n,f] <= 1
+  
+  @staticmethod
+  def maximize_processing(model):
+    return sum(
+      sum(
+        model.alpha[n,f] * model.x[n,f] / model.incoming_load[n,f] + sum(
+          model.beta[n,m,f] * model.y[n,m,f] for m in model.N
+        ) / model.incoming_load[n,f] - (
+          model.gamma[n,f] * model.z[n,f]
+        ) / model.incoming_load[n,f] for f in model.F
+      ) for n in model.N
+    )
