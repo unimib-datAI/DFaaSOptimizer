@@ -6,7 +6,6 @@ from postprocessing import plot_history
 from models.model import (
   BaseLoadManagementModel, 
   LoadManagementModel, 
-  SortOfKnapsack,
   PYO_VAR_TYPE
 )
 
@@ -574,7 +573,7 @@ def run(
   if log_on_file:
     log_stream = open(os.path.join(solution_folder, "out.log"), "w")
   # initialize models
-  models = [LoadManagementModel(), SortOfKnapsack()]
+  models = [LoadManagementModel()]
   # generate base instance data and load traces
   base_instance_data, input_requests_traces, agents, _ = init_problem(
     limits, trace_type, max_steps, seed, solution_folder
