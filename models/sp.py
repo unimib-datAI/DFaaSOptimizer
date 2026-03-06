@@ -345,6 +345,7 @@ class LSP_fixedr(LSP):
     self.model.fix_r = pyo.Constraint(
       self.model.F, rule = self.fix_r
     )
+    self.model.del_component(self.model.utilization_equilibrium2)
   
   @staticmethod
   def fix_r(model, f):
