@@ -289,7 +289,8 @@ def generate_load_traces(
         max_steps = max_steps, 
         limits = function_limits,
         rng = rng,
-        trace_type = new_trace_type #f"manual{function}"#
+        trace_type = new_trace_type, #f"manual{function}"#
+        only_integer_values = True
       )
       # plot trace (if required)
       if len(limits) <= 10 and len(function_limits) <= 10:

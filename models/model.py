@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 
-PYO_VAR_TYPE = pyo.NonNegativeReals
+PYO_VAR_TYPE = pyo.NonNegativeIntegers
 PYO_PARAM_TYPE = pyo.NonNegativeReals
 
 
