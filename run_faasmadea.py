@@ -170,10 +170,10 @@ def define_bids(
         utility.append(ut)
         candidate_sellers.append(j)
     # compute weights and define bids
+    assigned = 0
     if len(utility) > 0:
       utility = np.array(utility)
       sellers_order = np.argsort(utility)[::-1]
-      assigned = 0
       idx = 0
       while idx < len(sellers_order) and assigned < omega[i,f]:
         j = candidate_sellers[sellers_order[idx]]
@@ -194,6 +194,7 @@ def define_bids(
           assigned += 1
           d += 1
         idx += 1
+      # -- if you could not bid for everything, ask also for new replicas
       if assigned < omega[i,f]:
         for idx in sellers_order:
           j = candidate_sellers[idx]
@@ -201,8 +202,8 @@ def define_bids(
             memory_bids["i"].append(i)
             memory_bids["j"].append(j)
             memory_bids["f"].append(f)
-    else:
-      # if the problem is missing computing capacity, ask for new replicas
+    # if you could not bid for all, ask for new replicas
+    if assigned < omega[i,f]:
       for j in potential_memory_sellers - potential_capacity_sellers:
         memory_bids["i"].append(i)
         memory_bids["j"].append(j)
@@ -210,22 +211,43 @@ def define_bids(
   return pd.DataFrame(bids), pd.DataFrame(memory_bids)
 
 
+def ensure_memory_sellers(
+    potential_sellers, functions_to_share,
+    potential_memory_sellers, Nf
+  ):
+  extra_sellers = np.repeat(potential_memory_sellers, Nf)
+  extra_funcs = np.tile(np.arange(Nf), len(potential_memory_sellers))
+  sellers_all = np.concatenate((potential_sellers, extra_sellers))
+  funcs_all = np.concatenate((functions_to_share, extra_funcs))
+  pairs = np.unique(np.column_stack((sellers_all, funcs_all)), axis=0)
+  return pairs[:,0], pairs[:,1]
+
+
 def evaluate_bids(
     bids: pd.DataFrame, 
     blackboard: np.array, 
     data: dict, 
+    last_y: np.array,
     ell: np.array, 
     p: np.array, 
     capacity: np.array, 
     u0: np.array, 
     auction_options: dict,
     rho: np.array,
-    r: np.array
+    r: np.array,
+    tentatively_start_replicas: bool
   ) -> np.array:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
   # loop over agents and functions
   potential_sellers, functions_to_share = np.nonzero(blackboard)
+  if tentatively_start_replicas:
+    potential_sellers, functions_to_share = ensure_memory_sellers(
+      potential_sellers,
+      functions_to_share,
+      np.nonzero(rho)[0],
+      Nf
+    )
   y = np.zeros((Nn,Nn,Nf))
   additional_replicas = np.zeros((Nn,Nf))
   for j,f in zip(potential_sellers,functions_to_share):
@@ -248,29 +270,45 @@ def evaluate_bids(
     if remaining_capacity == 0 and (
         next_bid_idx > 0 or (next_bid_idx == 0 and len(bids_for_j) > 0)
       ):
-      max_a = int(rho[j] / data[None]["memory_requirement"][f+1])
-      if max_a > 0:
-        a = 1
-        while next_bid_idx < len(bids_for_j) and a <= max_a:
-          # -- check utilization with one more replica
-          q = bids_for_j.iloc[next_bid_idx]["d"]
-          u = data[None]["demand"][(j+1,f+1)] * (
-            ell[j,f] + y[:,j,f].sum() + q
-          ) / (r[j,f] + a)
-          if u <= data[None]["max_utilization"][f+1]:
-            # -- if possible, accomodate one more bid...
-            y[int(bids_for_j.iloc[next_bid_idx]["i"]),j,f] += q
-            next_bid_idx += 1
-            additional_replicas[j,f] = a
-          else:
-            # -- ...otherwhise, try to increase replicas
-            a += 1
-      else:
+      max_a = 0
+      if tentatively_start_replicas:
+        max_a = int(rho[j] / data[None]["memory_requirement"][f+1])
+        if max_a > 0:
+          a = 1
+          while next_bid_idx < len(bids_for_j) and a <= max_a:
+            # -- check utilization with one more replica
+            q = bids_for_j.iloc[next_bid_idx]["d"]
+            u = data[None]["demand"][(j+1,f+1)] * (
+              ell[j,f] + y[:,j,f].sum() + q
+            ) / (r[j,f] + a)
+            if u <= data[None]["max_utilization"][f+1]:
+              # -- if possible, accomodate one more bid...
+              y[int(bids_for_j.iloc[next_bid_idx]["i"]),j,f] += q
+              min_b = min(min_b, bids_for_j.iloc[next_bid_idx]["b"])
+              next_bid_idx += 1
+              additional_replicas[j,f] = a
+            else:
+              # -- ...otherwhise, try to increase replicas
+              a += 1
+      if not tentatively_start_replicas or max_a == 0:
         # if no additional replicas can start, replace existing assignments
-        # TODO
-        raise RuntimeError
+        # -- check who previously won the assignment to j
+        previous_buyers = np.nonzero(last_y[:,j,f])[0]
+        pbidx = 0
+        while next_bid_idx < len(bids_for_j) and pbidx < len(previous_buyers):
+          i = int(bids_for_j.iloc[next_bid_idx]["i"])
+          if (
+              previous_buyers[pbidx] != i and
+                bids_for_j.iloc[next_bid_idx]["b"] > p[j,f]
+            ):
+            q = bids_for_j.iloc[next_bid_idx]["d"]
+            y[previous_buyers[pbidx],j,f] -= q
+            y[int(bids_for_j.iloc[next_bid_idx]["i"]),j,f] += q
+            min_b = min(min_b, bids_for_j.iloc[next_bid_idx]["b"])
+            next_bid_idx += 1
+          pbidx += 1
     # compute utilization and update prices
-    if next_bid_idx > 0:
+    if len(bids_for_j) > 0:
       u = (ell[j,f] + y[:,j,f].sum()) / capacity[j,f]
       p[j,f] = min_b + auction_options["eta"] * (u - u0[j,f])
     else:
@@ -475,19 +513,22 @@ def run(
       total_runtime += (e - s).total_seconds()
       # sellers accept/reject bids
       rmp_omega = np.zeros((Nn,Nf))
+      additional_replicas = np.zeros((Nn,Nf))
       if len(bids) > 0:
         s = datetime.now()
         auction_y, p, additional_replicas = evaluate_bids(
           bids, 
           residual_capacity, 
           data, 
+          y,
           ell, 
           p, 
           capacity, 
           u0, 
           auction_options,
           sp_rho,
-          sp_r
+          sp_r,
+          tentatively_start_replicas = (len(memory_bids) == 0)
         )
         e = datetime.now()
         if verbose > 1:
@@ -538,7 +579,7 @@ def run(
             file = log_stream, 
             flush = True
           )
-      if len(memory_bids) > 0:
+      if len(memory_bids) > 0 and not (additional_replicas > 0).any():
         # tentatively start additional replicas
         s = datetime.now()
         additional_replicas, sp_rho = start_additional_replicas(
@@ -714,7 +755,7 @@ if __name__ == "__main__":
   # config_file = args.config
   # parallelism = args.parallelism
   # disable_plotting = args.disable_plotting
-  config_file = "solutions/integerload_faasmadea2/2026-03-06_14-50-09.014968/config.json"
+  config_file = "solutions/integerload_faasmadea3/2026-03-07_16-22-20.669068/config.json"
   parallelism = 0
   disable_plotting = False
   # load configuration file
