@@ -21,6 +21,7 @@ from utilities import load_configuration
 from models.sp import LSP, LSPr, LSP_fixedr
 
 from networkx import adjacency_matrix
+from collections import deque
 from datetime import datetime
 from copy import deepcopy
 from typing import Tuple
@@ -132,7 +133,8 @@ def define_bids(
     rho: np.array,
     auction_options: dict,
     latency: np.array,
-    fairness: np.array
+    fairness: np.array,
+    force_memory_bids: bool
   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
   # loop over agents and functions
   potential_buyers, functions_to_share = np.nonzero(omega)
@@ -203,7 +205,7 @@ def define_bids(
             memory_bids["j"].append(j)
             memory_bids["f"].append(f)
     # if you could not bid for all, ask for new replicas
-    if assigned < omega[i,f]:
+    if assigned < omega[i,f] or force_memory_bids:
       for j in potential_memory_sellers - potential_capacity_sellers:
         memory_bids["i"].append(i)
         memory_bids["j"].append(j)
@@ -377,6 +379,7 @@ def run(
   run_time_step = config.get("run_time_step", 1)
   checkpoint_interval = config["checkpoint_interval"]
   plot_interval = config.get("plot_interval", max_iterations)
+  patience = config["patience"]
   # generate solution folder
   now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
   solution_folder = f"{base_solution_folder}/{now}"
@@ -470,6 +473,7 @@ def run(
     y = np.zeros((Nn,Nn,Nf))
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn,Nf))
+    n_accepted_queue = deque(maxlen = patience)
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
@@ -499,7 +503,12 @@ def run(
         sp_rho,
         auction_options, 
         latency,
-        fairness
+        fairness,
+        force_memory_bids = (
+          (sp_rho >= 0).any() and
+            len(n_accepted_queue) >= n_accepted_queue.maxlen and 
+              all(x == n_accepted_queue[0] for x in n_accepted_queue)
+        )
       )
       e = datetime.now()
       if verbose > 1:
@@ -545,6 +554,7 @@ def run(
             rmp_omega[n,f] = y[n,:,f].sum()
             if rmp_omega[n,f] > 0:
               fairness[n,f] += 1
+        n_accepted_queue.append(rmp_omega.sum())
         # -- solve "restricted problem"
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, 
@@ -755,7 +765,7 @@ if __name__ == "__main__":
   # config_file = args.config
   # parallelism = args.parallelism
   # disable_plotting = args.disable_plotting
-  config_file = "solutions/integerload_faasmadea3/2026-03-07_16-22-20.669068/config.json"
+  config_file = "solutions/integerload_faasmadea3/2026-03-08_10-52-40.298771/config copy.json"
   parallelism = 0
   disable_plotting = False
   # load configuration file
