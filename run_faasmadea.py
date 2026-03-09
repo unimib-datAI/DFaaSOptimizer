@@ -451,8 +451,8 @@ def run(
     e = datetime.now()
     if verbose > 1:
       print(
-        f"    sp: DONE ",
-        f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})", 
+        f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
+        f"runtime = {sp_runtime['tot']})", 
         file = log_stream, 
         flush = True
       )
@@ -621,7 +621,7 @@ def run(
         best_it_so_far = it
         if verbose > 0:
           print(
-            f"        best solution updated; obj = {cobj}",
+            f"        best solution updated; obj = {spr_obj}",
             file = log_stream,
             flush = True
           )
@@ -761,13 +761,10 @@ def run(
 
 
 if __name__ == "__main__":
-  # args = parse_arguments()
-  # config_file = args.config
-  # parallelism = args.parallelism
-  # disable_plotting = args.disable_plotting
-  config_file = "solutions/integerload_faasmadea3/2026-03-08_10-52-40.298771/config copy.json"
-  parallelism = 0
-  disable_plotting = False
+  args = parse_arguments()
+  config_file = args.config
+  parallelism = args.parallelism
+  disable_plotting = args.disable_plotting
   # load configuration file
   config = load_configuration(config_file)
   # run
