@@ -111,7 +111,7 @@ def parse_log_file(
       complete_path, exp, logs_df, best_sol_df, Nn
     )
   elif "madea" in method_name.lower():
-    logs_df, best_sol_df = parse_faasmadea_log_file(
+    logs_df, best_sol_df = parse_faasmadea0_log_file(
       complete_path, exp, logs_df, best_sol_df, Nn
     )
   return logs_df, best_sol_df
@@ -537,7 +537,7 @@ def parse_faasmadea0_log_file(
       sp_runtime = None
       if "sp" in lines[t_row_idx] and "runtime" in lines[t_row_idx]:
         _, _, sp_runtime = parse.parse(
-          "    sp: DONE  ({}; obj = {}; runtime = {})\n", 
+          "    sp: DONE ({}; obj = {}; runtime = {})\n", 
           lines[t_row_idx]
         )
       t_row_idx += 1
