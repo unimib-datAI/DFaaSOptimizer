@@ -295,19 +295,27 @@ def evaluate_bids(
       if not tentatively_start_replicas or max_a == 0:
         # if no additional replicas can start, replace existing assignments
         # -- check who previously won the assignment to j
+        i_arr, d_arr, b_arr = bids_for_j[["i","d","b"]].to_numpy().T
         previous_buyers = np.nonzero(last_y[:,j,f])[0]
         pbidx = 0
-        while next_bid_idx < len(bids_for_j) and pbidx < len(previous_buyers):
-          i = int(bids_for_j.iloc[next_bid_idx]["i"])
-          if (
-              previous_buyers[pbidx] != i and
-                bids_for_j.iloc[next_bid_idx]["b"] > p[j,f]
-            ):
-            q = bids_for_j.iloc[next_bid_idx]["d"]
-            y[previous_buyers[pbidx],j,f] -= q
-            y[int(bids_for_j.iloc[next_bid_idx]["i"]),j,f] += q
-            min_b = min(min_b, bids_for_j.iloc[next_bid_idx]["b"])
-            next_bid_idx += 1
+        while next_bid_idx < len(i_arr) and pbidx < len(previous_buyers):
+          i = int(i_arr[next_bid_idx])
+          if previous_buyers[pbidx] != i and b_arr[next_bid_idx] > p[j,f]:
+            max_to_remove = last_y[previous_buyers[pbidx],j,f]
+            nbi = next_bid_idx
+            swapped = 0
+            while (
+                nbi < len(i_arr) and 
+                  i_arr[nbi] == i and 
+                    swapped < max_to_remove
+              ):
+              q = d_arr[nbi]
+              y[previous_buyers[pbidx],j,f] -= q
+              y[i,j,f] += q
+              swapped += q
+              min_b = min(min_b, b_arr[nbi])
+              nbi += 1
+            next_bid_idx += (nbi if nbi > 0 else 1)
           pbidx += 1
     # compute utilization and update prices
     if len(bids_for_j) > 0:
