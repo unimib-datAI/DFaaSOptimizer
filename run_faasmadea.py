@@ -19,10 +19,12 @@ from run_faasmacro import (
 )
 from utilities import load_configuration
 from models.sp import LSP, LSPr, LSP_fixedr
+from models.model import PYO_VAR_TYPE
 
 from networkx import adjacency_matrix
 from collections import deque
 from datetime import datetime
+import pyomo.environ as pyo
 from copy import deepcopy
 from typing import Tuple
 import pandas as pd
@@ -31,6 +33,9 @@ import argparse
 import json
 import sys
 import os
+
+
+VAR_TYPE = int if PYO_VAR_TYPE == pyo.NonNegativeIntegers else float
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -183,18 +188,28 @@ def define_bids(
         if idx < len(sellers_order) - 1:
           delta = utility[sellers_order[idx]] - utility[sellers_order[idx+1]]
         b = p[j,f] + auction_options["epsilon"] + delta
-        d = 1
-        while (d < int(min(blackboard[j,f], omega[i,f])) + 1) and (
-            assigned < omega[i,f]
-          ):
+        if auction_options["unit_bids"]:
+          d = 1
+          while (d < int(min(blackboard[j,f], omega[i,f])) + 1) and (
+              assigned < omega[i,f]
+            ):
+            bids["i"].append(i)
+            bids["f"].append(f)
+            bids["j"].append(j)
+            bids["d"].append(1)
+            bids["b"].append(b)
+            bids["utility"].append(utility[idx])
+            assigned += 1
+            d += 1
+        else:
+          d = VAR_TYPE(min(blackboard[j,f], (omega[i,f] - assigned)))
           bids["i"].append(i)
           bids["f"].append(f)
           bids["j"].append(j)
-          bids["d"].append(1)
+          bids["d"].append(d)
           bids["b"].append(b)
           bids["utility"].append(utility[idx])
-          assigned += 1
-          d += 1
+          assigned += d
         idx += 1
       # -- if you could not bid for everything, ask also for new replicas
       if assigned < omega[i,f]:
