@@ -148,8 +148,12 @@ def compare_across_folders(
     models = ["LoadManagementModel", "FaaS-MACrO"]
   # plot
   os.makedirs(plot_folder, exist_ok = True)
-  dev_plot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
-  dev_barplot_by_key(all_obj, all_runtime, all_rej, key, key_label, plot_folder)
+  dev_plot_by_key(
+    all_obj, all_runtime, all_rej, key, key_label, plot_folder, models
+  )
+  dev_barplot_by_key(
+    all_obj, all_runtime, all_rej, key, key_label, plot_folder, models
+  )
   plot_by_key(
     all_obj, 
     all_runtime, 
