@@ -821,9 +821,9 @@ def run(
   ):
   seed = base_config["seed"]
   log_on_file = True if base_config["verbose"] > 0 else False
-  exp_values = base_config["limits"].get(
-    loop_over, base_config["limits"]["neighborhood"][loop_over]
-  )
+  exp_values = base_config["limits"].get(loop_over)
+  if exp_values is None:
+    exp_values = base_config["limits"]["neighborhood"][loop_over]
   disable_plotting = not enable_plotting
   from_instances = base_config["limits"].get("path", None)
   generate_only = "generate_only" in methods
