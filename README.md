@@ -35,7 +35,7 @@ pip install -r requirements.txt
 ```
 
 > [!NOTE]
-> The provided code was tested under Python version 3.10.15
+> The provided code was tested under Python versions 3.10.15 and 3.12.3
 
 > [!CAUTION]
 > After installing [Pyomo](https://www.pyomo.org), it is necessary to check 
