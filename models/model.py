@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 
 
+# PYO_VAR_TYPE = pyo.NonNegativeReals
 PYO_VAR_TYPE = pyo.NonNegativeIntegers
 PYO_PARAM_TYPE = pyo.NonNegativeReals
 
@@ -69,7 +70,7 @@ class BaseAbstractModel():
     else:
       try:
         _ = write_iis(instance, "infeas.ilp", "gurobi")
-      except RuntimeError:
+      except Exception as e:
         with open(f"{solution['termination_condition']}.err", "w") as ost:
           instance.pprint(ostream = ost)
     return solution
