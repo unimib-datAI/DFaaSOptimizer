@@ -37,6 +37,14 @@ pip install -r requirements.txt
 > [!NOTE]
 > The provided code was tested under Python version 3.10.15
 
+> [!CAUTION]
+> After installing [Pyomo](https://www.pyomo.org), it is necessary to check 
+> that sub-optimal solutions can be saved if the model exits due to exceeding 
+> the maximum time limit (but a feasible solution exists). To do so, remove 
+> line `result.solution.clear()` (l. 669 in pyomo versions 6.9.0, 6.9.2) from 
+> `.venv/lib/python3.10/site-packages/pyomo/opt/base/solvers.py` (method 
+> `OptSolver.solve`, after calling `_model.solutions.load_from`)
+
 ## How to run experiments
 
 ### LoadManagementModel
