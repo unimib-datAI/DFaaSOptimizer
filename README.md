@@ -17,6 +17,30 @@ methods:
 - [How to configure experiments](#how-to-configure-experiments)
 - [Compare results](#compare-results)
 
+LMM and FaaS-MACrO were presented in a 
+[paper](https://www.sciencedirect.com/science/article/pii/S1383762126001050) 
+published in the Journal of Systems Architecture. If you use or refer to these 
+methods in your work, please cite:
+
+```
+@article{filippini2026jsa,
+  title = {{Distributed replica allocation and load balancing for Edge-Cloud 
+  FaaS: A cooperative multi-agent orchestration approach}},
+  journal = {Journal of Systems Architecture},
+  pages = {103787},
+  year = {2026},
+  issn = {1383-7621},
+  doi = {https://doi.org/10.1016/j.sysarc.2026.103787},
+  url = {https://www.sciencedirect.com/science/article/pii/S1383762126001050},
+  author = {Federica Filippini and Marin Lujak and Michele Ciavotta},
+}
+```
+
+> [!NOTE]
+> The specific version of the code used for the experiments published in 
+> the paper above is available at 
+> [25.11.22](https://github.com/unimib-datAI/DFaaSOptimizer/releases/tag/25.11.22)
+
 ## Installation instructions
 
 We strongly recommend running the code in a dedicated Python virtual 
