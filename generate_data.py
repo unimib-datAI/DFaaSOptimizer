@@ -214,11 +214,19 @@ def generate_weights(
     gamma = np.zeros((Nn,Nf))
     delta = np.zeros((Nn,Nf))
     if limits["weights"].get("type", "homogeneous") == "homogeneous":
-      b = [
-        alpha[f] * generate_random_float(
-          rng, limits["weights"]["beta_multiplier"]
-        ) for f in range(Nf)
-      ]
+      b = None
+      if "beta_multiplier" in limits["weights"]:
+        b = [
+          alpha[f] * generate_random_float(
+            rng, limits["weights"]["beta_multiplier"]
+          ) for f in range(Nf)
+        ]
+      else:
+        b = [
+          generate_random_float(
+            rng, limits["weights"]["beta"]
+          ) for _ in range(Nf)
+        ]
       g = [
         generate_random_float(
           rng, limits["weights"]["gamma"]
