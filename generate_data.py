@@ -206,9 +206,12 @@ def generate_weights(
   ) -> Tuple[list, np.array, np.array, np.array]:
   # weights (different for each function, equal for all nodes)
   alpha, beta, gamma, delta = [None] * 4
+  weights_generator = generate_random_float if limits["weights"].get(
+    "dtype", "float"
+  ) == "float" else generate_random_int
   if "initialization_time" not in limits["weights"]:
     alpha = [
-      generate_random_float(rng, limits["weights"]["alpha"]) for _ in range(Nf)
+      weights_generator(rng, limits["weights"]["alpha"]) for _ in range(Nf)
     ]
     beta = np.zeros((Nn,Nn,Nf))
     gamma = np.zeros((Nn,Nf))
@@ -223,12 +226,12 @@ def generate_weights(
         ]
       else:
         b = [
-          generate_random_float(
+          weights_generator(
             rng, limits["weights"]["beta"]
           ) for _ in range(Nf)
         ]
       g = [
-        generate_random_float(
+        weights_generator(
           rng, limits["weights"]["gamma"]
         ) for _ in range(Nf)
       ]
@@ -248,7 +251,7 @@ def generate_weights(
     else:
       for n1 in range(Nn - 1):
         g = [
-          generate_random_float(
+          weights_generator(
             rng, limits["weights"]["gamma"]
           ) for _ in range(Nf)
         ]
