@@ -68,10 +68,11 @@ class BaseAbstractModel():
       # get objective function value
       solution["obj"] = pyo.value(instance.OBJ)
     else:
+      now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
       try:
-        _ = write_iis(instance, "infeas.ilp", "gurobi")
+        _ = write_iis(instance, f"infeas_{now}.ilp", "gurobi")
       except Exception as e:
-        with open(f"{solution['termination_condition']}.err", "w") as ost:
+        with open(f"{solution['termination_condition']}_{now}.err","w") as ost:
           instance.pprint(ostream = ost)
     return solution
 
