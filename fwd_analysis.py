@@ -1,7 +1,7 @@
+from generators.load_generator import LoadGenerator
 from run_centralized_model import encode_solution
-from utilities import load_requests_traces
+from utilities.common import load_requests_traces
 from postprocessing import load_solution
-from load_generator import LoadGenerator
 
 import matplotlib.pyplot as plt
 from typing import Tuple

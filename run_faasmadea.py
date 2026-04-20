@@ -17,7 +17,7 @@ from run_faasmacro import (
   decode_solutions,
   solve_subproblem
 )
-from utilities import load_configuration
+from utilities.common import load_configuration
 from models.sp import LSP, LSPr, LSP_fixedr
 from models.model import PYO_VAR_TYPE
 

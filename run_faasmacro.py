@@ -10,8 +10,8 @@ from run_centralized_model import (
   save_solution,
   save_checkpoint
 )
-from utilities import load_configuration
-from generate_data import update_data
+from utilities.common import load_configuration
+from generators.generate_data import update_data
 from postprocessing import load_solution, plot_history
 
 from models.rmp import RMPAbstractModel, LRMP
