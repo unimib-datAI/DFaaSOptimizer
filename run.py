@@ -4,7 +4,7 @@ from run_centralized_model import run as run_centralized
 from run_faasmacro import run as run_iterations
 from run_faasmadea import run as run_auction
 from postprocessing import load_models_results
-from utilities.common import reconcile_paths
+from utils.common import reconcile_paths
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt

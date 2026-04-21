@@ -15,7 +15,7 @@ from run_faasmacro import (
   decode_solutions,
   solve_subproblem
 )
-from utilities.common import load_configuration
+from utils.common import load_configuration
 from models.sp import LSP, LSPr
 
 from networkx import adjacency_matrix

@@ -1,4 +1,4 @@
-from utilities.common import (
+from utils.common import (
   delete_tuples, 
   float_to_int, 
   load_configuration,

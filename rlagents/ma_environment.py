@@ -2,7 +2,7 @@ from RL4CC.environment import BaseMultiAgentEnvironment
 from RL4CC.callbacks import BaseCallbacks
 
 from generators.generate_load import generate_load_traces
-from utilities.common import (
+from utils.common import (
   load_base_instance, load_configuration, load_requests_traces
 )
 

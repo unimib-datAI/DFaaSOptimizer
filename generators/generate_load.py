@@ -1,4 +1,4 @@
-from utilities.common import load_requests_traces, NpEncoder
+from utils.common import load_requests_traces, NpEncoder
 from generators.load_generator import LoadGenerator
 
 import numpy as np

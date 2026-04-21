@@ -1,4 +1,4 @@
-from utilities import load_base_instance, load_requests_traces
+from utils.common import load_base_instance, load_requests_traces
 
 from copy import deepcopy
 from typing import Tuple

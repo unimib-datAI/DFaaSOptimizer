@@ -10,7 +10,7 @@ from run_centralized_model import (
   save_solution,
   save_checkpoint
 )
-from utilities.common import load_configuration
+from utils.common import load_configuration
 from generators.generate_data import update_data
 from postprocessing import load_solution, plot_history
 

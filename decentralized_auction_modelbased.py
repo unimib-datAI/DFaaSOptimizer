@@ -19,7 +19,7 @@ from run_faasmacro import (
   prepare_master_data,
   solve_subproblem
 )
-from utilities.common import load_configuration
+from utils.common import load_configuration
 from models.auction_models import (
   SellerNodeModel, 
   BuyerNodeModel, 
