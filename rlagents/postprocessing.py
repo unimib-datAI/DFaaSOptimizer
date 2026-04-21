@@ -514,7 +514,7 @@ def single_exp_postprocessing(
         ] + [
           f"fwd_utility-{a}" for a in agents
         ] + [
-          f"cloud_utility-{a}" for a in agents
+          f"cloud_penalty-{a}" for a in agents
         ], 
         moving_average_window, 
         plot_folder, 

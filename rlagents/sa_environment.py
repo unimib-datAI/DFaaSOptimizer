@@ -131,9 +131,9 @@ class FaaSRLEnvironment(BaseEnvironment):
         shape = (1,),
         dtype = np.float32
       ),
-      "previous_cloud_utility": Box(
-        low = 0.0,
-        high = 1.0,
+      "previous_cloud_penalty": Box(
+        low = -1.0,
+        high = 0.0,
         shape = (1,),
         dtype = np.float32
       ),
@@ -202,7 +202,7 @@ class FaaSRLEnvironment(BaseEnvironment):
       # -- utility
       "loc_utility": 0.0,
       "fwd_utility": 0.0,
-      "cloud_utility": 0.0,
+      "cloud_penalty": 0.0,
       "cobj": 0.0,
       # -- feasibility
       "feasible": True,
@@ -222,8 +222,8 @@ class FaaSRLEnvironment(BaseEnvironment):
       "previous_fwd_utility": np.array(
         [self.info["fwd_utility"]], dtype = np.float32
       ),
-      "previous_cloud_utility": np.array(
-        [self.info["cloud_utility"]], dtype = np.float32
+      "previous_cloud_penalty": np.array(
+        [self.info["cloud_penalty"]], dtype = np.float32
       ),
       "previous_r": deepcopy(self.info["n_replicas"]),
       "previous_cpu_utilization": deepcopy(self.info["cpu_utilization"]),
@@ -353,7 +353,7 @@ class FaaSRLEnvironment(BaseEnvironment):
     reward = float(cobj) if feasible else 0.0
     self.info["loc_utility"] = 0.0
     self.info["fwd_utility"] = 0.0
-    self.info["cloud_utility"] = 0.0
+    self.info["cloud_penalty"] = 0.0
     return reward
   
   def simulate_action(self, action_dict):

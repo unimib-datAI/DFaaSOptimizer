@@ -5,7 +5,7 @@ from generators.generate_load import generate_load_traces
 from utils.common import (
   load_base_instance, load_configuration, load_requests_traces
 )
-from sa_environment import _convert_arrival_rate_dist
+from rlagents.sa_environment import _convert_arrival_rate_dist
 
 from ray.rllib.utils.spaces.simplex import Simplex
 from ray.rllib.env.env_context import EnvContext
@@ -113,9 +113,9 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
           shape=(1,),
           dtype = np.float32
         ),
-        "previous_cloud_utility": Box(
-          low = 0.0,
-          high = 1.0,
+        "previous_cloud_penalty": Box(
+          low = -1.0,
+          high = 0.0,
           shape=(1,),
           dtype = np.float32
         ),
@@ -175,7 +175,7 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
         # -- utility
         "loc_utility": 0.0,
         "fwd_utility": 0.0,
-        "cloud_utility": 0.0
+        "cloud_penalty": 0.0
       }
       # -- forward
       for j in self.agent_neighbors[n]:
@@ -208,8 +208,8 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
       obs[agent]["previous_fwd_utility"] = np.array(
         [self.info[agent]["fwd_utility"]], dtype = np.float32
       )
-      obs[agent]["previous_cloud_utility"] = np.array(
-        [self.info[agent]["cloud_utility"]], dtype = np.float32
+      obs[agent]["previous_cloud_penalty"] = np.array(
+        [self.info[agent]["cloud_penalty"]], dtype = np.float32
       )
       # CPU utilization
       obs[agent]["previous_cpu_utilization"] = np.array(
@@ -301,7 +301,7 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
     # loop over agents
     for agent in self.agents:
       n,f = _get_n_f(agent)
-      loc_utility, fwd_utility, cloud_utility = 0.0, 0.0, 0.0
+      loc_utility, fwd_utility, cloud_penalty = 0.0, 0.0, 0.0
       # check if the solution is feasible
       if self.info[agent]["cpu_utilization"] <= self.instance_data[
           "max_utilization"
@@ -324,12 +324,12 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
             ) / self.info[agent]["input_rate"]
         self.info[agent]["fwd_utility"] = float(fwd_utility)
         # -- offloading to cloud
-        cloud_utility = (
+        cloud_penalty = (
           self.instance_data["gamma"][(n,f)] * self.info[agent]["rej"]
         ) / self.info[agent]["input_rate"]
-        self.info[agent]["cloud_utility"] = float(cloud_utility)
+        self.info[agent]["cloud_penalty"] = - float(cloud_penalty)
       # reward
-      reward[agent] = loc_utility + fwd_utility + cloud_utility
+      reward[agent] = loc_utility + fwd_utility + cloud_penalty
     return reward
   
   def simulate_action(self, action_dict):
