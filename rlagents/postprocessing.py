@@ -68,6 +68,93 @@ def parse_arguments() -> argparse.Namespace:
   return args
 
 
+def load_json_file(
+    exp_folder: str,
+    last_iter: int,
+    fname: str = "evaluations",
+    reload_all: bool = False
+  ) -> Tuple[pd.DataFrame, pd.DataFrame, str]:
+  """
+  Load results from the evaluations.json file
+  """
+  all_hist_stats = pd.DataFrame()
+  all_episode_hist_stats = pd.DataFrame()
+  all_policy_hist_stats = pd.DataFrame()
+  files_exist = False
+  if not reload_all:
+    summary_folder = os.path.join(exp_folder, "summary", fname)
+    files_exist, sfx = summary_files_exist(summary_folder)
+    compression = "gzip" if sfx != "" else None
+    if files_exist:
+      print("Loading existing files...")
+      all_hist_stats = pd.read_csv(
+        os.path.join(summary_folder, f"all_hist_stats.csv{sfx}"), 
+        compression = compression
+      )
+      print("  done (all_hist_stats)")
+      all_episode_hist_stats = pd.read_csv(
+        os.path.join(summary_folder, f"all_episode_hist_stats.csv{sfx}"), 
+        compression = compression
+      )
+      print("  done (all_episode_hist_stats)")
+      all_policy_hist_stats = pd.read_csv(
+        os.path.join(summary_folder, f"all_policy_hist_stats.csv{sfx}"), 
+        compression = compression
+      )
+      print("  done (all_policy_hist_stats)")
+  # load evaluations file
+  if not files_exist:
+    results = []
+    with open(os.path.join(exp_folder, f"{fname}.json"), "r") as istream:
+      if fname.startswith("eval"):
+        results = json.load(istream)["evaluations"]
+    pfx = "" if fname == "result" else "after_"
+    for result_line in results:
+      it = result_line[f"{pfx}training_iteration"]
+      print(f"Iter {it}")
+      # process results only if they are not already available
+      if it > last_iter:
+        # hist stats
+        hist_stats = {
+          k: v for k, v in result_line["hist_stats"].items() if not (
+            "episode_" in k or "policy_" in k or "worker_index" in k
+          )
+        }
+        hist_stats = pd.DataFrame(hist_stats)
+        episode_hist_stats = pd.DataFrame({
+          k: v for k, v in result_line["hist_stats"].items() if "episode_" in k
+        })
+        policy_hist_stats = pd.DataFrame({
+          k: v for k, v in result_line["hist_stats"].items() if "policy_" in k
+        })
+        # add information about the episode number
+        hist_stats["episode"] = [-1] * len(hist_stats)
+        # for _, temp in hist_stats.groupby("current_time"):
+        #   hist_stats.loc[temp.index, "episode"] = range(len(temp))
+        # concatenate
+        hist_stats["iter"] = [it] * len(hist_stats)
+        hist_stats["step"] = range(len(hist_stats))
+        episode_hist_stats["iter"] = [it] * len(episode_hist_stats)
+        policy_hist_stats["iter"] = [it] * len(policy_hist_stats)
+        all_hist_stats = pd.concat(
+          [all_hist_stats, hist_stats], ignore_index = True
+        )
+        all_episode_hist_stats = pd.concat(
+          [all_episode_hist_stats, episode_hist_stats], ignore_index = True
+        )
+        all_policy_hist_stats = pd.concat(
+          [all_policy_hist_stats, policy_hist_stats], ignore_index = True
+        )
+  return (
+    all_hist_stats, 
+    all_episode_hist_stats, 
+    all_policy_hist_stats, 
+    compression,
+    not files_exist
+  )
+
+
+
 def load_progress_file(
     exp_folder: str, 
     last_iter: int, 
@@ -113,6 +200,10 @@ def load_progress_file(
         os.path.join(exp_folder, f"{fname}.csv.gz"), compression = "gzip"
       )
       compression = "gzip"
+    elif os.path.exists(os.path.join(exp_folder, f"{fname}.json")):
+      return load_json_file(
+        exp_folder, last_iter, fname, reload_all
+      )
     # build dataframes
     pfx = "" if fname == "progress" else "after_"
     for it in progress[f"{pfx}training_iteration"]:
@@ -428,7 +519,7 @@ def single_exp_postprocessing(
     plot_iterations: list = [],
     eval_only: bool = False
   ) -> dict:
-  scenarios = ["evaluations"] if eval_only else ["progress"]
+  scenarios = ["evaluations"] if eval_only else ["progress", "evaluations"]
   results = {}
   for scenario in scenarios:
     print(80 * "-")
@@ -520,6 +611,16 @@ def single_exp_postprocessing(
         plot_folder, 
         "utilities"
       )
+      # -- centralized objective
+      plot_moving_average(
+        avg_stats_unpacked, 
+        [
+          f"previous_cobj-{a}" for a in agents
+        ], 
+        moving_average_window, 
+        plot_folder, 
+        "cobj"
+      )
       # -- number of replicas
       plot_moving_average(
         avg_stats_unpacked, 
@@ -560,6 +661,17 @@ def single_exp_postprocessing(
             moving_average_window, 
             plot_folder, 
             f"n_replicas_detailed-iter_{iteration}",
+            alpha = 0.7
+          )
+          # -- centralized objective
+          plot_moving_average(
+            all_hist_stats, 
+            [
+              f"previous_cobj-{a}" for a in agents
+            ], 
+            moving_average_window, 
+            plot_folder, 
+            f"cobj_detailed-iter_{iteration}",
             alpha = 0.7
           )
     results[scenario] = {
