@@ -12,11 +12,11 @@ from run_centralized_model import (
 )
 from run_faasmacro import (
   combine_solutions, 
-  compute_centralized_objective,
   compute_social_welfare,
   decode_solutions,
   solve_subproblem
 )
+from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.sp import LSP, LSPr, LSP_fixedr
 from models.model import PYO_VAR_TYPE
