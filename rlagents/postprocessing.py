@@ -1,5 +1,6 @@
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
+from copy import deepcopy
 from typing import Tuple
 import pandas as pd
 import numpy as np
@@ -215,11 +216,11 @@ def load_progress_file(
         hist_stats_cols = [
           c for c in row.columns if c.startswith("env_runners/hist_stats/")
         ]
-        hist_stats_dict = {
-          c.split("/")[-1]: ast.literal_eval(
+        hist_stats_dict = {}
+        for c in hist_stats_cols:
+          hist_stats_dict[c.split("/")[-1]] = ast.literal_eval(
             row[c].iloc[0]
-          ) for c in hist_stats_cols
-        }
+          )
         hist_stats = {
           k: v for k, v in hist_stats_dict.items() if not (
             "episode_" in k or "policy_" in k or "worker_index" in k
@@ -273,8 +274,9 @@ def plot_action(
     nrows = len(agents), ncols = 1, figsize = (30,4 * len(agents))
   )
   for idx, agent in enumerate(agents):
+    sfx = f"-{agent}" if agent != "default_policy" else ""
     # -- input load
-    to_plot[f"{pfx}input_rate-{agent}"].plot(
+    to_plot[f"{pfx}input_rate{sfx}"].plot(
       linewidth = 2,
       marker = ".",
       color = "k",
@@ -284,9 +286,9 @@ def plot_action(
     )
     # -- action
     to_plot[[
-      f"loc-{agent}", 
-      f"total_fwd-{agent}", 
-      f"rej-{agent}"
+      f"loc{sfx}", 
+      f"total_fwd{sfx}", 
+      f"rej{sfx}"
     ]].plot.bar(
       stacked = True,
       ax = axs[idx],
@@ -387,15 +389,20 @@ def plot_moving_average(
       new_linestyle = "solid"
     linestyles.append(new_linestyle)
     # -- color
+    idx = 0
     if "-" in column or column.endswith("_reward"):
-      idx = 0
       if "-" in column:
-        idx = int(column.split("-")[-1])
+        agent = column.split("-")[-1]
+        if "default" not in agent:
+          idx = int(agent)
       elif column.startswith("policy_") and column.endswith("_reward"):
         agent = column.replace("policy_", "")
         agent = agent.replace("_reward", "")
-        idx = int(agent)
-      colors.append(all_colors[idx])
+        if agent != "default":
+          idx = int(agent)
+    else:
+      idx += len(colors)
+    colors.append(all_colors[idx])
   # compute average
   avg = data[columns].rolling(
     window = window,
@@ -510,6 +517,78 @@ def unpack_step_values(
   return new_df, all_agents
 
 
+def build_column_names(basename: str, agents: list) -> list:
+  colnames = []
+  if len(agents) > 1 or agents[0] != "default_policy":
+    colnames = [f"{basename}-{a}" for a in agents]
+  else:
+    colnames = [basename]
+  return colnames
+
+
+def expand_agents_data(
+    all_hist_stats: pd.DataFrame
+  ) -> Tuple[pd.DataFrame, list]:
+  agents = set()
+  expanded_hist_stats = {}
+  for col in all_hist_stats.columns:
+    firstrow = all_hist_stats[col].iloc[0]
+    if isinstance(firstrow, list):
+      Nn = len(firstrow)
+      Nf = len(firstrow[0]) if col != "fwd" else len(firstrow[0][0])
+      for n in range(1, Nn+1):
+        for f in range(1, Nf+1):
+          agents.add(f"{n}_{f}")
+          for idx in range(len(all_hist_stats[col])):
+            if col != "fwd":
+              if f"{col}-{n}_{f}" not in expanded_hist_stats:
+                expanded_hist_stats[f"{col}-{n}_{f}"] = []
+              if all_hist_stats[col].iloc[idx] is not None:
+                expanded_hist_stats[f"{col}-{n}_{f}"].append(
+                  all_hist_stats[col].iloc[idx][n-1][f-1]
+                )
+              else:
+                expanded_hist_stats[f"{col}-{n}_{f}"].append(None)
+            else:
+              for j in range(1, Nn+1):
+                if f"{col}_to_{j}_{f}-{n}_{f}" not in expanded_hist_stats:
+                  expanded_hist_stats[f"{col}_to_{j}_{f}-{n}_{f}"] = []
+                if all_hist_stats[col].iloc[idx] is not None:
+                  expanded_hist_stats[f"{col}_to_{j}_{f}-{n}_{f}"].append(
+                    all_hist_stats[col].iloc[idx][n-1][j-1][f-1]
+                  )
+                else:
+                  expanded_hist_stats[f"{col}_to_{j}_{f}-{n}_{f}"].append(None)
+    elif isinstance(firstrow, dict):
+      nodes = list(firstrow.keys())
+      functions = [
+        int(k.replace("xyz_", "")) for k in firstrow[nodes[0]] if k != "r"
+      ]
+      for n in nodes:
+        for f in functions:
+          agents.add(f"{n}_{f}")
+          for idx in range(len(all_hist_stats[col])):
+            if f"action_n_replicas-{n}_{f}" not in expanded_hist_stats:
+              expanded_hist_stats[f"action_n_replicas-{n}_{f}"] = []
+            if f"action-{n}_{f}" not in expanded_hist_stats:
+              expanded_hist_stats[f"action-{n}_{f}"] = []
+            if all_hist_stats[col].iloc[idx] is not None:
+              expanded_hist_stats[f"action_n_replicas-{n}_{f}"].append(
+                all_hist_stats[col].iloc[idx][n]["r"]
+              )
+              expanded_hist_stats[f"action-{n}_{f}"].append(
+                all_hist_stats[col].iloc[idx][n][f"xyz_{f}"]
+              )
+            else:
+              expanded_hist_stats[f"action_n_replicas-{n}_{f}"].append(None)
+              expanded_hist_stats[f"action-{n}_{f}"].append(None)
+    else:
+      expanded_hist_stats[col] = all_hist_stats[col].values
+  expanded_hist_stats = pd.DataFrame(expanded_hist_stats)
+  expanded_hist_stats["iter"] = all_hist_stats["iter"]
+  return expanded_hist_stats, agents
+
+
 def single_exp_postprocessing(
     exp_folder: str, 
     reload_all: bool = False,
@@ -562,8 +641,11 @@ def single_exp_postprocessing(
     summary_folder = os.path.join(exp_folder, "summary", scenario)
     sfx = ".gz" if compression is not None else ""
     avg_stats_unpacked = pd.DataFrame()
+    expanded_agents = deepcopy(agents)
     new_results_loaded = True
     if new_results_loaded:
+      if len(agents) == 1 and agents[0] == "default_policy":
+        all_hist_stats, expanded_agents = expand_agents_data(all_hist_stats)
       avg_stats_unpacked = all_hist_stats.groupby(
         "iter"
       ).mean(numeric_only = True).reset_index()
@@ -600,80 +682,91 @@ def single_exp_postprocessing(
       # -- utility
       plot_moving_average(
         avg_stats_unpacked, 
-        [
-          f"loc_utility-{a}" for a in agents
-        ] + [
-          f"fwd_utility-{a}" for a in agents
-        ] + [
-          f"cloud_penalty-{a}" for a in agents
-        ], 
+        build_column_names(
+          "loc_utility", agents
+        ) + build_column_names(
+          "fwd_utility", agents
+        ) + build_column_names(
+          "cloud_penalty", agents
+        ), 
         moving_average_window, 
         plot_folder, 
         "utilities"
       )
       # -- centralized objective
-      plot_moving_average(
-        avg_stats_unpacked, 
-        [
-          f"previous_cobj-{a}" for a in agents
-        ], 
-        moving_average_window, 
-        plot_folder, 
-        "cobj"
-      )
+      try:
+        plot_moving_average(
+          avg_stats_unpacked, 
+          build_column_names("previous_cobj", agents), 
+          moving_average_window, 
+          plot_folder, 
+          "cobj"
+        )
+      except KeyError:
+        plot_moving_average(
+          avg_stats_unpacked, 
+          build_column_names("cobj", agents), 
+          moving_average_window, 
+          plot_folder, 
+          "cobj"
+        )
       # -- number of replicas
       plot_moving_average(
         avg_stats_unpacked, 
-        [
-          f"n_replicas-{a}" for a in agents
-        ], 
+        build_column_names("n_replicas", expanded_agents),
         moving_average_window, 
         plot_folder, 
         "n_replicas_avg"
       )
       # -- "average" actions
-      plot_action(avg_stats_unpacked, agents, plot_folder)
+      plot_action(avg_stats_unpacked, expanded_agents, plot_folder)
       # -- "average" detailed forwarding choices
-      plot_forward(avg_stats_unpacked, agents, plot_folder)
+      plot_forward(avg_stats_unpacked, expanded_agents, plot_folder)
       # -- detailed info in specific iterations
       for iteration in plot_iterations:
         if iteration in all_hist_stats["iter"].values:
           # ---- actions and detailed forwarding
           plot_action(
             all_hist_stats[all_hist_stats["iter"] == iteration], 
-            agents, 
+            expanded_agents, 
             plot_folder,
             f"-iter_{iteration}",
             use_previous = True
           )
           plot_forward(
             all_hist_stats[all_hist_stats["iter"] == iteration], 
-            agents, 
+            expanded_agents, 
             plot_folder,
             f"-iter_{iteration}"
           )
           # -- number of replicas
           plot_moving_average(
             all_hist_stats, 
-            [
-              f"n_replicas-{a}" for a in agents
-            ], 
+            build_column_names("n_replicas", expanded_agents), 
             moving_average_window, 
             plot_folder, 
             f"n_replicas_detailed-iter_{iteration}",
             alpha = 0.7
           )
           # -- centralized objective
-          plot_moving_average(
-            all_hist_stats, 
-            [
-              f"previous_cobj-{a}" for a in agents
-            ], 
-            moving_average_window, 
-            plot_folder, 
-            f"cobj_detailed-iter_{iteration}",
-            alpha = 0.7
-          )
+          try:
+            plot_moving_average(
+              all_hist_stats, 
+              build_column_names("previous_cobj", agents),
+              moving_average_window, 
+              plot_folder, 
+              f"cobj_detailed-iter_{iteration}",
+              alpha = 0.7
+            )
+          except KeyError:
+            plot_moving_average(
+              all_hist_stats, 
+              build_column_names("cobj", agents),
+              moving_average_window, 
+              plot_folder, 
+              f"cobj_detailed-iter_{iteration}",
+              alpha = 0.7
+            )
     results[scenario] = {
       "all_hist_stats": all_hist_stats,
       "all_episode_hist_stats": all_episode_hist_stats,
