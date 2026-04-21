@@ -1,4 +1,4 @@
-from rlagents.environment import FaaSMARLEnvironment
+from rlagents.ma_environment import FaaSMARLEnvironment
 from ray.tune.registry import register_env
 register_env("FaaSMARLEnvironment", lambda config: FaaSMARLEnvironment(config))
 
