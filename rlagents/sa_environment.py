@@ -329,7 +329,7 @@ class FaaSRLEnvironment(BaseEnvironment):
     cobj = compute_centralized_objective(
       sp_data, self.info["loc"], self.info["fwd"], self.info["rej"]
     )
-    self.info["cobj"] = cobj
+    self.info["cobj"] = float(cobj)
     # first attempt: reward only if feasible
     reward = float(cobj) if feasible else float(-1.0)
     self.info["loc_utility"] = 0.0
@@ -338,7 +338,11 @@ class FaaSRLEnvironment(BaseEnvironment):
     return reward
   
   def simulate_action(self, action_dict):
-    self.info["action"] = action_dict
+    self.info["action"] = {
+      k1: {
+        k2: v2.tolist() for k2,v2 in v1.items()
+      } for k1,v1 in action_dict.items()
+    }
     # tot_incoming_rate: total incoming requests for each agent (enqueued 
     # requests + those sent by neighbors)
     x = np.zeros((self.Nn,self.Nf), dtype = np.int32)
