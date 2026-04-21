@@ -308,49 +308,30 @@ class FaaSRLEnvironment(BaseEnvironment):
       obs = self._dummy_terminal_obs
     return obs, reward, done, truncated, obs_info
   
-  def check_feasibility(self) -> bool:
-    for n in self.nodes:
-      for f in self.functions:
-        # no traffic loss
-        managed_load = (
-          self.info["loc"][n-1,f-1] + 
-            self.info["total_fwd"][n-1,f-1] + 
-              self.info["rej"][n-1,f-1]
-        )
-        load = self.workload_trace[f-1][n-1][self.current_time]
-        if abs(managed_load - load) > 1e-3:
-          return False, f"no traffic loss ({n},{f}): {managed_load} != {load}"
-        # max utilization
-        utilization = self.info["cpu_utilization"][n-1,f-1]
-        max_utilization = self.instance_data["max_utilization"][f]
-        if utilization - max_utilization > 1e-5:
-          return False, f"max utilization ({n},{f}): {utilization}"
-    # memory capacity
-    for n, ram in self.instance_data["memory_capacity"].items():
-      used_memory = 0
-      for f, req_memory in self.instance_data["memory_requirement"].items():
-        used_memory += self.info["n_replicas"][n-1,f-1] * req_memory
-        if used_memory - ram > 1e-5:
-          return False, f"memory capacity ({n},{f}): {used_memory} > {ram}"
-    return True, ""
-  
   def compute_reward(self):
-    # check feasibility
-    feasible, why_feasible = self.check_feasibility()
-    self.info["feasible"] = feasible
-    self.info["why_feasible"] = why_feasible
-    # compute centralized objective
     sp_data = {None: deepcopy(self.instance_data)}
     sp_data[None]["incoming_load"] = {
       (n,f): self.info["input_rate"][n-1,f-1] \
         for n in self.nodes for f in self.functions
     }
+    # check feasibility
+    feasible, why_feasible = self.check_feasibility(
+      self.info["loc"],
+      self.info["total_fwd"],
+      self.info["rej"],
+      self.info["n_replicas"],
+      self.info["cpu_utilization"],
+      sp_data
+    )
+    self.info["feasible"] = feasible
+    self.info["why_feasible"] = why_feasible
+    # compute centralized objective
     cobj = compute_centralized_objective(
       sp_data, self.info["loc"], self.info["fwd"], self.info["rej"]
     )
     self.info["cobj"] = cobj
     # first attempt: reward only if feasible
-    reward = float(cobj) if feasible else 0.0
+    reward = float(cobj) if feasible else float(-1.0)
     self.info["loc_utility"] = 0.0
     self.info["fwd_utility"] = 0.0
     self.info["cloud_penalty"] = 0.0
@@ -396,6 +377,37 @@ class FaaSRLEnvironment(BaseEnvironment):
           self.instance_data["demand"][(n,f)] * incoming_rate_total
         ) / r[n-1,f-1]
     self.info["cpu_utilization"] = utilization
+  
+  @staticmethod
+  def check_feasibility(
+      x: np.array, 
+      omega: np.array, 
+      z: np.array, 
+      r: np.array, 
+      cpu_utilization: np.array,
+      data: dict
+    ) -> Tuple[bool, str]:
+    Nn, Nf = x.shape
+    for n in range(1, Nn+1):
+      for f in range(1, Nf+1):
+        # no traffic loss
+        managed_load = x[n-1,f-1] + omega[n-1,f-1] + z[n-1,f-1]
+        load = data[None]["incoming_load"][(n,f)]
+        if abs(managed_load - load) > 1e-3:
+          return False, f"no traffic loss ({n},{f}): {managed_load} != {load}"
+        # max utilization
+        utilization = cpu_utilization[n-1,f-1]
+        max_utilization = data[None]["max_utilization"][f]
+        if utilization - max_utilization > 1e-5:
+          return False, f"max utilization ({n},{f}): {utilization}"
+    # memory capacity
+    for n, ram in data[None]["memory_capacity"].items():
+      used_memory = 0
+      for f, req_memory in data[None]["memory_requirement"].items():
+        used_memory += r[n-1,f-1] * req_memory
+        if used_memory - ram > 1e-5:
+          return False, f"memory capacity ({n},{f}): {used_memory} > {ram}"
+    return True, ""
 
 
 class FaaSRLCallbacks(BaseCallbacks):

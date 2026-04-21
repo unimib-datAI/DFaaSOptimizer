@@ -5,7 +5,9 @@ from generators.generate_load import generate_load_traces
 from utils.common import (
   load_base_instance, load_configuration, load_requests_traces
 )
+from utils.faasmacro import compute_centralized_objective
 from rlagents.sa_environment import _convert_arrival_rate_dist
+from rlagents.sa_environment import FaaSRLEnvironment
 
 from ray.rllib.utils.spaces.simplex import Simplex
 from ray.rllib.env.env_context import EnvContext
@@ -157,7 +159,13 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
     })
   
   def init_agent_metrics(self):
-    self.info = {}
+    self.info = {
+      "__common__": {
+        "feasible": True,
+        "cobj": 0.0,
+        # "why_feasible": ""
+      }
+    }
     # loop over agents
     for agent in self.agents:
       n,f = _get_n_f(agent)
@@ -235,7 +243,10 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
         if key in obs_info[agent]:
           self.info[agent][f"previous_{key}"] = val
           self.info[agent][key] = obs_info[agent][key]
-    self.info["__common__"] = obs_info["__common__"]
+    self.info["__common__"] = {
+      **obs_info["__common__"],
+      **{f"previous_{key}": val for key,val in old_info["__common__"].items()}
+    }
     return obs, self.info
   
   def reset(self, seed: int = None, options = None):
@@ -297,8 +308,41 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
     return obs, reward, done, truncated, obs_info
   
   def compute_reward(self):
+    # check centralized feasibility and compute centralized objective
+    sp_data = {None: deepcopy(self.instance_data)}
+    sp_data[None]["incoming_load"] = {
+      _get_n_f(agent): self.info[agent]["input_rate"] \
+        for agent in self.agents
+    }
+    # -- convert solution
+    x = np.zeros((len(self.nodes), len(self.functions)))
+    y = np.zeros((len(self.nodes), len(self.nodes), len(self.functions)))
+    omega = np.zeros((len(self.nodes), len(self.functions)))
+    z = np.zeros((len(self.nodes), len(self.functions)))
+    r = np.zeros((len(self.nodes), len(self.functions)))
+    cpu_utilization = np.zeros((len(self.nodes), len(self.functions)))
+    for agent in self.agents:
+      n,f = _get_n_f(agent)
+      x[n-1,f-1] = self.info[agent]["loc"]
+      omega[n-1,f-1] = self.info[agent]["total_fwd"]
+      z[n-1,f-1] = self.info[agent]["rej"]
+      r[n-1,f-1] = self.info[agent]["n_replicas"]
+      cpu_utilization[n-1,f-1] = self.info[agent]["cpu_utilization"]
+      for jidx,j in enumerate(self.agent_neighbors[n]):
+        y[n-1,j-1,f-1] = self.info[agent]["fwd"][jidx]
+    # -- feasibility
+    feasible, why_feasible = FaaSRLEnvironment.check_feasibility(
+      x, omega, z, r, cpu_utilization, sp_data
+    )
+    # -- objective
+    cobj = -1.0
+    if feasible:
+      cobj = compute_centralized_objective(sp_data, x, y, z)
+    self.info["__common__"]["feasible"] = feasible
+    # self.info["__common__"]["why_feasible"] = why_feasible
+    self.info["__common__"]["cobj"] = float(cobj)
+    # compute reward
     reward = {}
-    # loop over agents
     for agent in self.agents:
       n,f = _get_n_f(agent)
       loc_utility, fwd_utility, cloud_penalty = 0.0, 0.0, 0.0
