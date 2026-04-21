@@ -1,5 +1,5 @@
-from utilities.common import generate_random_float, generate_random_int
-from utilities.common import load_base_instance
+from utils.common import generate_random_float, generate_random_int
+from utils.common import load_base_instance
 
 from networkx import random_regular_graph, adjacency_matrix
 from networkx import from_numpy_array, Graph
