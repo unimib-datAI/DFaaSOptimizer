@@ -50,11 +50,6 @@ def _convert_arrival_rate_dist(arrival_rate, action_dist):
   return tuple(raw_rates)
 
 
-def _get_n_f(agent: str) -> Tuple[int,int]:
-  n, f = agent.split("_")
-  return int(n), int(f)
-
-
 class FaaSRLEnvironment(BaseEnvironment):
   
   def load_configuration(self, env_config: EnvContext) -> int:

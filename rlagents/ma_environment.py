@@ -5,6 +5,7 @@ from generators.generate_load import generate_load_traces
 from utils.common import (
   load_base_instance, load_configuration, load_requests_traces
 )
+from sa_environment import _convert_arrival_rate_dist
 
 from ray.rllib.utils.spaces.simplex import Simplex
 from ray.rllib.env.env_context import EnvContext
@@ -13,39 +14,6 @@ from copy import deepcopy
 from typing import Tuple
 import numpy as np
 import os
-
-
-def _convert_arrival_rate_dist(arrival_rate, action_dist):
-  """
-  Distribute the arrival rate to the given action distribution.
-  Returns a tuple with the arrival rate for each action:
-  - First element: local processing rate
-  - Middle elements: forwarding rates to specific neighbors
-  - Last element: rejection rate
-  All values are integers.
-  This function expects an action distribution that sums to 1."""
-  # Calculate the raw rates based on the action distribution.
-  raw_rates = [int(prob * arrival_rate) for prob in action_dist]
-  # Calculate how many requests are currently assigned.
-  total_assigned = sum(raw_rates)
-  # Distribute the remaining requests due to integer rounding.
-  remaining = int(arrival_rate - total_assigned)
-  if remaining > 0:
-    # Find the actions with the highest fractional parts.
-    fractions = [
-      (
-        prob * arrival_rate
-      ) - raw_rates[i] for i, prob in enumerate(action_dist)
-    ]
-    # Sort indices by fraction.
-    sorted_indices = sorted(
-      range(len(fractions)), key=lambda i: fractions[i], reverse=True
-    )
-    # Assign remaining requests to actions with highest fractional parts.
-    for i in range(remaining):
-      raw_rates[sorted_indices[i % len(sorted_indices)]] += 1
-  assert sum(raw_rates) == arrival_rate
-  return tuple(raw_rates)
 
 
 def _get_n_f(agent: str) -> Tuple[int,int]:
