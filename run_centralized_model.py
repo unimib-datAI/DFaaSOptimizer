@@ -2,9 +2,9 @@ from utils.common import (
   delete_tuples, 
   float_to_int, 
   load_configuration,
-  load_requests_traces,
   NpEncoder
 )
+from utils.centralized import get_current_load
 from generators.generate_data import generate_data, update_data
 from generators.generate_load import generate_load_traces
 from postprocessing import plot_history
@@ -267,16 +267,6 @@ def extract_solution(
   # compute residual capacity
   rho = compute_residual_capacity(data, r)
   return x, y, z, r, xi, omega, rho, solution.get("obj", np.nan)
-
-
-def get_current_load(
-    input_requests_traces: dict, agents: list, t: int
-  ) -> dict:
-  incoming_load = {
-    (a+1, f+1): input_requests_traces[f][a][t] \
-      for a in agents for f in input_requests_traces
-  }
-  return incoming_load
 
 
 def init_complete_solution():
