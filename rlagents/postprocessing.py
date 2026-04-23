@@ -82,6 +82,7 @@ def load_json_file(
   all_episode_hist_stats = pd.DataFrame()
   all_policy_hist_stats = pd.DataFrame()
   files_exist = False
+  compression = None
   if not reload_all:
     summary_folder = os.path.join(exp_folder, "summary", fname)
     files_exist, sfx = summary_files_exist(summary_folder)
@@ -361,7 +362,8 @@ def plot_moving_average(
     plot_folder: str = None,
     title_key: str = "training",
     y_threshold: float = None,
-    alpha: float = 1.0
+    alpha: float = 1.0,
+    marker: str = None
   ):
   """
   Plot the moving average over the given window of the results in the listed 
@@ -414,7 +416,11 @@ def plot_moving_average(
   _, ax = plt.subplots()
   for column, color, linestyle in zip(columns, colors, linestyles):
     avg[column].plot(
-      color = color, linestyle = linestyle, ax = ax, alpha = alpha
+      color = color, 
+      linestyle = linestyle, 
+      ax = ax, 
+      alpha = alpha,
+      marker = marker
     )
   if y_threshold is not None:
     ax.axhline(y_threshold, color = "k", linestyle = "dashed", linewidth = 2)
@@ -627,7 +633,8 @@ def single_exp_postprocessing(
       ["episode_reward"], 
       moving_average_window, 
       plot_folder, 
-      "episode_total_reward"
+      "episode_total_reward",
+      marker = "."
     )
     # -- by node
     plot_moving_average(
@@ -635,14 +642,14 @@ def single_exp_postprocessing(
       [c for c in all_policy_hist_stats.columns if c != "iter"], 
       moving_average_window, 
       plot_folder, 
-      "by_node_reward"
+      "by_node_reward",
+      marker = "."
     )
     # compute by-episode average
     summary_folder = os.path.join(exp_folder, "summary", scenario)
     sfx = ".gz" if compression is not None else ""
     avg_stats_unpacked = pd.DataFrame()
     expanded_agents = deepcopy(agents)
-    new_results_loaded = True
     if new_results_loaded:
       if len(agents) == 1 and agents[0] == "default_policy":
         all_hist_stats, expanded_agents = expand_agents_data(all_hist_stats)
