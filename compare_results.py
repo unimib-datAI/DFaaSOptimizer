@@ -616,6 +616,7 @@ def plot_by_key(
   colors = {
     "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
+    "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"]
   }
   for ridx, (keys, bplot) in enumerate(bplots):
@@ -775,6 +776,7 @@ def violinplot_by_key(
   colors = {
     "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
+    "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"]
   }
   nrows = 1
