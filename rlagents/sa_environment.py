@@ -365,7 +365,7 @@ class FaaSRLEnvironment(BaseEnvironment):
           self.info["action"][n] = {}
         # -- get the number of replicas
         r[n-1,f-1] = (
-          action_dict[n]["r"] * self.instance_data["memory_capacity"][n]
+          action_dict[n]["r"][f-1] * self.instance_data["memory_capacity"][n]
         ) // self.instance_data["memory_requirement"][f]
     self.info["loc"] = x
     self.info["fwd"] = y
