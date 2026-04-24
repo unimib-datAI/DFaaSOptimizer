@@ -110,24 +110,33 @@ def load_json_file(
     with open(os.path.join(exp_folder, f"{fname}.json"), "r") as istream:
       if fname.startswith("eval"):
         results = json.load(istream)["evaluations"]
-    pfx = "" if fname == "result" else "after_"
+      else:
+        results = istream.readlines()
+    pfx = "after_" if fname == "evaluations" else ""
     for result_line in results:
+      if fname.startswith("result"):
+        result_line = json.loads(result_line)
       it = result_line[f"{pfx}training_iteration"]
       print(f"Iter {it}")
       # process results only if they are not already available
       if it > last_iter:
         # hist stats
+        hist_stats_dict = {}
+        if fname.startswith("result"):
+          hist_stats_dict = result_line["env_runners"]["hist_stats"]
+        else:
+          hist_stats_dict = result_line["hist_stats"]
         hist_stats = {
-          k: v for k, v in result_line["hist_stats"].items() if not (
+          k: v for k, v in hist_stats_dict.items() if not (
             "episode_" in k or "policy_" in k or "worker_index" in k
           )
         }
         hist_stats = pd.DataFrame(hist_stats)
         episode_hist_stats = pd.DataFrame({
-          k: v for k, v in result_line["hist_stats"].items() if "episode_" in k
+          k: v for k, v in hist_stats_dict.items() if "episode_" in k
         })
         policy_hist_stats = pd.DataFrame({
-          k: v for k, v in result_line["hist_stats"].items() if "policy_" in k
+          k: v for k, v in hist_stats_dict.items() if "policy_" in k
         })
         # add information about the episode number
         hist_stats["episode"] = [-1] * len(hist_stats)
@@ -205,6 +214,12 @@ def load_progress_file(
     elif os.path.exists(os.path.join(exp_folder, f"{fname}.json")):
       return load_json_file(
         exp_folder, last_iter, fname, reload_all
+      )
+    elif fname == "progress" and os.path.exists(
+        os.path.join(exp_folder, "result.json")
+      ):
+      return load_json_file(
+        exp_folder, last_iter, "result", reload_all
       )
     # build dataframes
     pfx = "" if fname == "progress" else "after_"
