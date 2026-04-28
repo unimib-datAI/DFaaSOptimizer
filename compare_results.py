@@ -182,8 +182,15 @@ def compare_results(
     postprocessing_folder: str, 
     key: str, 
     key_label: str,
-    models: list
+    models: list,
+    folder_parse_format: str = None
   ):
+  key_values = {}
+  if folder_parse_format is not None:
+    fname = os.path.basename(os.path.split(postprocessing_folder)[0])
+    tokens = parse(folder_parse_format, fname)
+    for key,val in zip(tokens[0::2], tokens[1::2]):
+      key_values[key] = float(val)
   obj = pd.read_csv(os.path.join(postprocessing_folder, "obj.csv"))
   for k in ["LSP", "SP/coord"]:
     if k in obj:
@@ -198,6 +205,16 @@ def compare_results(
   for k in ["LSP", "SP/coord"]:
     if k in runtime:
       runtime.rename(columns = {k: "FaaS-MACrO"}, inplace = True)
+  for key,val in key_values.items():
+    obj[key] = val
+    if rej is not None:
+      rej[key] = val
+    runtime[key] = val
+  if folder_parse_format is not None:
+    obj.to_csv(os.path.join(postprocessing_folder, "obj.csv"))
+    if rej is not None:
+      rej.to_csv(os.path.join(postprocessing_folder, "rejections.csv"))
+    runtime.to_csv(os.path.join(postprocessing_folder, "runtime.csv"))
   dev_plot_by_key(
     obj, runtime, rej, key, key_label, postprocessing_folder, models
   )
@@ -940,7 +957,8 @@ if __name__ == "__main__":
         os.path.join(postprocessing_folder, "postprocessing"),
         loop_over,
         loop_over_label,
-        models
+        models,
+        folder_parse_format = folder_parse_format
       )
   elif what_to_do == "compare_across_folders":
     # for eef,
