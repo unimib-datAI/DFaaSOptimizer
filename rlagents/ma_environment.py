@@ -79,7 +79,7 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
     Define the environment observation space(s)
     """
     self.absolute_max_workload = 10000
-    self.observation_space = Dict({
+    self._observation_space = Dict({
       agent: Dict({
         "input_rate": Box(
           low = 0,
@@ -149,7 +149,7 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
               offloaded to the cloud
       * r:    number of replicas
     """
-    self.action_space = Dict({
+    self._action_space = Dict({
       agent: Dict({
         "xyz": Simplex(
           shape = (1 + len(self.agent_neighbors[_get_n_f(agent)[0]]) + 1,)
@@ -410,6 +410,360 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
         self.instance_data["demand"][(n,f)] * incoming_rate_total
       ) / self.info[agent]["n_replicas"]
       self.info[agent]["cpu_utilization"] = float(utilization)
+
+
+class FaaSMARLEnvironment2(FaaSMARLEnvironment):
+
+  def load_configuration(self, env_config: EnvContext) -> int:
+    # simulation time management
+    self.min_time = env_config["min_time"]
+    self.max_time = env_config["max_time"]
+    self.time_step = env_config["time_step"]
+    self.current_time = self.min_time
+    # initialize agents
+    self.agents = env_config["agents"]
+    # load base instance data
+    self.instance_data, self.load_limits = load_base_instance(
+      env_config["opt_folder"]
+    )
+    self.instance_data = self.instance_data[None]
+    # -- nodes and functions
+    self.nodes = list(range(1, self.instance_data["Nn"][None] + 1))
+    self.functions = list(range(1, self.instance_data["Nf"][None] + 1))
+    # -- build neighborhood
+    self.agent_neighbors = {
+      i: [
+        j for j in self.agents if self.instance_data["neighborhood"][
+          (int(i),int(j))
+        ]
+      ] for i in self.agents
+    }
+    # -- compute maximum number of replicas
+    self.max_n_replicas = {}
+    for agent in self.agents:
+      n = int(agent)
+      self.max_n_replicas[agent] = [
+        self.instance_data[
+          "memory_capacity"
+        ][n] // self.instance_data[
+          "memory_requirement"
+        ][f] for f in self.functions
+      ]
+    # load requests traces (in evaluation)
+    self.is_evaluation = env_config.get("is_evaluation", False)
+    if self.is_evaluation:
+      self.workload_trace, mt, Mt, ts = load_requests_traces(
+        env_config["opt_folder"]
+      )
+      if self.min_time < mt or self.max_time > Mt or self.time_step != ts:
+        raise RuntimeError("Inconsistent time management")
+    # initialize random number generator
+    self.opt_config = load_configuration(
+      os.path.join(env_config["opt_folder"], "config.json")
+    )
+    self.rng = np.random.default_rng(seed = self.opt_config["seed"])
+    return int(self.rng.integers(low = 0, high = 4850 * 4850))
+  
+  def define_observation_spaces(self):
+    """
+    Define the environment observation space(s)
+    """
+    self.absolute_max_workload = 10000
+    self._observation_space = Dict({
+      agent: Dict({
+        "input_rate": Box(
+          low = 0,
+          high = self.absolute_max_workload,
+          shape = (len(self.functions),),
+          dtype = np.int32
+        ),
+        "previous_input_rate": Box(
+          low = 0,
+          high = self.absolute_max_workload,
+          shape = (len(self.functions),),
+          dtype = np.int32
+        ),
+        # rate of requests forwarded to all neighbors in the previous step
+        **{
+          f"previous_y_{j}": Box(
+            low = 0,
+            high = self.absolute_max_workload,
+            shape = (len(self.functions),),
+            dtype = np.int32
+          ) for j in self.agent_neighbors[agent]
+        },
+        # previous local/forwarding/cloud offloading utility
+        "previous_loc_utility": Box(
+          low = 0.0,
+          high = 1.0,
+          shape=(1,),
+          dtype = np.float32
+        ),
+        "previous_fwd_utility": Box(
+          low = 0.0,
+          high = 1.0,
+          shape=(1,),
+          dtype = np.float32
+        ),
+        "previous_cloud_penalty": Box(
+          low = -1.0,
+          high = 0.0,
+          shape=(1,),
+          dtype = np.float32
+        ),
+        # previous CPU utilization
+        "previous_cpu_utilization": Box(
+          low = 0.0,
+          high = np.inf,
+          shape = (len(self.functions),),
+          dtype = np.float32
+        ),
+        # previous number of replicas
+        "previous_r": Box(
+          low = 0,
+          high = np.array(self.max_n_replicas[agent]),
+          shape = (len(self.functions),),
+          dtype = np.int32
+        )
+      }) for agent in self.agents
+    })
+    # initialize a random dummy observation to return at the end
+    self._dummy_terminal_obs = self.observation_space.sample()
+  
+  def define_action_spaces(self):
+    """
+    Define the environment action space(s)
+    ---
+    For each agent,
+      * xyz:  proportion of requests enqueued, fowarded (to each neighbor) or 
+              offloaded to the cloud
+      * r:    number of replicas
+    """
+    self._action_space = Dict({
+      agent: Dict({
+        **{
+          f"xyz_{f}": Simplex(
+            shape = (1 + len(self.agent_neighbors[agent]) + 1,)
+          ) for f in self.functions
+        },
+        "r": Simplex(
+          shape = (len(self.functions),)
+        )
+      }) for agent in self.agents
+    })
+  
+  def init_agent_metrics(self):
+    self.info = {
+      "__common__": {
+        "feasible": True,
+        "cobj": 0.0,
+        # "why_feasible": ""
+      }
+    }
+    # loop over agents
+    for agent in self.agents:
+      self.info[agent] = {
+        # -- input rate and CPU utilization
+        "input_rate": [0] * len(self.functions),
+        "cpu_utilization": [0] * len(self.functions),
+        # -- action
+        # "action": {},
+        "loc": [0] * len(self.functions),
+        "fwd": [0] * len(self.functions) * len(self.agent_neighbors[agent]),
+        "total_fwd": [0] * len(self.functions),
+        "rej": [0] * len(self.functions),
+        "n_replicas": [0] * len(self.functions),
+        # -- utility
+        "loc_utility": 0.0,
+        "fwd_utility": 0.0,
+        "cloud_penalty": 0.0
+      }
+      # -- forward
+      for neighbor in self.agent_neighbors[agent]:
+        self.info[agent][f"fwd_to_{neighbor}"] = [0] * len(self.functions)
+  
+  def observation(self):
+    """
+    Return the next observation (and the corresponding info dictionary)
+    """
+    obs = {agent: {} for agent in self.agents}
+    obs_info = {agent: {} for agent in self.agents}
+    # loop over agents
+    for agent in self.agents:
+      n = int(agent)
+      # -- workload
+      obs[agent]["input_rate"] = np.array(
+        [
+          self.workload_trace[f-1][n-1][self.current_time] 
+            for f in self.functions
+        ], dtype = np.int32
+      )
+      obs_info[agent]["input_rate"] = [
+        int(self.workload_trace[f-1][n-1][self.current_time])
+          for f in self.functions
+      ]
+      obs[agent]["previous_input_rate"] = np.array(
+        self.info[agent]["input_rate"], dtype = np.int32
+      )
+      # -- utilities
+      obs[agent]["previous_loc_utility"] = np.array(
+        [self.info[agent]["loc_utility"]], dtype = np.float32
+      )
+      obs[agent]["previous_fwd_utility"] = np.array(
+        [self.info[agent]["fwd_utility"]], dtype = np.float32
+      )
+      obs[agent]["previous_cloud_penalty"] = np.array(
+        [self.info[agent]["cloud_penalty"]], dtype = np.float32
+      )
+      # CPU utilization
+      obs[agent]["previous_cpu_utilization"] = np.array(
+        self.info[agent]["cpu_utilization"], dtype = np.float32
+      )
+      # number of replicas
+      obs[agent]["previous_r"] = np.array(
+        self.info[agent]["n_replicas"], dtype = np.int32
+      )
+      # -- forward to neighbors
+      for neighbor in self.agent_neighbors[agent]:
+        obs[agent][f"previous_y_{neighbor}"] = np.array(
+          self.info[agent][f"fwd_to_{neighbor}"], dtype = np.int32
+        )
+    obs_info["__common__"] = {
+      "current_time": self.current_time
+    }
+    # update info
+    old_info = deepcopy(self.info)
+    for agent, agent_info in old_info.items():
+      for key, val in agent_info.items():
+        if key in obs_info[agent]:
+          self.info[agent][f"previous_{key}"] = val
+          self.info[agent][key] = obs_info[agent][key]
+    self.info["__common__"] = {
+      **obs_info["__common__"],
+      **{f"previous_{key}": val for key,val in old_info["__common__"].items()}
+    }
+    return obs, self.info
+  
+  def compute_reward(self):
+    # check centralized feasibility and compute centralized objective
+    sp_data = {None: deepcopy(self.instance_data)}
+    sp_data[None]["incoming_load"] = {
+      (int(agent),f): self.info[agent]["input_rate"] \
+        for agent in self.agents for f in self.functions
+    }
+    # -- convert solution
+    x = np.zeros((len(self.nodes), len(self.functions)))
+    y = np.zeros((len(self.nodes), len(self.nodes), len(self.functions)))
+    omega = np.zeros((len(self.nodes), len(self.functions)))
+    z = np.zeros((len(self.nodes), len(self.functions)))
+    r = np.zeros((len(self.nodes), len(self.functions)))
+    cpu_utilization = np.zeros((len(self.nodes), len(self.functions)))
+    for agent in self.agents:
+      n = int(agent)
+      x[n-1,:] = np.array(self.info[agent]["loc"])
+      omega[n-1,:] = np.array(self.info[agent]["total_fwd"])
+      z[n-1,:] = np.array(self.info[agent]["rej"])
+      r[n-1,:] = np.array(self.info[agent]["n_replicas"])
+      cpu_utilization[n-1,:] = np.array(self.info[agent]["cpu_utilization"])
+      for jidx,neighbor in enumerate(self.agent_neighbors[agent]):
+        j = int(neighbor)
+        y[n-1,j-1,:] = np.array(self.info[agent]["fwd"][jidx])
+    # -- feasibility
+    feasible, why_feasible = FaaSRLEnvironment.check_feasibility(
+      x, omega, z, r, cpu_utilization, sp_data
+    )
+    # -- objective
+    cobj = -1.0
+    if feasible:
+      cobj = compute_centralized_objective(sp_data, x, y, z)
+    self.info["__common__"]["feasible"] = feasible
+    # self.info["__common__"]["why_feasible"] = why_feasible
+    self.info["__common__"]["cobj"] = float(cobj)
+    # compute reward
+    reward = {}
+    for agent in self.agents:
+      n = int(agent)
+      loc_utility, fwd_utility, cloud_penalty = 0.0, 0.0, 0.0
+      for f in self.functions:
+        # check if the solution is feasible
+        if self.info[agent]["cpu_utilization"][f-1] <= self.instance_data[
+            "max_utilization"
+          ][f]:
+          # -- local processing
+          loc_utility += (
+            self.instance_data["alpha"][(n,f)] * self.info[agent]["loc"][f-1]
+          ) / self.info[agent]["input_rate"][f-1]
+          # -- forwarding to neighbors
+          for neighbor in self.agent_neighbors[agent]:
+            j = int(neighbor)
+            if (
+                self.info[neighbor][
+                  "cpu_utilization"
+                ][f-1] <= self.instance_data["max_utilization"][f]
+              ):
+              fwd_utility += (
+                self.instance_data["beta"][(n,j,f)] * self.info[agent][
+                  f"fwd_to_{neighbor}"
+                ][f-1]
+              ) / self.info[agent]["input_rate"][f-1]
+          # -- offloading to cloud
+          cloud_penalty = (
+            self.instance_data["gamma"][(n,f)] * self.info[agent][
+              "rej"
+            ][f-1]
+          ) / self.info[agent]["input_rate"][f-1]
+      self.info[agent]["loc_utility"] = float(loc_utility)
+      self.info[agent]["fwd_utility"] = float(fwd_utility)
+      self.info[agent]["cloud_penalty"] = - float(cloud_penalty)
+      # reward
+      reward[agent] = loc_utility + fwd_utility + cloud_penalty
+    return reward
+  
+  def simulate_action(self, action_dict):
+    # tot_incoming_rate: total incoming requests for each agent (enqueued 
+    # requests + those sent by neighbors)
+    x = np.zeros((len(self.nodes), len(self.functions)))
+    y = np.zeros((len(self.nodes), len(self.nodes), len(self.functions)))
+    omega = np.zeros((len(self.nodes), len(self.functions)))
+    z = np.zeros((len(self.nodes), len(self.functions)))
+    r = np.zeros((len(self.nodes), len(self.functions)))
+    for agent in self.agents:
+      n = int(agent)
+      # self.info[agent]["action"] = {
+      #   k1: v1.tolist() for k1,v1 in action_dict[agent].items()
+      # }
+      for f in self.functions:
+        # -- convert the action proportions into actual number of requests
+        action = _convert_arrival_rate_dist(
+          self.info[agent]["input_rate"][f-1], action_dict[agent][f"xyz_{f}"]
+        )
+        x[n-1,f-1] = action[0]
+        for jidx, neighbor in enumerate(self.agent_neighbors[agent]):
+          j = int(neighbor)
+          y[n-1,j-1,f-1] = action[jidx+1]
+        omega[n-1,f-1] = y[n-1,:,f-1].sum()
+        z[n-1,f-1] = action[-1]
+        # -- get the number of replicas
+        r[n-1,f-1] = (
+          action_dict[agent]["r"][f-1] * self.instance_data[
+            "memory_capacity"
+          ][n]
+        ) // self.instance_data["memory_requirement"][f]
+      self.info[agent]["loc"] = x[n-1,:].tolist()
+      self.info[agent]["fwd"] = y[n-1,:,:].tolist()
+      self.info[agent]["total_fwd"] = omega[n-1,:].tolist()
+      self.info[agent]["rej"] = z[n-1,:].tolist()
+      self.info[agent]["n_replicas"] = r[n-1,:].tolist()
+    # simulate
+    utilization = np.zeros((len(self.nodes), len(self.functions)))
+    for agent in self.agents:
+      n = int(agent)
+      for f in self.functions:
+        incoming_rate_total = x[n-1,f-1] + y[:, n-1, f-1].sum()
+        utilization[n-1,f-1] = (
+          self.instance_data["demand"][(n,f)] * incoming_rate_total
+        ) / r[n-1,f-1]
+      self.info[agent]["cpu_utilization"] = utilization[n-1,:].tolist()
 
 
 class FaaSMARLCallbacks(BaseCallbacks):
