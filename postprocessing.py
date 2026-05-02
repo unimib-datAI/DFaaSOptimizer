@@ -1,4 +1,4 @@
-from utilities.common import load_requests_traces
+from utils.common import load_requests_traces
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
