@@ -235,7 +235,7 @@ def define_bids(
             bids["j"].append(j)
             bids["d"].append(1)
             bids["b"].append(b)
-            bids["utility"].append(utility[idx])
+            bids["utility"].append(utility[sellers_order[idx]])
             assigned += 1
             d += 1
         else:
@@ -245,7 +245,7 @@ def define_bids(
           bids["j"].append(j)
           bids["d"].append(d)
           bids["b"].append(b)
-          bids["utility"].append(utility[idx])
+          bids["utility"].append(utility[sellers_order[idx]])
           assigned += d
         idx += 1
       # -- if you could not bid for everything, ask also for new replicas
