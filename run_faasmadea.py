@@ -69,6 +69,43 @@ def parse_arguments() -> argparse.Namespace:
   return args
 
 
+def check_ls_pr_feasibility_from_fixed_y(sp_data, y, tol=1e-9):
+  Nn = sp_data[None]["Nn"][None]
+  Nf = sp_data[None]["Nf"][None]
+  bad = []
+  # loop over nodes
+  for n in range(Nn):
+    mem_cap = sp_data[None]["memory_capacity"][n+1]
+    req_mem = 0
+    details = []
+    # loop over functions
+    for f in range(Nf):
+      fixed_in = y[:, n, f].sum()
+      d = sp_data[None]["demand"][(n+1, f+1)]
+      u = sp_data[None]["max_utilization"][f+1]
+      ram = sp_data[None]["memory_requirement"][f+1]
+      # check the number of replicas required for the current function 
+      # and the corresponding memory requirement
+      req_r = int(np.ceil((d * fixed_in - tol) / u)) if fixed_in > tol else 0
+      req_mem += req_r * ram
+      details.append({
+        "f": f,
+        "fixed_in": float(fixed_in),
+        "req_r": req_r,
+        "ram": ram,
+        "mem_for_f": req_r * ram
+      })
+    # track nodes for which the memory capacity is exceeded
+    if req_mem > mem_cap:
+      bad.append({
+        "node": n,
+        "required_memory": int(req_mem),
+        "memory_capacity": int(mem_cap),
+        "details": details
+      })
+  return bad
+
+
 def check_stopping_criteria(
     it: int,
     max_iterations: int,
@@ -250,7 +287,7 @@ def evaluate_bids(
     capacity: np.array, 
     u0: np.array, 
     auction_options: dict,
-    rho: np.array,
+    initial_rho: np.array,
     r: np.array,
     tentatively_start_replicas: bool
   ) -> np.array:
@@ -262,11 +299,12 @@ def evaluate_bids(
     potential_sellers, functions_to_share = ensure_memory_sellers(
       potential_sellers,
       functions_to_share,
-      np.nonzero(rho)[0],
+      np.nonzero(initial_rho)[0],
       Nf
     )
   y = np.zeros((Nn,Nn,Nf))
   additional_replicas = np.zeros((Nn,Nf))
+  rho = deepcopy(initial_rho)
   for j,f in zip(potential_sellers,functions_to_share):
     # extract bids for the current node
     bids_for_j = bids[(bids["j"] == j) & (bids["f"] == f)].sort_values(
@@ -303,7 +341,9 @@ def evaluate_bids(
               y[int(bids_for_j.iloc[next_bid_idx]["i"]),j,f] += q
               min_b = min(min_b, bids_for_j.iloc[next_bid_idx]["b"])
               next_bid_idx += 1
-              additional_replicas[j,f] = a
+              additional_replicas[j,f] = a 
+              # -- and update the remaining memory capacity
+              rho[j] -= (a * data[None]["memory_requirement"][f+1])
             else:
               # -- ...otherwhise, try to increase replicas
               a += 1
@@ -579,6 +619,9 @@ def run(
               fairness[n,f] += 1
         n_accepted_queue.append(rmp_omega.sum())
         # -- solve "restricted problem"
+        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+        if bad_nodes:
+          raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, 
           sp_data, 
