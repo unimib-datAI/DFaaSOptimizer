@@ -568,7 +568,7 @@ def run(
         latency,
         fairness,
         force_memory_bids = (
-          (sp_rho >= 0).any() and
+          (sp_rho > 0).any() and
             len(n_accepted_queue) >= n_accepted_queue.maxlen and 
               all(x == n_accepted_queue[0] for x in n_accepted_queue)
         )
