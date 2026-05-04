@@ -10,6 +10,7 @@ from run_centralized_model import (
   save_solution,
   save_checkpoint
 )
+from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from generators.generate_data import update_data
@@ -324,6 +325,8 @@ def decode_solutions(
   sp_complete_solution = decode_solution(
     sp_x, sp_y, sp_z, sp_r, sp_xi, sp_rho, sp_U, sp_complete_solution
   )
+  feas = check_feasibility(sp_x,sp_y.sum(axis=1),sp_z,sp_r,sp_U,sp_data)
+  assert feas[0],feas[1]
   # -- RMP
   if "rmp" in solution and rmp_complete_solution is not None:
     rmp_x = solution["rmp"]["x"]

@@ -16,6 +16,7 @@ from run_faasmacro import (
   decode_solutions,
   solve_subproblem
 )
+from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.sp import LSP, LSPr, LSP_fixedr
@@ -680,10 +681,18 @@ def run(
       cobj = compute_centralized_objective(
         sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
       )
+      s = datetime.now()
+      feas = check_feasibility(
+        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+        csol["sp"]["r"], csol["sp"]["U"], sp_data
+      )
+      e = datetime.now()
+      print(f"        check_feasibility: DONE ({feas[0]}; {feas[1]}; runtime = {(e-s).total_seconds()})", file = log_stream, flush = True)
+      assert feas[0],feas[1]
       # update best solution so far
       if spr_obj < best_cost_so_far or it == 0:
         best_cost_so_far = spr_obj
-        best_solution_so_far = csol
+        best_solution_so_far = deepcopy(csol)
         best_it_so_far = it
         if verbose > 0:
           print(
@@ -693,7 +702,7 @@ def run(
           )
       if cobj > best_centralized_cost:
         best_centralized_cost = cobj
-        best_centralized_solution = csol
+        best_centralized_solution = deepcopy(csol)
         best_centralized_it = it
         if verbose > 0:
           print(
