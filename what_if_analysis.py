@@ -24,6 +24,12 @@ def parse_arguments() -> argparse.Namespace:
     required = True
   )
   parser.add_argument(
+    "-l", "--loop_over",
+    help = "Key to loop over",
+    type = str,
+    default = "Nn"
+  )
+  parser.add_argument(
     "-m", "--milestones",
     help = "List of time limits to consider as milestones",
     nargs = "+",
@@ -35,13 +41,15 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def add_time(
-    best_sol_df: pd.DataFrame, logs_df: pd.DataFrame
+    best_sol_df: pd.DataFrame, loop_over: str, logs_df: pd.DataFrame
   ) -> pd.DataFrame:
+  columns = ["exp",loop_over,"time","iteration"]
+  if loop_over != "Nn":
+    columns += ["Nn"]
   new_df = best_sol_df.rename(
     columns = {"best_solution_it": "iteration"}
-  ).set_index(
-    ["exp","Nn","time","iteration"]).join(
-    logs_df.set_index(["exp","Nn","time","iteration"])
+  ).set_index(columns).join(
+    logs_df.set_index(columns)
   )[["obj", "measured_total_time"]].reset_index().rename(
     columns = {"iteration": "best_solution_it"}
   )
@@ -152,7 +160,7 @@ def analyze_final_results(
 def compute_minmaxavg_in_milestone(
     tvals: pd.DataFrame, milestone: float
   ) -> pd.DataFrame:
-  columns = ["Nn","obj","measured_total_time","dev","centralized_dev"]
+  columns = [loop_over,"obj","measured_total_time","dev","centralized_dev"]
   metrics_by_milestones = pd.DataFrame()
   # ---- min
   tdf = pd.DataFrame(tvals[columns].min()).transpose()
@@ -179,11 +187,10 @@ def compute_minmaxavg_in_milestone(
 
 
 def compute_progressive_deviation(
-    obj_df: pd.DataFrame, milestones: list, output_folder: str
+    obj_df: pd.DataFrame, loop_over: str, milestones: list, output_folder: str
   ):
   progressive_dev = pd.DataFrame()
-  for _, vals in obj_df.groupby(["method", "exp", "Nn", "time"]):
-    print(vals)
+  for _, vals in obj_df.groupby(["method", "exp", loop_over, "time"]):
     dev = []
     for idx in range(1, len(vals)):
       dev.append(
@@ -209,7 +216,7 @@ def compute_progressive_deviation(
         experiments["faas-macro"], experiments["experiments_list"]
       ):
       exp_description_match[os.path.basename(exp)] = {
-        "Nn": int(exp_description_tuple[0]),
+        loop_over: int(exp_description_tuple[0]),
         "seed": int(exp_description_tuple[-1]),
         "method": "faas-macro"
       }
@@ -217,22 +224,28 @@ def compute_progressive_deviation(
         experiments["faas-madea"], experiments["experiments_list"]
       ):
       exp_description_match[os.path.basename(exp)] = {
-        "Nn": int(exp_description_tuple[0]),
+        loop_over: int(exp_description_tuple[0]),
         "seed": int(exp_description_tuple[-1]),
         "method": "faas-madea"
       }
     # -- add match info
-    progressive_dev["seed"] = [
-      exp_description_match[exp]["seed"] for exp in progressive_dev["exp"]
-    ]
+    pdevseed = []
+    for exp in progressive_dev["exp"]:
+      if exp in exp_description_match:
+        pdevseed.append(exp_description_match[exp]["seed"])
+      else:
+        pdevseed.append(None)
+    progressive_dev["seed"] = pdevseed
   # load centralized solution (if available)
   if os.path.exists(os.path.join(output_folder, "obj.csv")):
     centralized_obj = pd.read_csv(os.path.join(output_folder, "obj.csv"))
     progressive_dev["centralized_obj"] = None
-    for (Nn, seed, time), val in centralized_obj.groupby(["Nn","seed","time"]):
+    for (loop_over_val, seed, time), val in centralized_obj.groupby(
+        [loop_over,"seed","time"]
+      ):
       idxs = progressive_dev[
         (
-          progressive_dev["Nn"] == Nn
+          progressive_dev[loop_over] == loop_over_val
         ) & (
           progressive_dev["seed"] == seed
         ) & (
@@ -251,7 +264,7 @@ def compute_progressive_deviation(
   )
   # plot and compute metrics by milestones
   metrics_by_milestones = pd.DataFrame()
-  for Nn, vals in progressive_dev.groupby("Nn"):
+  for loop_over_val, vals in progressive_dev.groupby(loop_over):
     _, ax = plt.subplots(figsize = (7,3))
     fontsize = 10
     for _, tvals in vals.groupby("time"):
@@ -277,7 +290,7 @@ def compute_progressive_deviation(
       ]
       if len(tvals) > 0:
         idxmax = tvals.groupby(
-          ["Nn", "seed", "time"]
+          [loop_over, "seed", "time"]
         )["measured_total_time"].idxmax()
         tvals_at_max = tvals.loc[idxmax,:]
         ax.axvline(
@@ -300,7 +313,7 @@ def compute_progressive_deviation(
     tvals = vals[vals["measured_total_time"] >= milestones[-1]]
     if len(tvals) > 0:
       idxmax = tvals.groupby(
-        ["Nn", "seed", "time"]
+        [loop_over, "seed", "time"]
       )["measured_total_time"].idxmax()
       tvals_at_max = tvals.loc[idxmax,:]
       avgdev = tvals_at_max["centralized_dev"].mean()
@@ -323,7 +336,9 @@ def compute_progressive_deviation(
       fontsize = fontsize
     )
     plt.savefig(
-      os.path.join(output_folder, f"progressive_dev-Nn_{Nn}.png"),
+      os.path.join(
+        output_folder, f"progressive_dev-{loop_over}_{loop_over_val}.png"
+      ),
       dpi = 300,
       format = "png",
       bbox_inches = "tight"
@@ -335,7 +350,7 @@ def compute_progressive_deviation(
 
 
 def find_best_iterations(
-    experiment_folder: str
+    experiment_folder: str, loop_over: str
   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
   # build folder to store the analysis outcomes
   output_folder = os.path.join(experiment_folder, "postprocessing")
@@ -347,10 +362,25 @@ def find_best_iterations(
     ) as istream:
     data = json.load(istream)
     Nn = int(data["None"]["Nn"]["None"])
+  # get the "loop_over" value
+  loop_over_val = None
+  with open(
+      os.path.join(experiment_folder, "config.json"), "r"
+    ) as istream:
+    base_config = json.load(istream)
+    exp_values = base_config["limits"].get(loop_over)
+    if exp_values is None:
+      exp_values = base_config["limits"]["neighborhood"][loop_over]
+      loop_over_val = exp_values
+    else:
+      loop_over_val = exp_values["min"]
   # check the method to consider
-  method_name = "faas-macro" if os.path.exists(
-      os.path.join(experiment_folder, "LSP_solution.csv")
-    ) else "faas-madea"
+  method_name = None
+  with open(os.path.join(experiment_folder, "obj.csv"), "r") as istream:
+    mname = istream.readline()
+    method_name = "faas-macro" if "MACrO" in mname else (
+      "faas-madea" if "MADeA" in mname else "centralized"
+    )
   # parse logs file
   exp = os.path.basename(experiment_folder)
   logs_df, best_sol_df = parse_log_file(
@@ -361,11 +391,14 @@ def find_best_iterations(
     Nn,
     method_name = method_name
   )
+  logs_df[loop_over] = loop_over_val
+  best_sol_df["social_welfare"][loop_over] = loop_over_val
+  best_sol_df["centralized"][loop_over] = loop_over_val
   best_sol_df["social_welfare"] = add_time(
-    best_sol_df["social_welfare"], logs_df
+    best_sol_df["social_welfare"], loop_over, logs_df
   )
   best_sol_df["centralized"] = add_time(
-    best_sol_df["centralized"], logs_df
+    best_sol_df["centralized"], loop_over, logs_df
   )
   # save
   best_sol_df["social_welfare"].to_csv(
@@ -438,7 +471,7 @@ def find_best_iterations(
   return best_sol_df["social_welfare"], best_sol_df["centralized"]
 
 
-def main(base_folder: str, milestones: list):
+def main(base_folder: str, loop_over: str, milestones: list):
   # build folder to store the analysis outcomes
   output_folder = os.path.join(base_folder, "postprocessing")
   os.makedirs(output_folder, exist_ok = True)
@@ -453,7 +486,7 @@ def main(base_folder: str, milestones: list):
             "LSPc_solution.csv" in os.listdir(experiment_folder)
         ):
         print(foldername)
-        sw, cobj = find_best_iterations(experiment_folder)
+        sw, cobj = find_best_iterations(experiment_folder, loop_over)
         by_social_welfare = pd.concat(
           [by_social_welfare, sw], ignore_index = True
         )
@@ -462,21 +495,22 @@ def main(base_folder: str, milestones: list):
         )
   # analyze final result
   last_by_sw = by_social_welfare.groupby(
-    ["method", "exp", "Nn", "time"]
+    ["method", "exp", loop_over, "time"]
   ).last()
   last_by_cobj = by_centralized_objective.groupby(
-    ["method", "exp", "Nn", "time"]
+    ["method", "exp", loop_over, "time"]
   ).last()
   analyze_final_results(last_by_sw, last_by_cobj, output_folder)
   # compute progressive deviation
   compute_progressive_deviation(
-    by_centralized_objective, milestones, output_folder
+    by_centralized_objective, loop_over, milestones, output_folder
   )
 
 
 if __name__ == "__main__":
   args = parse_arguments()
   base_folder = args.base_folder
+  loop_over = args.loop_over
   milestones = [int(m) for m in args.milestones]
-  main(base_folder, milestones)
+  main(base_folder, loop_over, milestones)
 
