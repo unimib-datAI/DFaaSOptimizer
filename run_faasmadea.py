@@ -216,7 +216,7 @@ def define_bids(
         candidate_sellers.append(j)
     # compute weights and define bids
     assigned = 0
-    if len(utility) > 0:
+    if len(utility) > - data[None]["gamma"][(i+1,f+1)]:
       utility = np.array(utility)
       sellers_order = np.argsort(utility)[::-1]
       idx = 0
