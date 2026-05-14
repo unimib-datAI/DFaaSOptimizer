@@ -211,12 +211,12 @@ def define_bids(
         auction_options["latency_weight"] * latency[i,j] - 
         auction_options["fairness_weight"] * fairness[i,f]
       )
-      if ut > 0:
+      if ut > - data[None]["gamma"][(i+1,f+1)]:
         utility.append(ut)
         candidate_sellers.append(j)
     # compute weights and define bids
     assigned = 0
-    if len(utility) > - data[None]["gamma"][(i+1,f+1)]:
+    if len(utility) > 0:
       utility = np.array(utility)
       sellers_order = np.argsort(utility)[::-1]
       idx = 0
