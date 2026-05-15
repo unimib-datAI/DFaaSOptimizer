@@ -1,16 +1,20 @@
 from utils.common import generate_random_float, generate_random_int
 from utils.common import load_base_instance
 
-from networkx import random_regular_graph, adjacency_matrix
-from networkx import from_numpy_array, Graph
 from copy import deepcopy
 from typing import Tuple
+import networkx as nx
 import numpy as np
+
+try:
+  import sage.all as sage
+except ImportError:
+  pass
 
 
 def add_network_latency(
-    graph: Graph, limits: dict, rng: np.random.Generator
-  ) -> Graph:
+    graph: nx.Graph, limits: dict, rng: np.random.Generator
+  ) -> nx.Graph:
   if "weights" in limits and "edge_network_latency" in limits["weights"]:
     for (u, v) in graph.edges():
       graph.edges[u,v]["network_latency"] = generate_random_float(
@@ -42,7 +46,7 @@ def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
     neighborhood = np.zeros((Nn,Nn))
     for (n1, n2), p in base_instance_data[None]["neighborhood"].items():
       neighborhood[n1-1,n2-1] = p
-    graph = add_network_latency(from_numpy_array(neighborhood), limits, rng)
+    graph = add_network_latency(nx.from_numpy_array(neighborhood), limits, rng)
   # weights
   if "weights" in limits:
     alpha, beta, gamma, delta = generate_weights(Nn, Nf, limits, rng, graph)
@@ -180,7 +184,7 @@ def generate_memory_requirement(
 
 def generate_neighborhood(
     Nn: int, limits: dict, rng: np.random.Generator
-  ) -> Tuple[np.array, Graph]:
+  ) -> Tuple[np.array, nx.Graph]:
   neighborhood = np.zeros((Nn, Nn))
   graph = None
   if "p" in limits["neighborhood"]:
@@ -188,21 +192,31 @@ def generate_neighborhood(
       for n2 in range(n1+1,Nn):
         neighborhood[n1,n2] = rng.binomial(1, limits["neighborhood"]["p"])
         neighborhood[n2,n1] = neighborhood[n1,n2]
-    graph = from_numpy_array(neighborhood)
+    graph = nx.from_numpy_array(neighborhood)
   elif "k" in limits["neighborhood"]:
-    graph = random_regular_graph(
-      d = limits["neighborhood"]["k"],
-      n = Nn,
-      seed = int(rng.integers(low = 0, high = 4850 * 4850 * 4850))
-    )
-    neighborhood = adjacency_matrix(graph).toarray()
+    if limits["neighborhood"].get("shape", "") == "planar":
+      g = sage.graphs.RandomTriangulation(
+        n = Nn, 
+        k = limits["neighborhood"]["k"],
+        seed = int(rng.integers(low = 0, high = 4850 * 4850 * 4850))
+      )
+      graph = nx.Graph()
+      graph.add_nodes_from(g.vertices())
+      graph.add_edges_from(g.edges(labels=False))
+    else:
+      graph = nx.random_regular_graph(
+        d = limits["neighborhood"]["k"],
+        n = Nn,
+        seed = int(rng.integers(low = 0, high = 4850 * 4850 * 4850))
+      )
+    neighborhood = nx.adjacency_matrix(graph).toarray()
   # -- add network latency (if available)
   graph = add_network_latency(graph, limits, rng)
   return neighborhood, graph
 
 
 def generate_weights(
-    Nn: int, Nf: int, limits: dict, rng: np.random.Generator, graph: Graph
+    Nn: int, Nf: int, limits: dict, rng: np.random.Generator, graph: nx.Graph
   ) -> Tuple[list, np.array, np.array, np.array]:
   # weights (different for each function, equal for all nodes)
   alpha, beta, gamma, delta = [None] * 4
@@ -348,7 +362,7 @@ def update_data(data: dict, fixed_values: dict) -> dict:
 
 def random_instance_data(
     limits: dict, rng: np.random.Generator
-  ) -> Tuple[dict, dict, Graph]:
+  ) -> Tuple[dict, dict, nx.Graph]:
   # number of nodes and function classes
   Nn = rng.integers(limits["Nn"]["min"], limits["Nn"]["max"], endpoint = True)
   Nf = rng.integers(limits["Nf"]["min"], limits["Nf"]["max"], endpoint = True)
