@@ -14,7 +14,7 @@ from models.model import (
   PYO_VAR_TYPE
 )
 
-from networkx import draw_networkx, kamada_kawai_layout, Graph
+from networkx import draw_networkx, kamada_kawai_layout, Graph, is_planar
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -325,6 +325,11 @@ def init_problem(
     load_limits, max_steps, seed, trace_type, solution_folder
   )
   # draw graph
+  os.makedirs(os.path.join(solution_folder, "graph"), exist_ok = True)
+  planar = is_planar(graph)
+  if planar:
+    with open(os.path.join(solution_folder, "graph/PLANAR"), "wb") as ost:
+      pass
   draw_networkx(
     graph, 
     pos = kamada_kawai_layout(graph, weight = "network_latency"),
@@ -334,7 +339,7 @@ def init_problem(
     width = 0.1
   )
   plt.savefig(
-    os.path.join(solution_folder, "graph.png"), 
+    os.path.join(solution_folder, "graph", "graph.png"), 
     dpi = 300,
     format = "png",
     bbox_inches = "tight"
