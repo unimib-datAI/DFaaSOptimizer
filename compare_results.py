@@ -89,9 +89,22 @@ def parse_arguments() -> argparse.Namespace:
   return args
 
 
+def get_loop_over_label(key: str) -> str:
+  if key == "Nn":
+    return "Number of agents"
+  elif key == "k":
+    return "Node degree $k$"
+  elif key == "Nf":
+    return "Number of functions"
+  elif key == "eef":
+    return "Edge-exposed fraction [%]"
+  return None
+
+
 def compare_across_folders(
     postprocessing_folders: list, 
     str_format: str, 
+    loop_over: str,
     key_label: str,
     models: list,
     plot_folder: str,
@@ -107,8 +120,8 @@ def compare_across_folders(
     key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
     obj, rej, runtime = compare_results(
       os.path.join(postprocessing_folder, "postprocessing"), 
-      "Nn", 
-      "Number of agents",
+      loop_over, 
+      get_loop_over_label(loop_over),
       models
     )
     # add info
@@ -976,6 +989,7 @@ if __name__ == "__main__":
     compare_across_folders(
       postprocessing_folders, 
       folder_parse_format,
+      loop_over,
       loop_over_label,
       models,
       common_output_folder,
