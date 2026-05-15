@@ -69,6 +69,15 @@ pip install -r requirements.txt
 > `.venv/lib/python3.10/site-packages/pyomo/opt/base/solvers.py` (method 
 > `OptSolver.solve`, after calling `_model.solutions.load_from`)
 
+### Install with conda (required for planar graphs generation)
+
+```
+conda create -n sage_venv -c conda-forge sage
+conda activate sage_venv
+conda install -c conda-forge pip
+pip install -r requirements.txt
+```
+
 ## How to run experiments
 
 ### LoadManagementModel
