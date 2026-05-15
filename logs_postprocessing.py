@@ -14,7 +14,12 @@ def get_faasmacro_runtime(
   for exp, data in logs_df.groupby("exp"):
     all_time_data = pd.DataFrame()
     for _, t_data in data.groupby("time"):
-      time_data = t_data.loc[:,t_data.columns.str.endswith("runtime")].copy(
+      runtime_cols = []
+      for col in t_data.columns:
+        if col.endswith("runtime"):
+          if "MACrO" in method or (not col.startswith("sp")):
+            runtime_cols.append(col)
+      time_data = t_data.loc[:,runtime_cols].copy(
         deep = True
       )
       time_data["tot_runtime"] = time_data.sum(axis = "columns")
@@ -548,6 +553,8 @@ def parse_faasmadea0_log_file(
         "iteration": [],
         "define_bids_runtime": [],
         "evaluate_bids_runtime": [],
+        "n_define_bids": [],
+        "n_evaluate_bids": [],
         "sp_runtime": []
       }
       n_iterations = 0
@@ -568,23 +575,43 @@ def parse_faasmadea0_log_file(
             ):
             if "define_bids" in lines[it_row_idx]:
               runtime = None
+              n_auctions = None
               if "runtime" in lines[it_row_idx]:
-                runtime = parse.parse(
-                  "        define_bids: DONE; runtime = {})\n",
-                  lines[it_row_idx]
-                )[0]
+                if "n_auctions" in lines[it_row_idx]:
+                  runtime, n_auctions, _ = parse.parse(
+                    "        define_bids: DONE; runtime = {}; n_auctions = {}; tot runtime = {})\n",
+                    lines[it_row_idx]
+                  )
+                else:
+                  runtime = parse.parse(
+                    "        define_bids: DONE; runtime = {})\n",
+                    lines[it_row_idx]
+                  )[0]
               df["define_bids_runtime"].append(
                 float(runtime) if runtime else None
               )
+              df["n_define_bids"].append(
+                int(n_auctions) if n_auctions else None
+              )
             elif "evaluate_bids" in lines[it_row_idx]:
               runtime = None
+              n_auctions = None
               if "runtime" in lines[it_row_idx]:
-                runtime = parse.parse(
-                  "        evaluate_bids: DONE; runtime = {})\n",
-                  lines[it_row_idx]
-                )[0]
+                if "n_auctions" in lines[it_row_idx]:
+                  runtime, n_auctions, _ = parse.parse(
+                    "        evaluate_bids: DONE; runtime = {}; n_auctions = {}; tot runtime = {})\n",
+                    lines[it_row_idx]
+                  )
+                else:
+                  runtime = parse.parse(
+                    "        evaluate_bids: DONE; runtime = {})\n",
+                    lines[it_row_idx]
+                  )[0]
               df["evaluate_bids_runtime"].append(
                 float(runtime) if runtime else None
+              )
+              df["n_evaluate_bids"].append(
+                int(n_auctions) if n_auctions else None
               )
             elif (
                 "check_stopping_criteria" in lines[it_row_idx] and 

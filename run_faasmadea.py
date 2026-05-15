@@ -263,7 +263,7 @@ def define_bids(
         memory_bids["i"].append(i)
         memory_bids["j"].append(j)
         memory_bids["f"].append(f)
-  return pd.DataFrame(bids), pd.DataFrame(memory_bids)
+  return pd.DataFrame(bids), pd.DataFrame(memory_bids), len(potential_buyers)
 
 
 def ensure_memory_sellers(
@@ -379,7 +379,7 @@ def evaluate_bids(
       p[j,f] = min_b + auction_options["eta"] * (u - u0[j,f])
     else:
       p[j,f] *= (1 - auction_options["zeta"])
-  return y, p, additional_replicas
+  return y, p, additional_replicas, len(potential_sellers)
 
 
 def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
@@ -558,7 +558,7 @@ def run(
       total_runtime += (e - s).total_seconds()
       # buyers define their bids
       s = datetime.now()
-      bids, memory_bids = define_bids(
+      bids, memory_bids, n_auctions = define_bids(
         omega, 
         blackboard, 
         p, 
@@ -575,21 +575,23 @@ def run(
         )
       )
       e = datetime.now()
+      rt = (e - s).total_seconds()
       if verbose > 1:
         print(
-          f"        define_bids: DONE; runtime = {(e - s).total_seconds()})", 
+          f"        define_bids: DONE; runtime = {rt/n_auctions}; "
+          f"n_auctions = {n_auctions}; tot runtime = {rt})", 
           file = log_stream, 
           flush = True
         )
         if verbose > 2:
           print(bids, file = log_stream, flush = True)
-      total_runtime += (e - s).total_seconds()
+      total_runtime += (rt/n_auctions)
       # sellers accept/reject bids
       rmp_omega = np.zeros((Nn,Nf))
       additional_replicas = np.zeros((Nn,Nf))
       if len(bids) > 0:
         s = datetime.now()
-        auction_y, p, additional_replicas = evaluate_bids(
+        auction_y, p, additional_replicas, n_auctions = evaluate_bids(
           bids, 
           residual_capacity, 
           data, 
@@ -604,13 +606,15 @@ def run(
           tentatively_start_replicas = (len(memory_bids) == 0)
         )
         e = datetime.now()
+        rt = (e - s).total_seconds()
         if verbose > 1:
           print(
-           f"        evaluate_bids: DONE; runtime = {(e - s).total_seconds()})", 
+           f"        evaluate_bids: DONE; runtime = {rt/n_auctions}; "
+           f"n_auctions = {n_auctions}; tot runtime = {rt})", 
            file = log_stream, 
            flush = True
           )
-        total_runtime += (e - s).total_seconds()
+        total_runtime += (rt/n_auctions)
         # update effective load, number of replicas and fairness matrix
         y += auction_y
         for n in range(Nn):

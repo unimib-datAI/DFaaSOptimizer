@@ -435,9 +435,15 @@ def results_postprocessing(
             int(exp_description_tuple[0]),
             mname
           )
+          logs_df.to_csv(
+            os.path.join(exp_plot_folder, f"logs_df_{mname}.csv")
+          )
           runtimes[mname] = get_faasmacro_runtime(
             logs_df, exp_plot_folder, mname
           )
+      runtimes[mname].to_csv(
+        os.path.join(exp_plot_folder, f"runtime_{mname}.csv")
+      )
     # plot runtime comparison
     if "LoadManagementModel" in found_methods and len(runtimes) > 1:
       runtime_comparison = {
