@@ -682,6 +682,7 @@ def parse_faasmadea0_log_file(
       neval = len(df["evaluate_bids_runtime"])
       if neval < ndef:
         df["evaluate_bids_runtime"] += [None] * (ndef - neval)
+        df["n_evaluate_bids"] += [None] * (ndef - neval)
       # merge and move to the next time step
       logs_df = pd.concat(
         [logs_df, pd.DataFrame(df)], ignore_index = True
