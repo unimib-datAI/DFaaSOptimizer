@@ -45,7 +45,10 @@ class HierarchicalAuctionEngine:
     self._neighborhood = neighborhood
     self._num_nodes = neighborhood.shape[0]
     self._num_functions = num_functions
-    self._service_quantum = np.asarray(service_quantum, dtype=float)
+    self._service_quantum = np.broadcast_to(
+      np.asarray(service_quantum, dtype=float),
+      (num_functions,),
+    )
     self.max_depth = max_depth
     self._options = auction_options or {}
 
@@ -265,10 +268,12 @@ class HierarchicalAuctionEngine:
             break
 
           want = min(omega[buyer_node, f], demand_remaining)
-
+          candidates: list[tuple[float, int, float]] = []
           for seller_node in seller_nodes:
+            if seller_node == buyer_node:
+              continue
             available = token_manager.available_tokens(seller_node, f)
-            if available <= 0 or want <= 1e-10:
+            if available <= 0:
               continue
 
             structure_bid = generate_structure_bid(
@@ -284,9 +289,22 @@ class HierarchicalAuctionEngine:
               latency_weight=latency_weight,
               fairness_weight=fairness_weight,
             )
-            tokens = min(available, int(np.ceil(want)))
+            candidates.append((effective, seller_node, structure_bid))
+
+          candidates.sort(reverse=True)
+
+          for effective, seller_node, _structure_bid in candidates:
+            if want <= 1e-10:
+              break
+            available = token_manager.available_tokens(seller_node, f)
+            if available <= 0:
+              continue
+
+            quantum = self._service_quantum[f]
+            tokens = min(available, int(np.ceil(want / quantum)))
             if tokens <= 0:
               continue
+            quantity = min(want, tokens * quantum)
 
             req = TokenRequest(
               level=level,
@@ -296,12 +314,12 @@ class HierarchicalAuctionEngine:
               function=f,
               tokens=tokens,
               bid_value=effective,
-              quantity=float(tokens),
+              quantity=float(quantity),
             )
             requests.append(req)
             token_manager.request(req)
-            want -= float(tokens)
-            demand_remaining -= float(tokens)
+            want -= quantity
+            demand_remaining -= quantity
 
     return requests
 

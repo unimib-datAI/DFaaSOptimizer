@@ -1,4 +1,9 @@
-from hierarchical_auction.runner import build_auction_options
+import numpy as np
+
+from hierarchical_auction.runner import (
+  build_auction_options,
+  compute_offloaded_demand,
+)
 
 
 def test_build_auction_options_accepts_scalar_or_list_eta():
@@ -31,6 +36,20 @@ def test_build_auction_options_scalar_eta():
   }
   opts = build_auction_options(config)
   assert opts["eta"] == 0.5
+
+
+def test_compute_offloaded_demand_sums_seller_axis():
+  y = np.zeros((2, 3, 2))
+  y[0, 1, 0] = 3.0
+  y[0, 2, 0] = 4.0
+  y[1, 0, 1] = 5.0
+
+  rmp_omega = compute_offloaded_demand(y)
+
+  assert np.array_equal(rmp_omega, np.array([
+    [7.0, 0.0],
+    [0.0, 5.0],
+  ]))
 
 
 def test_run_py_accepts_hierarchical_method(monkeypatch):

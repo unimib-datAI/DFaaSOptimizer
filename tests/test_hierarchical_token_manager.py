@@ -47,3 +47,32 @@ def test_commit_is_cumulative_across_rounds():
   accepted = manager.resolve_node_function(0, 0)
   manager.commit(accepted)
   assert manager.available_tokens(0, 0) == 1
+
+
+def test_partial_acceptance_preserves_request_quantity_ratio():
+  manager = CapacityTokenManager(np.array([[4.0]]), np.array([2.0]))
+  manager.request(TokenRequest(
+    level=2,
+    buyer_structure=1,
+    buyer_node=1,
+    seller_node=0,
+    function=0,
+    tokens=1,
+    bid_value=10.0,
+    quantity=2.0,
+  ))
+  manager.request(TokenRequest(
+    level=2,
+    buyer_structure=2,
+    buyer_node=2,
+    seller_node=0,
+    function=0,
+    tokens=2,
+    bid_value=5.0,
+    quantity=4.0,
+  ))
+
+  accepted = manager.resolve_node_function(0, 0)
+
+  assert [a.tokens for a in accepted] == [1, 1]
+  assert [a.quantity for a in accepted] == [2.0, 2.0]

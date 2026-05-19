@@ -86,6 +86,11 @@ def build_auction_options(config: dict) -> dict:
   }
 
 
+def compute_offloaded_demand(y: np.ndarray) -> np.ndarray:
+  """Return total offloaded demand per buyer node/function."""
+  return y.sum(axis=1)
+
+
 def run(
   config: dict,
   parallelism: int = -1,
@@ -166,6 +171,7 @@ def run(
     stop_searching = False
     y = np.zeros((Nn, Nn, Nf))
     omega = deepcopy(sp_omega)
+    rmp_omega = np.zeros((Nn, Nf))
     best_centralized_solution: dict | None = None
     best_centralized_cost = 0.0
     best_centralized_it = -1
@@ -199,10 +205,9 @@ def run(
         )
         y += auction_y
 
-        rmp_omega = np.zeros((Nn, Nf))
+        rmp_omega = compute_offloaded_demand(y)
         for n in range(Nn):
           for f in range(Nf):
-            rmp_omega[n, f] = y[n, :, f].sum()
             if rmp_omega[n, f] > 0:
               fairness[n, f] += 1
 
@@ -245,10 +250,29 @@ def run(
       )
       y = result.y
       omega = result.omega
+      rmp_omega = compute_offloaded_demand(y)
+
+      if result.accepted_allocations:
+        spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
+          spr, sp_data, agents, solver_name, general_solver_options,
+          y, rmp_omega, parallelism,
+        )
+        total_runtime += (
+          spr_runtime if isinstance(spr_runtime, (int, float)) else 0.0
+        )
+
+        sp_x = spr_sol[0]
+        sp_r = spr_sol[4]
+        sp_rho = spr_sol[5]
+        for i in range(Nn):
+          for f in range(Nf):
+            omega[i, f] = sp_omega[i, f] - rmp_omega[i, f]
+            if abs(omega[i, f]) < tolerance:
+              omega[i, f] = 0.0
 
       # Convergence check
       stop_searching, why_stop_searching = check_stopping_criteria(
-        it, max_iterations, blackboard, omega, np.zeros((Nn, Nf)),
+        it, max_iterations, blackboard, omega, rmp_omega,
         bids, memory_bids, tolerance, total_runtime, time_limit,
       )
 

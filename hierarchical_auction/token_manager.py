@@ -82,6 +82,7 @@ class CapacityTokenManager:
     for req in sorted_reqs:
       take = min(req.tokens, remaining)
       if take > 0:
+        accepted_quantity = req.quantity * (take / req.tokens)
         accepted.append(AcceptedAllocation(
           level=req.level,
           buyer_structure=req.buyer_structure,
@@ -89,7 +90,7 @@ class CapacityTokenManager:
           seller_node=req.seller_node,
           function=req.function,
           tokens=take,
-          quantity=float(take),
+          quantity=accepted_quantity,
           bid_value=req.bid_value,
         ))
         remaining -= take
