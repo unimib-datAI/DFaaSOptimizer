@@ -239,15 +239,12 @@ class HierarchicalAuctionEngine:
     requests: list[TokenRequest] = []
 
     for root, buyer_s in buyer_structures.items():
+      buyer_s.structure_price = compute_structure_price(
+        buyer_s, node_prices, token_manager.tokens, eta=eta,
+      )
       for f in range(self._num_functions):
         if not buyer_s.is_buyer(f):
           continue
-
-        # Compute structure price once per (structure, function)
-        if np.allclose(buyer_s.structure_price, 0.0):
-          buyer_s.structure_price = compute_structure_price(
-            buyer_s, node_prices, token_manager.tokens, eta=eta,
-          )
 
         # Find seller nodes in adjacent structures
         seller_nodes = self._collect_seller_nodes(
