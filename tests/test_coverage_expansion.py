@@ -4,6 +4,13 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+
+def test_hierarchical_auction_public_imports():
+  import hierarchical_auction as ha
+
+  assert ha.AcceptedAllocation is not None
+  assert ha.TokenRequest is not None
+
 import compare_results
 import fwd_analysis
 import postprocessing
