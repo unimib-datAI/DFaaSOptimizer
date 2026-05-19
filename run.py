@@ -3,6 +3,7 @@ from run_centralized_model import load_configuration
 from run_centralized_model import run as run_centralized
 from run_faasmacro import run as run_iterations
 from run_faasmadea import run as run_auction
+from hierarchical_auction.runner import run as run_hierarchical
 from postprocessing import load_models_results
 from utilities import reconcile_paths
 
@@ -49,7 +50,8 @@ def parse_arguments() -> argparse.Namespace:
       "centralized", 
       "faas-macro-v0", 
       "faas-macro", 
-      "faas-madea", 
+      "faas-madea",
+      "hierarchical",
       "generate_only"
     ],
     required = True
@@ -257,7 +259,9 @@ def results_postprocessing(
         )
         mname = "LoadManagementModel" if method == "centralized" else (
           "FaaS-MACrO" if method == "faas-macro" else (
-            "FaaS-MACrO(v0)" if method == "faas-macro-v0" else "FaaS-MADeA"
+            "FaaS-MACrO(v0)" if method == "faas-macro-v0" else (
+              "FaaS-MADeA" if method == "faas-madea" else "HierarchicalAuction"
+            )
           )
         )
         results.append(load_models_results(abs_folders[-1], [mkey], [mname]))
@@ -833,7 +837,8 @@ def run(
     "centralized": [], 
     "faas-macro": [], 
     "faas-macro-v0": [], 
-    "faas-madea": []
+    "faas-madea": [],
+    "hierarchical": []
   }
   if os.path.exists(os.path.join(base_solution_folder, "experiments.json")):
     with open(
@@ -852,6 +857,7 @@ def run(
     run_i = False # -- faasmacro
     run_i_v0 = False # -- faasmacro (v0)
     run_a = False # -- faasmadea
+    run_h = False # -- hierarchical
     experiment_idx = None
     try:
       experiment_idx = solution_folders["experiments_list"].index(
@@ -881,13 +887,20 @@ def run(
           solution_folders["faas-madea"][experiment_idx] is None
         )):
         run_a = True
+      if (not generate_only and "hierarchical" in methods) and ((
+          len(solution_folders["hierarchical"]) <= experiment_idx
+        ) or (
+          solution_folders["hierarchical"][experiment_idx] is None
+        )):
+        run_h = True
     except ValueError:
       run_c = "centralized" in methods
       run_i = "faas-macro" in methods
       run_i_v0 = "faas-macro-v0" in methods
       run_a = "faas-madea" in methods
+      run_h = "hierarchical" in methods
     # if the experiment is still to run...
-    if run_c or run_i or run_i_v0 or run_a or generate_only:
+    if run_c or run_i or run_i_v0 or run_a or run_h or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       config["limits"][loop_over].pop("values", None)
@@ -959,12 +972,21 @@ def run(
       # -- solve auction
       if run_a:
         a_folder = run_auction(
-          config, 
+          config,
           sp_parallelism,
-          log_on_file = log_on_file, 
+          log_on_file = log_on_file,
           disable_plotting = disable_plotting
         )
         solution_folders["faas-madea"].append(a_folder)
+      # -- solve hierarchical
+      if run_h:
+        h_folder = run_hierarchical(
+          config,
+          sp_parallelism,
+          log_on_file = log_on_file,
+          disable_plotting = disable_plotting
+        )
+        solution_folders["hierarchical"].append(h_folder)
       # -- save info
       if experiment_idx is None:
         solution_folders["experiments_list"].append([exp_value, seed])
