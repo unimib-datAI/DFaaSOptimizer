@@ -181,3 +181,81 @@ def test_price_computed_correctly_in_zero_price_two_function_network():
   assert result.y[0, 2, 1] == 2.0
   assert result.omega[0, 0] == 0.0
   assert result.omega[0, 1] == 0.0
+
+
+def test_engine_stops_early_when_no_capacity_available():
+    """No seller has capacity — engine must return immediately with empty allocations."""
+    neighborhood = np.array([
+        [0, 1, 0],
+        [1, 0, 1],
+        [0, 1, 0],
+    ], dtype=float)
+    engine = HierarchicalAuctionEngine(
+        neighborhood=neighborhood,
+        num_functions=1,
+        service_quantum=np.array([1.0]),
+        max_depth=5,
+        auction_options={
+            "epsilon": 0.01,
+            "eta": [0.5, 0.3, 0.2, 0.1, 0.05],
+            "latency_weight": 0.0,
+            "fairness_weight": 0.0,
+        },
+    )
+
+    result = engine.run_higher_levels(
+        y=np.zeros((3, 3, 1)),
+        omega=np.array([[3.0], [0.0], [0.0]]),
+        residual_capacity=np.zeros((3, 1)),
+        node_prices=np.zeros((3, 1)),
+        latency=np.zeros((3, 3)),
+        fairness=np.zeros((3, 1)),
+    )
+
+    assert result.accepted_allocations == []
+    assert result.omega[0, 0] == 3.0
+    assert result.y[0, :, 0].sum() == 0.0
+
+
+def test_engine_multi_level_cascade_terminates_cleanly():
+    """Engine must iterate levels without error and not over-allocate.
+
+    Topology: linear chain 0-1-2-3-4.
+    omega[0] = 2.0, residual_capacity[4] = 5.0.
+    Node 4 may not be reachable at level 2 depending on aggregation,
+    but the engine must terminate without AssertionError and the
+    total allocated flow must equal 2.0 - remaining omega.
+    """
+    n = 5
+    neighborhood = np.zeros((n, n), dtype=float)
+    for i in range(n - 1):
+        neighborhood[i, i + 1] = 1.0
+        neighborhood[i + 1, i] = 1.0
+
+    engine = HierarchicalAuctionEngine(
+        neighborhood=neighborhood,
+        num_functions=1,
+        service_quantum=np.array([1.0]),
+        max_depth=4,
+        auction_options={
+            "epsilon": 0.01,
+            "eta": [0.5, 0.4, 0.3, 0.2],
+            "latency_weight": 0.0,
+            "fairness_weight": 0.0,
+        },
+    )
+
+    result = engine.run_higher_levels(
+        y=np.zeros((n, n, 1)),
+        omega=np.array([[2.0], [0.0], [0.0], [0.0], [0.0]]),
+        residual_capacity=np.array([[0.0], [0.0], [0.0], [0.0], [5.0]]),
+        node_prices=np.zeros((n, 1)),
+        latency=np.zeros((n, n)),
+        fairness=np.zeros((n, 1)),
+    )
+
+    assert result.omega[0, 0] >= 0.0
+    total_allocated = result.y[0, :, 0].sum()
+    assert total_allocated == pytest.approx(2.0 - result.omega[0, 0])
+    assert result.y[0, 0, 0] == 0.0   # no self-allocation
+    assert total_allocated <= 2.0
