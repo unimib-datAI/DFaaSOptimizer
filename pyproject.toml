@@ -27,7 +27,88 @@ dependencies = [
   "six==1.17.0",
   "tqdm==4.67.1",
   "tzdata==2025.2",
+  "seaborn>=0.13.2",
 ]
 
 [tool.uv]
 package = false
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+    "pandas-stubs>=2.3.3.260113",
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.15.13",
+    "types-pyyaml>=6.0.12.20260518",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+indent-width = 2
+
+[tool.ruff.lint]
+select = [
+  "E9",
+  "F",
+]
+ignore = [
+  "F401",
+  "F541",
+  "F841",
+]
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+files = [
+  "*.py",
+  "models",
+  "tests",
+]
+check_untyped_defs = true
+disable_error_code = [
+  "arg-type",
+  "assignment",
+  "attr-defined",
+  "call-overload",
+  "has-type",
+  "index",
+  "list-item",
+  "misc",
+  "operator",
+  "override",
+  "return-value",
+  "str-bytes-safe",
+  "union-attr",
+  "valid-type",
+  "var-annotated",
+]
+follow_imports = "skip"
+ignore_missing_imports = true
+implicit_optional = true
+show_error_codes = true
+warn_unused_configs = true
+warn_unused_ignores = true
+
+[tool.coverage.run]
+branch = true
+source = [
+  ".",
+]
+omit = [
+  ".claude/*",
+  ".gitnexus/*",
+  ".pytest_cache/*",
+  ".uv-cache/*",
+  ".venv/*",
+  "tests/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
