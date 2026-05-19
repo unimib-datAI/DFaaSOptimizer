@@ -18,7 +18,6 @@ import numpy as np
 import pandas as pd
 from networkx import adjacency_matrix as nx_adjacency_matrix
 
-# Reuse existing code (NOT modified)
 from decentralized_auction import (
   check_stopping_criteria,
   compute_residual_capacity,
@@ -161,7 +160,6 @@ def run(
     p = np.zeros((Nn, Nf))
     fairness = np.zeros((Nn, Nf))
 
-    # Step 1: Local Planning
     sp_data = deepcopy(data)
     sp = LSP()
     spr = LSPr()
@@ -172,7 +170,6 @@ def run(
     )
     total_runtime = sp_runtime["tot"] if isinstance(sp_runtime, dict) else 0.0
 
-    # Auction loop
     it = 0
     stop_searching = False
     y = np.zeros((Nn, Nn, Nf))
@@ -181,17 +178,22 @@ def run(
     best_centralized_solution: dict | None = None
     best_centralized_cost = 0.0
     best_centralized_it = -1
+    engine = HierarchicalAuctionEngine(
+      neighborhood=neighborhood,
+      num_functions=Nf,
+      service_quantum=np.ones(Nf),
+      max_depth=max_hierarchy_depth,
+      auction_options=auction_options,
+    )
 
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file=log_stream, flush=True)
 
-      # ====== LEVEL 1: One-hop auction (reuse existing code) ======
       capacity, blackboard, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data,
       )
 
-      # Use scalar eta for existing one-hop functions
       level1_options = dict(auction_options)
       if isinstance(level1_options.get("eta"), list):
         level1_options["eta"] = level1_options["eta"][0]
@@ -212,10 +214,7 @@ def run(
         y += auction_y
 
         rmp_omega = compute_offloaded_demand(y)
-        for n in range(Nn):
-          for f in range(Nf):
-            if rmp_omega[n, f] > 0:
-              fairness[n, f] += 1
+        fairness += (rmp_omega > 0).astype(fairness.dtype)
 
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
@@ -227,25 +226,14 @@ def run(
         sp_x = spr_sol[0]
         sp_r = spr_sol[4]
         sp_rho = spr_sol[5]
-        for i in range(Nn):
-          for f in range(Nf):
-            omega[i, f] = sp_omega[i, f] - rmp_omega[i, f]
-            if abs(omega[i, f]) < tolerance:
-              omega[i, f] = 0.0
+        omega = sp_omega - rmp_omega
+        omega[np.abs(omega) < tolerance] = 0.0
       else:
         a, sp_rho = start_additional_replicas(
           memory_bids, sp_r, sp_data, sp_rho,
         )
         sp_r += a
 
-      # ====== LEVELS 2+: Hierarchical auction ======
-      engine = HierarchicalAuctionEngine(
-        neighborhood=neighborhood,
-        num_functions=Nf,
-        service_quantum=np.ones(Nf),
-        max_depth=max_hierarchy_depth,
-        auction_options=auction_options,
-      )
       result = engine.run_higher_levels(
         y=y,
         omega=omega,
@@ -269,19 +257,14 @@ def run(
         sp_x = spr_sol[0]
         sp_r = spr_sol[4]
         sp_rho = spr_sol[5]
-        for i in range(Nn):
-          for f in range(Nf):
-            omega[i, f] = sp_omega[i, f] - rmp_omega[i, f]
-            if abs(omega[i, f]) < tolerance:
-              omega[i, f] = 0.0
+        omega = sp_omega - rmp_omega
+        omega[np.abs(omega) < tolerance] = 0.0
 
-      # Convergence check
       stop_searching, why_stop_searching = check_stopping_criteria(
         it, max_iterations, blackboard, omega, rmp_omega,
         bids, memory_bids, tolerance, total_runtime, time_limit,
       )
 
-      # Merge and track best
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt,
         sp_x, sp_r, sp_rho,

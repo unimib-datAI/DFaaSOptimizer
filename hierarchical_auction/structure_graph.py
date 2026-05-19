@@ -47,7 +47,7 @@ class StructureGraph:
       si = structures[ri]
       for rj in roots[idx_a + 1:]:
         sj = structures[rj]
-        if ri != rj and self.are_adjacent(si, sj):
+        if self.are_adjacent(si, sj):
           si.adjacent_structures.add(rj)
           sj.adjacent_structures.add(ri)
 

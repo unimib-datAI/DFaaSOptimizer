@@ -99,32 +99,25 @@ class HierarchicalAuctionEngine:
       residual_capacity, self._service_quantum
     )
 
-    # Build level-1 structures
     level_structures = self._structure_graph.build_level1(
       num_functions=self._num_functions
     )
-
-    # Propagate residual demand into level-1 structures (for initial state)
     self._aggregate_residual_demand(level_structures, current_omega)
 
     current_level = 2
     while current_level <= self.max_depth:
-      # Check if any structure still has unmet demand
       if not self._has_residual_demand(level_structures):
         break
 
-      # Aggregate to next level
       next_structures = self._structure_graph.aggregate_to_next_level(
         level_structures, num_functions=self._num_functions,
       )
       if not next_structures:
         break
 
-      # Propagate residual demand
       self._aggregate_residual_demand(next_structures, current_omega)
       self._populate_indicative_tokens(next_structures, token_manager)
 
-      # Generate token requests
       eta = self._get_eta(current_level)
       lat_w = self._options.get("latency_weight", 0.0)
       fair_w = self._options.get("fairness_weight", 0.0)
@@ -145,7 +138,6 @@ class HierarchicalAuctionEngine:
         level=current_level,
       )
 
-      # Resolve conflicts per (node, function)
       level_accepted: list[AcceptedAllocation] = []
       for k in range(self._num_nodes):
         for f in range(self._num_functions):
@@ -155,16 +147,12 @@ class HierarchicalAuctionEngine:
             level_accepted.extend(accepted)
 
       if not level_accepted:
-        break  # nothing allocated at this level, stop
+        break
 
       all_accepted.extend(level_accepted)
-
-      # Map to concrete flows
       current_y, current_omega = apply_allocations(
         current_y, current_omega, level_accepted,
       )
-
-      # Prepare for next level
       level_structures = next_structures
       current_level += 1
 
@@ -249,14 +237,12 @@ class HierarchicalAuctionEngine:
         if not buyer_s.is_buyer(f):
           continue
 
-        # Find seller nodes in adjacent structures
         seller_nodes = self._collect_seller_nodes(
           buyer_s, all_structures, token_manager, f,
         )
         if not seller_nodes:
           continue
 
-        # Distribute demand to concrete buyer nodes
         demand_remaining = buyer_s.residual_demand[f]
         buyer_nodes = sorted(
           n for n in buyer_s.member_nodes
@@ -268,7 +254,7 @@ class HierarchicalAuctionEngine:
             break
 
           want = min(omega[buyer_node, f], demand_remaining)
-          candidates: list[tuple[float, int, float]] = []
+          candidates: list[tuple[float, int, int]] = []
           for seller_node in seller_nodes:
             if seller_node == buyer_node:
               continue
@@ -289,16 +275,13 @@ class HierarchicalAuctionEngine:
               latency_weight=latency_weight,
               fairness_weight=fairness_weight,
             )
-            candidates.append((effective, seller_node, structure_bid))
+            candidates.append((effective, seller_node, available))
 
           candidates.sort(reverse=True)
 
-          for effective, seller_node, _structure_bid in candidates:
+          for effective, seller_node, available in candidates:
             if want <= 1e-10:
               break
-            available = token_manager.available_tokens(seller_node, f)
-            if available <= 0:
-              continue
 
             quantum = self._service_quantum[f]
             tokens = min(available, int(np.ceil(want / quantum)))
