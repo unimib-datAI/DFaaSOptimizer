@@ -52,6 +52,24 @@ def test_compute_offloaded_demand_sums_seller_axis():
   ]))
 
 
+def test_extract_graph_latency_returns_numpy_array_with_edge_weights():
+  import networkx as nx
+  from hierarchical_auction.runner import _extract_latency
+
+  g = nx.path_graph(3)
+  nx.set_edge_attributes(
+    g, {(0, 1): 5.0, (1, 2): 3.0}, "network_latency"
+  )
+  lat = _extract_latency(g)
+
+  assert isinstance(lat, np.ndarray)
+  assert lat.shape == (3, 3)
+  assert lat[0, 1] == 5.0
+  assert lat[1, 0] == 5.0   # undirected
+  assert lat[1, 2] == 3.0
+  assert lat[0, 0] == 0.0
+
+
 def test_run_py_accepts_hierarchical_method(monkeypatch):
   monkeypatch.setattr(
     "sys.argv",

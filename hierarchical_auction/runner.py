@@ -16,6 +16,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from networkx import adjacency_matrix as nx_adjacency_matrix
 
 # Reuse existing code (NOT modified)
 from decentralized_auction import (
@@ -91,6 +92,10 @@ def compute_offloaded_demand(y: np.ndarray) -> np.ndarray:
   return y.sum(axis=1)
 
 
+def _extract_latency(graph: Any) -> np.ndarray:
+  return nx_adjacency_matrix(graph, weight="network_latency").toarray()
+
+
 def run(
   config: dict,
   parallelism: int = -1,
@@ -137,6 +142,7 @@ def run(
   neighborhood = neigh_dict_to_matrix(
     base_instance_data[None]["neighborhood"], Nn,
   )
+  latency = _extract_latency(graph)
 
   ub = (max_run_time + run_time_step) if max_run_time == min_run_time else max_run_time
   spc_complete_solution = init_complete_solution()
@@ -193,7 +199,7 @@ def run(
       bids, memory_bids = define_bids(
         omega, blackboard, p, sp_data, neighborhood, sp_rho,
         level1_options,
-        latency=np.zeros((Nn, Nn)),
+        latency=latency,
         fairness=fairness,
         delta=np.zeros((Nn, Nn)),
       )
@@ -245,7 +251,7 @@ def run(
         omega=omega,
         residual_capacity=blackboard,
         node_prices=p,
-        latency=np.zeros((Nn, Nn)),
+        latency=latency,
         fairness=fairness,
       )
       y = result.y
