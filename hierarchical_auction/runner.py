@@ -81,7 +81,7 @@ def build_auction_options(config: dict) -> dict:
   return {
     "epsilon": auction.get("epsilon", 0.01),
     "eta": auction.get("eta", [0.5, 0.3, 0.1]),
-    "zeta": auction.get("zeta", 0.1),
+    "zeta": auction.get("zeta", 0.1),   # consumed by evaluate_bids (level-1 price dampening)
     "latency_weight": auction.get("latency_weight", 0.0),
     "fairness_weight": auction.get("fairness_weight", 0.0),
   }
@@ -255,7 +255,6 @@ def run(
         fairness=fairness,
       )
       y = result.y
-      omega = result.omega
       rmp_omega = compute_offloaded_demand(y)
 
       if result.accepted_allocations:

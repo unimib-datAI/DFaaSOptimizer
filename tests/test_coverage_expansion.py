@@ -10,6 +10,8 @@ def test_hierarchical_auction_public_imports():
 
   assert ha.AcceptedAllocation is not None
   assert ha.TokenRequest is not None
+  assert ha.HierarchicalAuctionEngine is not None
+  assert ha.LevelResult is not None
 
 import compare_results
 import fwd_analysis

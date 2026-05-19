@@ -23,13 +23,11 @@ class Structure:
   residual_demand: np.ndarray = field(init=False)
   structure_price: np.ndarray = field(init=False)
   indicative_tokens: np.ndarray = field(init=False)
-  bid_price: np.ndarray = field(init=False)
 
   def __post_init__(self) -> None:
     self.residual_demand = np.zeros(self.num_functions, dtype=float)
     self.structure_price = np.zeros(self.num_functions, dtype=float)
     self.indicative_tokens = np.zeros(self.num_functions, dtype=float)
-    self.bid_price = np.zeros(self.num_functions, dtype=float)
 
   @property
   def size(self) -> int:
