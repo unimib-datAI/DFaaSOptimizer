@@ -57,8 +57,8 @@ def compute_avg_demand(demand: dict, Nn: int, Nf: int) -> Tuple[float, float]:
     # compute standard deviation
     demand_std[f] = 0.0
     for n in range(Nn):
-      demand_avg[f] += (demand[(n+1, f+1)] - demand_avg[f])**2
-    demand_avg[f] = np.sqrt(demand_avg[f] / (Nn - 1))
+      demand_std[f] += (demand[(n+1, f+1)] - demand_avg[f])**2
+    demand_std[f] = np.sqrt(demand_std[f] / max(1, Nn - 1))
   return demand_avg, demand_std
 
 
