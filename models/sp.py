@@ -1,4 +1,4 @@
-from models.model import BaseLoadManagementModel, PYO_VAR_TYPE
+from models.model import BaseLoadManagementModel, PYO_VAR_TYPE, PYO_PARAM_TYPE
 
 import pyomo.environ as pyo
 
@@ -177,12 +177,12 @@ class LSPr_v0(SPAbstractModel):
     ###########################################################################
     # assigned offloading
     self.model.omega_bar = pyo.Param(
-      self.model.N, self.model.F, 
-      within = PYO_VAR_TYPE
+      self.model.N, self.model.F,
+      within = PYO_PARAM_TYPE
     )
     self.model.y_bar = pyo.Param(
-      self.model.N, self.model.N, self.model.F, 
-      within = PYO_VAR_TYPE
+      self.model.N, self.model.N, self.model.F,
+      within = PYO_PARAM_TYPE
     )
     ###########################################################################
     # Constraints

@@ -322,7 +322,6 @@ def plot_action(
     )
     plt.close()
   else:
-    plt.title(title_key)
     plt.show()
 
 
@@ -366,7 +365,6 @@ def plot_forward(
     )
     plt.close()
   else:
-    plt.title(title_key)
     plt.show()
 
 

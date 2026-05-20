@@ -45,7 +45,7 @@ from run_faasmacro import (
   decode_solutions,
   solve_subproblem,
 )
-from utilities import load_configuration
+from utils.common import load_configuration
 
 
 def parse_arguments() -> argparse.Namespace:

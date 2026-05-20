@@ -6,6 +6,7 @@ from models.model import (
   BaseCentralizedModel,
   LoadManagementModel,
   PYO_VAR_TYPE,
+  PYO_PARAM_TYPE,
   _solver_option_name,
 )
 from models.sp import (
@@ -274,6 +275,42 @@ def test_lspr_v0_model_has_assigned_offloading():
   assert model.omega_bar is not None
   assert model.y_bar is not None
   assert model.no_traffic_loss_v0 is not None
+
+
+def test_lspr_v0_omega_bar_and_y_bar_domain_is_nonnegative_reals():
+  # Regression: omega_bar and y_bar were declared within=PYO_VAR_TYPE
+  # (NonNegativeIntegers), but they store previous-iteration solver outputs
+  # which can be fractional. The domain must be NonNegativeReals.
+  m = LSPr_v0()
+  assert m.model.omega_bar.domain == pyo.NonNegativeReals
+  assert m.model.y_bar.domain == pyo.NonNegativeReals
+  assert m.model.omega_bar.domain == PYO_PARAM_TYPE
+  assert m.model.y_bar.domain == PYO_PARAM_TYPE
+
+
+def test_lspr_v0_generate_instance_accepts_float_omega_bar():
+  # Regression: RuntimeError "value not in domain NonNegativeIntegers" when
+  # a solver returns fractional omega values (e.g. 0.51) stored in omega_bar.
+  m = LSPr_v0()
+  data = {
+    None: {
+      "Nn": {None: 2},
+      "Nf": {None: 1},
+      "whoami": {None: 1},
+      "incoming_load": {(1, 1): 10.0, (2, 1): 5.0},
+      "demand": {(1, 1): 1.0, (2, 1): 1.0},
+      "max_utilization": {1: 0.8},
+      "memory_requirement": {1: 2},
+      "memory_capacity": {1: 10, 2: 10},
+      "alpha": {(1, 1): 1.0, (2, 1): 1.0},
+      "delta": {(1, 1): 0.9, (2, 1): 0.9},
+      "omega_bar": {(1, 1): 0.51, (2, 1): 0.0},
+      "y_bar": {(1, 1, 1): 0.17, (1, 2, 1): 0.0, (2, 1, 1): 0.0, (2, 2, 1): 0.0},
+    }
+  }
+  instance = m.generate_instance(data)
+  assert instance is not None
+  assert abs(pyo.value(instance.omega_bar[1, 1]) - 0.51) < 1e-9
 
 
 def test_lspr_model_adds_rejections_to_lspr_v0():

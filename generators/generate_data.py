@@ -193,8 +193,8 @@ def generate_neighborhood(
     ):
     if Nn < 6 or Nn % 2 != 0:
       raise ValueError("planar degree-3 neighborhood requires an even Nn >= 6")
-    graph = circular_ladder_graph(Nn // 2)
-    neighborhood = adjacency_matrix(graph).toarray()
+    graph = nx.circular_ladder_graph(Nn // 2)
+    neighborhood = nx.adjacency_matrix(graph).toarray()
   elif "p" in limits["neighborhood"]:
     for n1 in range(Nn):
       for n2 in range(n1+1,Nn):

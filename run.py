@@ -144,14 +144,20 @@ def load_termination_condition(
       for s in tc["0"]:
         c, i, d, b, bc, trt = [None] * 6
         if "total runtime" in s:
-          if "centralized" in s:
+          if "centralized" in s and "obj. deviation" in s:
             c, i, d, b, bc, trt = parse(
-              "{} (it: {}; obj. deviation: {}; best it: {}; best centralized it: {}; total runtime: {})", 
+              "{} (it: {}; obj. deviation: {}; best it: {}; best centralized it: {}; total runtime: {})",
+              s
+            )
+          elif "centralized" in s:
+            # hierarchical auction format: no obj. deviation / best it fields
+            c, i, bc, trt = parse(
+              "{} (it: {}; best centralized it: {}; total runtime: {})",
               s
             )
           else:
             c, i, d, b, trt = parse(
-              "{} (it: {}; obj. deviation: {}; best it: {}; total runtime: {})", 
+              "{} (it: {}; obj. deviation: {}; best it: {}; total runtime: {})",
               s
             )
         elif "best it" in s:

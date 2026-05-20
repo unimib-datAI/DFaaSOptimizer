@@ -53,8 +53,9 @@
       "max": 0.75
     },
     "load": {
-      "trace_type": "fixed_sum",
-      "values": ["auto"]
+      "trace_type": "sinusoidal",
+      "min": {"min": 5, "max": 10},
+      "max": {"min": 50, "max": 100}
     },
     "weights": {
       "alpha": {"min": 1.0, "max": 1.5},
