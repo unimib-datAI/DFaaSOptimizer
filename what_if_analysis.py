@@ -351,7 +351,7 @@ def compute_progressive_deviation(
 
 def find_best_iterations(
     experiment_folder: str, loop_over: str
-  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+  ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
   # build folder to store the analysis outcomes
   output_folder = os.path.join(experiment_folder, "postprocessing")
   os.makedirs(output_folder, exist_ok = True)
@@ -466,9 +466,10 @@ def find_best_iterations(
   )
   plt.close()
   # add method name
+  logs_df["method"] = method_name
   best_sol_df["social_welfare"]["method"] = method_name
   best_sol_df["centralized"]["method"] = method_name
-  return best_sol_df["social_welfare"], best_sol_df["centralized"]
+  return best_sol_df["social_welfare"], best_sol_df["centralized"], logs_df
 
 
 def main(base_folder: str, loop_over: str, milestones: list):
@@ -478,6 +479,7 @@ def main(base_folder: str, loop_over: str, milestones: list):
   # load information
   by_social_welfare = pd.DataFrame()
   by_centralized_objective = pd.DataFrame()
+  all_logs_df = pd.DataFrame()
   for foldername in os.listdir(base_folder):
     experiment_folder = os.path.join(base_folder, foldername)
     if os.path.isdir(experiment_folder) and not foldername.startswith("."):
@@ -486,12 +488,15 @@ def main(base_folder: str, loop_over: str, milestones: list):
             "LSPc_solution.csv" in os.listdir(experiment_folder)
         ):
         print(foldername)
-        sw, cobj = find_best_iterations(experiment_folder, loop_over)
+        sw, cobj, ldf = find_best_iterations(experiment_folder, loop_over)
         by_social_welfare = pd.concat(
           [by_social_welfare, sw], ignore_index = True
         )
         by_centralized_objective = pd.concat(
           [by_centralized_objective, cobj], ignore_index = True
+        )
+        all_logs_df = pd.concat(
+          [all_logs_df, ldf], ignore_index = True
         )
   # analyze final result
   last_by_sw = by_social_welfare.groupby(
@@ -504,6 +509,10 @@ def main(base_folder: str, loop_over: str, milestones: list):
   # compute progressive deviation
   compute_progressive_deviation(
     by_centralized_objective, loop_over, milestones, output_folder
+  )
+  # save logs
+  all_logs_df.to_csv(
+    os.path.join(output_folder, "all_logs_df.csv"), index = False
   )
 
 
