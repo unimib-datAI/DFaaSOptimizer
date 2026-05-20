@@ -117,36 +117,41 @@ def compare_across_folders(
   all_runtime = pd.DataFrame()
   for postprocessing_folder in postprocessing_folders:
     print(postprocessing_folder)
-    key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
-    obj, rej, runtime = compare_results(
-      os.path.join(postprocessing_folder, "postprocessing"), 
-      loop_over, 
-      get_loop_over_label(loop_over),
-      models
-    )
-    # add info
-    obj[key] = int(key_val) if key != "eef" else round(
-      float(key_val) * 100, 2
-    )
-    rej[key] = int(key_val) if key != "eef" else round(
-      float(key_val) * 100, 2
-    )
-    runtime[key] = int(key_val) if key != "eef" else round(
-      float(key_val) * 100, 2
-    )
-    if filter_by is not None and filter_by in obj and filter_by in runtime:
-      if keep_only is not None:
-        obj = obj[obj[filter_by] == keep_only]
-        rej = rej[rej[filter_by] == keep_only]
-        runtime = runtime[runtime[filter_by] == keep_only]
-      elif drop_value is not None:
-        obj = obj[obj[filter_by] != drop_value]
-        rej = rej[rej[filter_by] != drop_value]
-        runtime = runtime[runtime[filter_by] != drop_value]
-    # merge
-    all_obj = pd.concat([all_obj, obj])
-    all_rej = pd.concat([all_rej, rej])
-    all_runtime = pd.concat([all_runtime, runtime])
+    bname = os.path.basename(postprocessing_folder)
+    tokens = parse(str_format, bname)
+    if tokens is not None:
+      key, key_val = tokens
+      obj, rej, runtime = compare_results(
+        os.path.join(postprocessing_folder, "postprocessing"), 
+        loop_over, 
+        get_loop_over_label(loop_over),
+        models
+      )
+      # add info
+      obj[key] = int(key_val) if key != "eef" else round(
+        float(key_val) * 100, 2
+      )
+      rej[key] = int(key_val) if key != "eef" else round(
+        float(key_val) * 100, 2
+      )
+      runtime[key] = int(key_val) if key != "eef" else round(
+        float(key_val) * 100, 2
+      )
+      if filter_by is not None and filter_by in obj and filter_by in runtime:
+        if keep_only is not None:
+          obj = obj[obj[filter_by] == keep_only]
+          rej = rej[rej[filter_by] == keep_only]
+          runtime = runtime[runtime[filter_by] == keep_only]
+        elif drop_value is not None:
+          obj = obj[obj[filter_by] != drop_value]
+          rej = rej[rej[filter_by] != drop_value]
+          runtime = runtime[runtime[filter_by] != drop_value]
+      # merge
+      all_obj = pd.concat([all_obj, obj])
+      all_rej = pd.concat([all_rej, rej])
+      all_runtime = pd.concat([all_runtime, runtime])
+    else:
+      print(f"\tSKIPPED: {bname} does not adhere to parse format")
   # 
   if "ScaledOnSumLMM" in models:
     all_obj.rename(
