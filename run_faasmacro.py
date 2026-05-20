@@ -687,10 +687,11 @@ def run(
     "LRMP": {it: [] for it in range(max_iterations)}
   }
   tc_dict = {
-    "LSP": {it: [] for it in range(max_iterations)}, 
-    "LSPr": [], 
+    "LSP": {it: [] for it in range(max_iterations)},
+    "LSPr": [],
     "LRMP": {it: [] for it in range(max_iterations)}
   }
+  runtime_list: list[float] = []
   ub = (
     max_run_time + run_time_step
   ) if max_run_time == min_run_time else max_run_time
@@ -1036,11 +1037,12 @@ def run(
             spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
           )
     ee = datetime.now()
+    runtime_list.append(total_runtime)
     if verbose > 0:
       print(
         f"    TOTAL RUNTIME [s] = {total_runtime} "
         f"(wallclock: {(ee-ss).total_seconds()})",
-        file = log_stream, 
+        file = log_stream,
         flush = True
       )
   # join
@@ -1121,6 +1123,9 @@ def run(
   # save models termination condition
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
+  )
+  pd.DataFrame({"tot": runtime_list}).to_csv(
+    os.path.join(solution_folder, "runtime.csv"), index=False,
   )
   if verbose > 0:
     print(
