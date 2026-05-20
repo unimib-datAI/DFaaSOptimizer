@@ -65,9 +65,7 @@ class BuyerNodeModel(SPAbstractModel):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.maximize_utility, sense = pyo.maximize
-    )
+    self.set_objective(rule = self.maximize_utility, sense = pyo.maximize)
   
   @staticmethod
   def no_traffic_loss(model, f):
@@ -163,9 +161,7 @@ class SellerNodeModel(RMPAbstractModel):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.maximize_processing, sense = pyo.maximize
-    )
+    self.set_objective(rule = self.maximize_processing, sense = pyo.maximize)
   
   @staticmethod
   def no_traffic_loss(model, n, f):

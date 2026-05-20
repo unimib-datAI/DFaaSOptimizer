@@ -116,9 +116,7 @@ class LRMP(RMPCentralized):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.maximize_processing, sense = pyo.maximize
-    )
+    self.set_objective(rule = self.maximize_processing, sense = pyo.maximize)
   
   def _provide_initial_solution(self, instance, initial_solution):
     Nn = instance.Nn.value
@@ -242,9 +240,7 @@ class LRMP_freeMemory(RMPAbstractModel):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.maximize_processing, sense = pyo.maximize
-    )
+    self.set_objective(rule = self.maximize_processing, sense = pyo.maximize)
   
   @staticmethod
   def no_traffic_loss(model, n, f):

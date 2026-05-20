@@ -1,4 +1,5 @@
 import pyomo.environ as pyo
+import logging
 from models.model import (
   BaseAbstractModel,
   BaseLoadManagementModel,
@@ -159,6 +160,15 @@ def test_base_abstract_model_generate_instance():
 def test_base_abstract_model_solve_method_exists():
   m = BaseAbstractModel()
   assert hasattr(m, "solve")
+
+
+def test_model_objective_overrides_are_explicit(caplog):
+  caplog.set_level(logging.WARNING)
+
+  _ = LSP()
+  _ = LSPr()
+
+  assert "Implicitly replacing the Component attribute OBJ" not in caplog.text
 
 
 def test_solve_does_not_pass_disabled_warmstart(monkeypatch):

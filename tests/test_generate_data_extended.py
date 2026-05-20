@@ -1,4 +1,5 @@
 import numpy as np
+import networkx as nx
 import pytest
 from networkx import Graph
 
@@ -67,6 +68,19 @@ def test_generate_neighborhood_with_k_regular():
   assert neighborhood.shape == (6, 6)
   assert graph.number_of_nodes() == 6
   assert not np.allclose(neighborhood, np.zeros((6, 6)))
+
+
+def test_generate_neighborhood_with_planar_degree_three_graph():
+  rng = _rng()
+  limits = {"neighborhood": {"type": "planar", "degree": 3}}
+
+  neighborhood, graph = generate_neighborhood(10, limits, rng)
+
+  assert neighborhood.shape == (10, 10)
+  assert graph.number_of_nodes() == 10
+  assert nx.is_connected(graph)
+  assert nx.check_planarity(graph)[0] is True
+  assert {degree for _, degree in graph.degree()} == {3}
 
 
 def test_generate_weights_with_initialization_time():

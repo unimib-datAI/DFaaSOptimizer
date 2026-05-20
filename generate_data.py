@@ -1,7 +1,7 @@
 from utilities import generate_random_float, generate_random_int
 from utilities import load_base_instance
 
-from networkx import random_regular_graph, adjacency_matrix
+from networkx import random_regular_graph, adjacency_matrix, circular_ladder_graph
 from networkx import from_numpy_array, Graph
 from copy import deepcopy
 from typing import Tuple
@@ -183,7 +183,15 @@ def generate_neighborhood(
   ) -> Tuple[np.array, Graph]:
   neighborhood = np.zeros((Nn, Nn))
   graph = None
-  if "p" in limits["neighborhood"]:
+  if (
+      limits["neighborhood"].get("type") == "planar"
+      and limits["neighborhood"].get("degree") == 3
+    ):
+    if Nn < 6 or Nn % 2 != 0:
+      raise ValueError("planar degree-3 neighborhood requires an even Nn >= 6")
+    graph = circular_ladder_graph(Nn // 2)
+    neighborhood = adjacency_matrix(graph).toarray()
+  elif "p" in limits["neighborhood"]:
     for n1 in range(Nn):
       for n2 in range(n1+1,Nn):
         neighborhood[n1,n2] = rng.binomial(1, limits["neighborhood"]["p"])

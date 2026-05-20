@@ -28,6 +28,11 @@ class BaseAbstractModel():
   
   def generate_instance(self, data: dict):
     return self.model.create_instance(data)
+
+  def set_objective(self, rule, sense = pyo.minimize) -> None:
+    if hasattr(self.model, "OBJ"):
+      self.model.del_component(self.model.OBJ)
+    self.model.OBJ = pyo.Objective(rule = rule, sense = sense)
   
   def solve(
       self, 
@@ -236,9 +241,7 @@ class LoadManagementModel(BaseCentralizedModel):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.maximize_processing, sense = pyo.maximize
-    )
+    self.set_objective(rule = self.maximize_processing, sense = pyo.maximize)
   
   @staticmethod
   def utilization_equilibrium(model, n, f):
