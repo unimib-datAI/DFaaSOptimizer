@@ -14,7 +14,12 @@ def get_faasmacro_runtime(
   for exp, data in logs_df.groupby("exp"):
     all_time_data = pd.DataFrame()
     for _, t_data in data.groupby("time"):
-      time_data = t_data.loc[:,t_data.columns.str.endswith("runtime")].copy(
+      runtime_cols = []
+      for col in t_data.columns:
+        if col.endswith("runtime"):
+          if "MACrO" in method or (not col.startswith("sp")):
+            runtime_cols.append(col)
+      time_data = t_data.loc[:,runtime_cols].copy(
         deep = True
       )
       time_data["tot_runtime"] = time_data.sum(axis = "columns")
@@ -111,7 +116,7 @@ def parse_log_file(
       complete_path, exp, logs_df, best_sol_df, Nn
     )
   elif "madea" in method_name.lower():
-    logs_df, best_sol_df = parse_faasmadea_log_file(
+    logs_df, best_sol_df = parse_faasmadea0_log_file(
       complete_path, exp, logs_df, best_sol_df, Nn
     )
   return logs_df, best_sol_df
@@ -377,7 +382,7 @@ def parse_faasmadea_log_file(
                   lines[it_row_idx].startswith("    TOTAL RUNTIME")
             ):
             # load sp info
-            if "sp" in lines[it_row_idx]:
+            if "sp: DONE" in lines[it_row_idx]:
               sp_runtime = None
               if "runtime" in lines[it_row_idx]:
                 _, _, sp_runtime = parse.parse(
@@ -398,10 +403,10 @@ def parse_faasmadea_log_file(
             elif "evaluate_bids" in lines[it_row_idx]:
               runtime = None
               if "runtime" in lines[it_row_idx]:
-                runtime = parse.parse(
-                  "        evaluate_bids: DONE; runtime = {})\n",
+                _, runtime = parse.parse(
+                  "        evaluate_bids: DONE; obj = {}; runtime = {})\n",
                   lines[it_row_idx]
-                )[0]
+                )
               df["evaluate_bids_runtime"].append(
                 float(runtime) if runtime else None
               )
@@ -537,7 +542,7 @@ def parse_faasmadea0_log_file(
       sp_runtime = None
       if "sp" in lines[t_row_idx] and "runtime" in lines[t_row_idx]:
         _, _, sp_runtime = parse.parse(
-          "    sp: DONE  ({}; obj = {}; runtime = {})\n", 
+          "    sp: DONE ({}; obj = {}; runtime = {})\n", 
           lines[t_row_idx]
         )
       t_row_idx += 1
@@ -548,6 +553,8 @@ def parse_faasmadea0_log_file(
         "iteration": [],
         "define_bids_runtime": [],
         "evaluate_bids_runtime": [],
+        "n_define_bids": [],
+        "n_evaluate_bids": [],
         "sp_runtime": []
       }
       n_iterations = 0
@@ -568,23 +575,43 @@ def parse_faasmadea0_log_file(
             ):
             if "define_bids" in lines[it_row_idx]:
               runtime = None
+              n_auctions = None
               if "runtime" in lines[it_row_idx]:
-                runtime = parse.parse(
-                  "        define_bids: DONE; runtime = {})\n",
-                  lines[it_row_idx]
-                )[0]
+                if "n_auctions" in lines[it_row_idx]:
+                  runtime, n_auctions, _ = parse.parse(
+                    "        define_bids: DONE; runtime = {}; n_auctions = {}; tot runtime = {})\n",
+                    lines[it_row_idx]
+                  )
+                else:
+                  runtime = parse.parse(
+                    "        define_bids: DONE; runtime = {})\n",
+                    lines[it_row_idx]
+                  )[0]
               df["define_bids_runtime"].append(
                 float(runtime) if runtime else None
               )
+              df["n_define_bids"].append(
+                int(n_auctions) if n_auctions else None
+              )
             elif "evaluate_bids" in lines[it_row_idx]:
               runtime = None
+              n_auctions = None
               if "runtime" in lines[it_row_idx]:
-                runtime = parse.parse(
-                  "        evaluate_bids: DONE; runtime = {})\n",
-                  lines[it_row_idx]
-                )[0]
+                if "n_auctions" in lines[it_row_idx]:
+                  runtime, n_auctions, _ = parse.parse(
+                    "        evaluate_bids: DONE; runtime = {}; n_auctions = {}; tot runtime = {})\n",
+                    lines[it_row_idx]
+                  )
+                else:
+                  runtime = parse.parse(
+                    "        evaluate_bids: DONE; runtime = {})\n",
+                    lines[it_row_idx]
+                  )[0]
               df["evaluate_bids_runtime"].append(
                 float(runtime) if runtime else None
+              )
+              df["n_evaluate_bids"].append(
+                int(n_auctions) if n_auctions else None
               )
             elif (
                 "check_stopping_criteria" in lines[it_row_idx] and 
@@ -655,6 +682,7 @@ def parse_faasmadea0_log_file(
       neval = len(df["evaluate_bids_runtime"])
       if neval < ndef:
         df["evaluate_bids_runtime"] += [None] * (ndef - neval)
+        df["n_evaluate_bids"] += [None] * (ndef - neval)
       # merge and move to the next time step
       logs_df = pd.concat(
         [logs_df, pd.DataFrame(df)], ignore_index = True

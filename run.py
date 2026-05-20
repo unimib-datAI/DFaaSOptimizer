@@ -5,7 +5,7 @@ from run_faasmacro import run as run_iterations
 from run_faasmadea import run as run_auction
 from hierarchical_auction.runner import run as run_hierarchical
 from postprocessing import load_models_results
-from utilities import reconcile_paths
+from utils.common import reconcile_paths
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -439,9 +439,15 @@ def results_postprocessing(
             int(exp_description_tuple[0]),
             mname
           )
+          logs_df.to_csv(
+            os.path.join(exp_plot_folder, f"logs_df_{mname}.csv")
+          )
           runtimes[mname] = get_faasmacro_runtime(
             logs_df, exp_plot_folder, mname
           )
+      runtimes[mname].to_csv(
+        os.path.join(exp_plot_folder, f"runtime_{mname}.csv")
+      )
     # plot runtime comparison
     if "LoadManagementModel" in found_methods and len(runtimes) > 1:
       runtime_comparison = {
@@ -825,7 +831,9 @@ def run(
   ):
   seed = base_config["seed"]
   log_on_file = True if base_config["verbose"] > 0 else False
-  exp_values = base_config["limits"][loop_over]
+  exp_values = base_config["limits"].get(loop_over)
+  if exp_values is None:
+    exp_values = base_config["limits"]["neighborhood"][loop_over]
   disable_plotting = not enable_plotting
   from_instances = base_config["limits"].get("path", None)
   generate_only = "generate_only" in methods
@@ -903,9 +911,13 @@ def run(
     if run_c or run_i or run_i_v0 or run_a or run_h or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
-      config["limits"][loop_over].pop("values", None)
-      config["limits"][loop_over]["min"] = exp_value
-      config["limits"][loop_over]["max"] = exp_value
+      if loop_over in config["limits"]:
+        config["limits"][loop_over].pop("values", None)
+        config["limits"][loop_over]["min"] = exp_value
+        config["limits"][loop_over]["max"] = exp_value
+      else:
+        config["limits"]["neighborhood"][loop_over].pop("values", None)
+        config["limits"]["neighborhood"][loop_over] = exp_value
       config["seed"] = seed
       # -- look for old instance path (if required)
       if "experiments_list" in old_instance_paths:

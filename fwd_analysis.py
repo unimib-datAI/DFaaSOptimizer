@@ -1,7 +1,7 @@
+from generators.load_generator import LoadGenerator
 from run_centralized_model import encode_solution
-from utilities import load_requests_traces
+from utils.common import load_requests_traces
 from postprocessing import load_solution
-from load_generator import LoadGenerator
 
 import matplotlib.pyplot as plt
 from typing import Tuple
@@ -23,9 +23,13 @@ def count_requests(
     Nn = int(data["None"]["Nn"]["None"])
     Nf = int(data["None"]["Nf"]["None"])
   # load solution
-  solution, replicas, detailed_fwd_solution, _, _ = load_solution(
-    solution_folder, model_name
-  )
+  solution, replicas, detailed_fwd_solution = [pd.DataFrame()] * 3
+  if os.path.exists(
+      os.path.join(solution_folder, f"{model_name}_solution.csv")
+    ):
+    solution, replicas, detailed_fwd_solution, _, _ = load_solution(
+      solution_folder, model_name
+    )
   # count local/fwd/rejected requests
   all_local = pd.DataFrame()
   all_sentrecv = pd.DataFrame()
@@ -126,45 +130,57 @@ def plot_filtered_traces(
 
 
 if __name__ == "__main__":
-  solution_folder = "solutions/for_dfaas_instances/2026-01-27_12-07-13.163152"
+  base_solution_folder = "solutions/3classes-fixed_sum_auto_avg/k_3"
   model_name = "LoadManagementModel"
-  all_local, all_sentrecv, all_rej = count_requests(
-    solution_folder, model_name
-  )
-  only_local,with_offloading,with_reject = filter_traces(all_sentrecv, all_rej)
-  with open(
-      os.path.join(solution_folder, "load", "trace_filtered.json"), "w"
-    ) as ost:
-    ost.write(
-      json.dumps(
-        {
-          "only_local": only_local, 
-          "with_offloading": with_offloading,
-          "with_reject": with_reject
-        }, 
-        indent = 2
+  for dname in os.listdir(base_solution_folder):
+    if os.path.isdir(os.path.join(base_solution_folder, dname)) and not (
+        dname.startswith(".") or dname.startswith("postprocessing")
+      ):
+      print(dname)
+      solution_folder = os.path.join(base_solution_folder, dname)
+      all_local, all_sentrecv, all_rej = count_requests(
+        solution_folder, model_name
       )
-    )
-  plot_filtered_traces(
-    solution_folder, only_local, with_offloading, with_reject
-  )
-  # plot all
-  t = 0
-  all_sentrecv[all_sentrecv["t"] == t][["sent","recv"]].plot.bar(logy = True)
-  plt.grid(which = "both", axis = "y")
-  plt.savefig(
-    os.path.join(solution_folder, f"sentrecv_t{t}.png"),
-    dpi = 300,
-    format = "png",
-    bbox_inches = "tight"
-  )
-  # #
-  # _, axs = plt.subplots(nrows = Nf, ncols = 1, figsize = (30,2*Nf))
-  # for f in range(Nf):
-  #   all_sentrecv[
-  #     all_sentrecv["t"] == 0
-  #   ].loc[:,all_sentrecv.columns.str.startswith(f"f{f}")].plot.bar(
-  #     ax = axs[f],
-  #     logy = True
-  #   )
-  # plt.show()
+      if len(all_sentrecv) > 0:
+        only_local, with_offloading, with_reject = filter_traces(
+          all_sentrecv, all_rej
+        )
+        os.makedirs(os.path.join(solution_folder, "load"), exist_ok = True)
+        with open(
+            os.path.join(solution_folder, "load", "trace_filtered.json"), "w"
+          ) as ost:
+          ost.write(
+            json.dumps(
+              {
+                "only_local": only_local, 
+                "with_offloading": with_offloading,
+                "with_reject": with_reject
+              }, 
+              indent = 2
+            )
+          )
+        plot_filtered_traces(
+          solution_folder, only_local, with_offloading, with_reject
+        )
+        # plot all
+        t = 0
+        all_sentrecv[all_sentrecv["t"] == t][["sent","recv"]].plot.bar(
+          logy = True
+        )
+        plt.grid(which = "both", axis = "y")
+        plt.savefig(
+          os.path.join(solution_folder, f"sentrecv_t{t}.png"),
+          dpi = 300,
+          format = "png",
+          bbox_inches = "tight"
+        )
+        # #
+        # _, axs = plt.subplots(nrows = Nf, ncols = 1, figsize = (30,2*Nf))
+        # for f in range(Nf):
+        #   all_sentrecv[
+        #     all_sentrecv["t"] == 0
+        #   ].loc[:,all_sentrecv.columns.str.startswith(f"f{f}")].plot.bar(
+        #     ax = axs[f],
+        #     logy = True
+        #   )
+        # plt.show()

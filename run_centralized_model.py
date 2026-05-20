@@ -1,7 +1,12 @@
-from utilities import delete_tuples, NpEncoder, load_configuration
-from utilities import float_to_int, load_requests_traces
-from generate_data import generate_data, update_data
-from load_generator import LoadGenerator
+from utils.common import (
+  delete_tuples, 
+  float_to_int, 
+  load_configuration,
+  NpEncoder
+)
+from utils.centralized import get_current_load
+from generators.generate_data import generate_data, update_data
+from generators.generate_load import generate_load_traces
 from postprocessing import plot_history
 from models.model import (
   BaseLoadManagementModel, 
@@ -9,7 +14,7 @@ from models.model import (
   PYO_VAR_TYPE
 )
 
-from networkx import draw_networkx, kamada_kawai_layout, Graph
+from networkx import draw_networkx, kamada_kawai_layout, Graph, is_planar
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -264,64 +269,6 @@ def extract_solution(
   return x, y, z, r, xi, omega, rho, solution.get("obj", np.nan)
 
 
-def generate_load_traces(
-    limits: dict, 
-    max_steps: int = 100, 
-    seed: int = 4850, 
-    trace_type: str = "clipped",
-    solution_folder: str = None
-  ) -> dict:
-  input_requests_traces = {}
-  if trace_type == "load_existing":
-    input_requests_traces = load_requests_traces(limits["load_existing"])[0]
-  else:
-    LG = LoadGenerator(average_requests = 100, amplitude_requests = 50)
-    rng = np.random.default_rng(seed = seed)
-    # generate trace for all request classes
-    input_requests_traces = {}
-    for function, function_limits in limits.items():
-      new_trace_type = trace_type
-      if trace_type == "fixed_sum_minmax" and function%2 == 0: # min for even
-        new_trace_type = "fixed_sum_min"
-      elif trace_type == "fixed_sum_minmax" and function%2 != 0: # max for odd
-        new_trace_type = "fixed_sum_max"
-      input_requests_traces[function] = LG.generate_traces(
-        max_steps = max_steps, 
-        limits = function_limits,
-        rng = rng,
-        trace_type = new_trace_type #f"manual{function}"#
-      )
-      # plot trace (if required)
-      if len(limits) <= 10 and len(function_limits) <= 10:
-        plot_filename = None
-        if solution_folder is not None:
-          plot_filename = os.path.join(solution_folder, "load")
-          os.makedirs(plot_filename, exist_ok = True)
-          plot_filename = os.path.join(plot_filename, f"f{function}.png")
-        LG.plot_input_load(
-          input_requests_traces[function], plot_filename = plot_filename
-        )
-  # save traces (if required)
-  if solution_folder is not None:
-    with open(
-      os.path.join(solution_folder, "input_requests_traces.json"), "w"
-    ) as istream:
-      istream.write(
-        json.dumps(input_requests_traces, indent = 2, cls = NpEncoder)
-      )
-  return input_requests_traces
-
-
-def get_current_load(
-    input_requests_traces: dict, agents: list, t: int
-  ) -> dict:
-  incoming_load = {
-    (a+1, f+1): input_requests_traces[f][a][t] \
-      for a in agents for f in input_requests_traces
-  }
-  return incoming_load
-
-
 def init_complete_solution():
   return {
     "local_processing": pd.DataFrame(),
@@ -378,6 +325,11 @@ def init_problem(
     load_limits, max_steps, seed, trace_type, solution_folder
   )
   # draw graph
+  os.makedirs(os.path.join(solution_folder, "graph"), exist_ok = True)
+  planar = is_planar(graph)
+  if planar:
+    with open(os.path.join(solution_folder, "graph/PLANAR"), "wb") as ost:
+      pass
   draw_networkx(
     graph, 
     pos = kamada_kawai_layout(graph, weight = "network_latency"),
@@ -387,7 +339,7 @@ def init_problem(
     width = 0.1
   )
   plt.savefig(
-    os.path.join(solution_folder, "graph.png"), 
+    os.path.join(solution_folder, "graph", "graph.png"), 
     dpi = 300,
     format = "png",
     bbox_inches = "tight"

@@ -1,0 +1,28 @@
+import numpy as np
+
+
+def compute_centralized_objective(
+    sp_data: dict, sp_x: np.array, sp_y: np.array, sp_z: np.array
+  ) -> float:
+  Nn = sp_data[None]["Nn"][None]
+  Nf = sp_data[None]["Nf"][None]
+  # objective function weights
+  alpha = np.zeros((Nn,Nf))
+  for (n,f), a in sp_data[None]["alpha"].items():
+    alpha[n-1,f-1] = a
+  beta = np.zeros((Nn,Nn,Nf))
+  for (n1,n2,f), b in sp_data[None]["beta"].items():
+    beta[n1-1,n2-1,f-1] = b
+  gamma = np.zeros((Nn,Nf))
+  for (n,f), g in sp_data[None]["gamma"].items():
+    gamma[n-1,f-1] = g
+  # value
+  tot = 0.0
+  for n1 in range(Nn):
+    for f in range(Nf):
+      load = sp_data[None]["incoming_load"][(n1+1,f+1)]
+      tot += alpha[n1,f] * sp_x[n1,f] / load
+      tot -= gamma[n1,f] * sp_z[n1,f] / load
+      for n2 in range(Nn):
+        tot += beta[n1,n2,f] * sp_y[n1,n2,f] / load
+  return tot#(alpha * sp_x).sum() + (beta * sp_y).sum() - (gamma * sp_z).sum()

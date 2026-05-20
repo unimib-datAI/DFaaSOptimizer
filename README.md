@@ -17,6 +17,30 @@ methods:
 - [How to configure experiments](#how-to-configure-experiments)
 - [Compare results](#compare-results)
 
+LMM and FaaS-MACrO were presented in a 
+[paper](https://www.sciencedirect.com/science/article/pii/S1383762126001050) 
+published in the Journal of Systems Architecture. If you use or refer to these 
+methods in your work, please cite:
+
+```
+@article{filippini2026jsa,
+  title = {{Distributed replica allocation and load balancing for Edge-Cloud 
+  FaaS: A cooperative multi-agent orchestration approach}},
+  journal = {Journal of Systems Architecture},
+  pages = {103787},
+  year = {2026},
+  issn = {1383-7621},
+  doi = {https://doi.org/10.1016/j.sysarc.2026.103787},
+  url = {https://www.sciencedirect.com/science/article/pii/S1383762126001050},
+  author = {Federica Filippini and Marin Lujak and Michele Ciavotta},
+}
+```
+
+> [!NOTE]
+> The specific version of the code used for the experiments published in 
+> the paper above is available at 
+> [25.11.22](https://github.com/unimib-datAI/DFaaSOptimizer/releases/tag/25.11.22)
+
 ## Installation instructions
 
 This repository is configured as an `uv` project. To create a local
@@ -36,7 +60,24 @@ uv run run.py --help
 ```
 
 > [!NOTE]
-> The provided code was tested under Python version 3.10.15
+> The provided code was tested under Python versions 3.10.15 and 3.12.3
+
+> [!CAUTION]
+> After installing [Pyomo](https://www.pyomo.org), it is necessary to check 
+> that sub-optimal solutions can be saved if the model exits due to exceeding 
+> the maximum time limit (but a feasible solution exists). To do so, remove 
+> line `result.solution.clear()` (l. 669 in pyomo versions 6.9.0, 6.9.2) from 
+> `.venv/lib/python3.10/site-packages/pyomo/opt/base/solvers.py` (method 
+> `OptSolver.solve`, after calling `_model.solutions.load_from`)
+
+### Install with conda (required for planar graphs generation)
+
+```
+conda create -n sage_venv -c conda-forge sage
+conda activate sage_venv
+conda install -c conda-forge pip
+pip install -r requirements.txt
+```
 
 ## How to run experiments
 

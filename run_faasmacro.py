@@ -10,8 +10,10 @@ from run_centralized_model import (
   save_solution,
   save_checkpoint
 )
-from utilities import load_configuration
-from generate_data import update_data
+from utils.centralized import check_feasibility
+from utils.faasmacro import compute_centralized_objective
+from utils.common import load_configuration
+from generators.generate_data import update_data
 from postprocessing import load_solution, plot_history
 
 from models.rmp import RMPAbstractModel, LRMP
@@ -170,33 +172,6 @@ def check_stopping_criteria(
   return stop, why_stopping, new_psi
 
 
-def compute_centralized_objective(
-    sp_data: dict, sp_x: np.array, sp_y: np.array, sp_z: np.array
-  ) -> float:
-  Nn = sp_data[None]["Nn"][None]
-  Nf = sp_data[None]["Nf"][None]
-  # objective function weights
-  alpha = np.zeros((Nn,Nf))
-  for (n,f), a in sp_data[None]["alpha"].items():
-    alpha[n-1,f-1] = a
-  beta = np.zeros((Nn,Nn,Nf))
-  for (n1,n2,f), b in sp_data[None]["beta"].items():
-    beta[n1-1,n2-1,f-1] = b
-  gamma = np.zeros((Nn,Nf))
-  for (n,f), g in sp_data[None]["gamma"].items():
-    gamma[n-1,f-1] = g
-  # value
-  tot = 0.0
-  for n1 in range(Nn):
-    for f in range(Nf):
-      load = sp_data[None]["incoming_load"][(n1+1,f+1)]
-      tot += alpha[n1,f] * sp_x[n1,f] / load
-      tot -= gamma[n1,f] * sp_z[n1,f] / load
-      for n2 in range(Nn):
-        tot += beta[n1,n2,f] * sp_y[n1,n2,f] / load
-  return tot#(alpha * sp_x).sum() + (beta * sp_y).sum() - (gamma * sp_z).sum()
-
-
 def compute_deviation(
     rmp_data: dict, 
     sp_x: np.array, 
@@ -350,6 +325,8 @@ def decode_solutions(
   sp_complete_solution = decode_solution(
     sp_x, sp_y, sp_z, sp_r, sp_xi, sp_rho, sp_U, sp_complete_solution
   )
+  feas = check_feasibility(sp_x,sp_y.sum(axis=1),sp_z,sp_r,sp_U,sp_data)
+  assert feas[0],feas[1]
   # -- RMP
   if "rmp" in solution and rmp_complete_solution is not None:
     rmp_x = solution["rmp"]["x"]

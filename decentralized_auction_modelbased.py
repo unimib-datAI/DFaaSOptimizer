@@ -1,6 +1,9 @@
+from postprocessing import load_solution
 from run_centralized_model import (
   init_complete_solution,
   join_complete_solution,
+  compute_utilization,
+  encode_solution,
   get_current_load, 
   save_checkpoint,
   save_solution,
@@ -13,10 +16,16 @@ from run_faasmacro import (
   compute_social_welfare,
   combine_solutions, 
   decode_solutions,
+  prepare_master_data,
   solve_subproblem
 )
 from utils.common import load_configuration
-from models.sp import LSP, LSPr
+from models.auction_models import (
+  SellerNodeModel, 
+  BuyerNodeModel, 
+  BuyerNodeModel_fixedr,
+  SellerNodeModel_fixedr
+)
 
 from networkx import adjacency_matrix
 from datetime import datetime
@@ -42,7 +51,7 @@ def parse_arguments() -> argparse.Namespace:
     "-c", "--config",
     help = "Configuration file",
     type = str,
-    default = "manual_config.json"
+    default = "config_files/manual_config.json"
   )
   parser.add_argument(
     "-j", "--parallelism",
@@ -65,10 +74,9 @@ def check_stopping_criteria(
     it: int,
     max_iterations: int,
     blackboard: np.array,
-    omega: np.array,
+    sp_omega: np.array,
     rmp_omega: np.array,
-    bids: pd.DataFrame,
-    memory_bids: pd.DataFrame,
+    sp_y: np.array,
     tolerance: float,
     total_runtime: float,
     time_limit: float
@@ -81,15 +89,12 @@ def check_stopping_criteria(
   elif (blackboard <= tolerance).all():
     stop = True
     why_stopping = "no capacity left"
-  elif (omega <= tolerance).all():
+  elif (abs(sp_omega - rmp_omega) <= tolerance).all():
+    stop = True
+    why_stopping = "local solution is feasible"
+  elif (sp_y <= tolerance).all():
     stop = True
     why_stopping = "all load assigned"
-  elif (rmp_omega <= tolerance).all():
-    stop = True
-    why_stopping = "load cannot be assigned"
-  elif len(bids) == 0 and len(memory_bids) == 0:
-    stop = True
-    why_stopping = "no available or convenient sellers"
   elif total_runtime >= time_limit:
     stop = True
     why_stopping = f"reached time limit: {total_runtime} >= {time_limit}"
@@ -118,74 +123,27 @@ def compute_residual_capacity(
   return cap, c, ell
 
 
-def define_bids(
-    omega: np.array,
-    blackboard: np.array, 
+def compute_utility(
     p: np.array, 
     data: dict,
-    neighborhood: np.array,
-    rho: np.array,
     auction_options: dict,
     latency: np.array,
-    fairness: np.array,
-    delta: np.array
-  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    fairness: np.array
+  ) -> np.array:
+  Nn = data[None]["Nn"][None]
+  Nf = data[None]["Nf"][None]
+  utility = np.zeros((Nn,Nn,Nf))
   # loop over agents and functions
-  potential_buyers, functions_to_share = np.nonzero(omega)
-  bids = {
-    "i": [], "j": [], "f": [], "d": [], "b": [], "utility": [], "weight": []
-  }
-  memory_bids = {
-    "i": [], "j": [], "f": []
-  }
-  for i,f in zip(potential_buyers, functions_to_share):
-    # identify potential sellers
-    potential_sellers = set(np.nonzero(neighborhood[i,:])[0])
-    # -- capacity sellers are neighbors with residual computing capacity 
-    # for function f
-    potential_capacity_sellers = potential_sellers.intersection(
-      set(np.nonzero(blackboard[:,f])[0])
-    )
-    # -- memory sellers are neighbors with residual memory capacity to 
-    # instantiate new replicas
-    potential_memory_sellers = potential_sellers.intersection(
-      set(np.nonzero(rho)[0])
-    )
-    # -- loop over potential sellers
-    utility = []
-    candidate_sellers = []
-    for j in potential_capacity_sellers:
-      # -- compute utility
-      ut = (  
-        data[None]["beta"][(i+1,j+1,f+1)] - 
-        p[j,f] - 
-        auction_options["latency_weight"] * latency[i,j] - 
-        auction_options["fairness_weight"] * fairness[i,f]
-      )
-      if ut > 0:
-        utility.append(ut)
-        candidate_sellers.append(j)
-    # compute weights and define bids
-    if len(utility) > 0:
-      utility = np.array(utility)
-      weights = np.exp(utility) / np.sum(np.exp(utility))
-      for idx,(j,w) in enumerate(zip(candidate_sellers,weights)):
-        d = min(blackboard[j,f], w * omega[i,f])
-        b = p[j,f] + auction_options["epsilon"] + delta[i,f]
-        bids["i"].append(i)
-        bids["f"].append(f)
-        bids["j"].append(j)
-        bids["d"].append(d)
-        bids["b"].append(b)
-        bids["utility"].append(utility[idx])
-        bids["weight"].append(w)
-    else:
-      # if the problem is missing computing capacity, ask for new replicas
-      for j in potential_memory_sellers - potential_capacity_sellers:
-        memory_bids["i"].append(i)
-        memory_bids["j"].append(j)
-        memory_bids["f"].append(f)
-  return pd.DataFrame(bids), pd.DataFrame(memory_bids)
+  for i in range(Nn):
+    for j in range(Nn):
+      for f in range(Nf):
+        utility[i,j,f] = (
+          data[None]["beta"][(i+1,j+1,f+1)] - 
+          p[j,f] - 
+          auction_options["latency_weight"] * latency[i,j] - 
+          auction_options["fairness_weight"] * fairness[i,f]
+        )
+  return utility
 
 
 def evaluate_bids(
@@ -227,13 +185,19 @@ def evaluate_bids(
   return y, p
 
 
-def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
-  neighborhood = np.zeros((Nn,Nn))
+def data_dict_to_matrix(data_dict: dict, Nn: int, Nf: int = 0) -> np.array:
+  data_mat = np.zeros((Nn,Nn))
+  if Nf > 0:
+    data_mat = np.zeros((Nn,Nn,Nf))
   for n1 in range(Nn):
     for n2 in range(Nn):
-      if n1 != n2 and neighborhood_dict[(n1+1,n2+1)]:
-        neighborhood[n1,n2] = 1
-  return neighborhood
+      if n1 != n2:
+        if Nf == 0:
+          data_mat[n1,n2] = data_dict[(n1+1,n2+1)]
+        else:
+          for f in range(Nf):
+            data_mat[n1,n2,f] = data_dict[(n1+1,n2+1,f+1)]
+  return data_mat
 
 
 def start_additional_replicas(
@@ -304,17 +268,27 @@ def run(
   )
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
+  # load globally-optimal solution (if provided)
+  opt_solution, opt_replicas, opt_detailed_fwd = None, None, None
+  if "opt_solution_folder" in config:
+    opt_solution, opt_replicas, opt_detailed_fwd, _, _ = load_solution(
+      config["opt_solution_folder"], "LoadManagementModel"
+    )
   # -- save neighborhood matrix
-  neighborhood = neigh_dict_to_matrix(
+  neighborhood = data_dict_to_matrix(
     base_instance_data[None]["neighborhood"], Nn
   )
   latency = adjacency_matrix(graph, weight = "network_latency")
+  # define models
+  seller = SellerNodeModel() if opt_solution is None else SellerNodeModel_fixedr()
+  buyer = BuyerNodeModel() if opt_solution is None else BuyerNodeModel_fixedr()
   # loop over time
   ub = (
     max_run_time + run_time_step
   ) if max_run_time == min_run_time else max_run_time
   sp_complete_solution = init_complete_solution()
   spc_complete_solution = init_complete_solution()
+  rmp_complete_solution = init_complete_solution()
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
   for t in range(min_run_time, ub, run_time_step):
@@ -323,37 +297,12 @@ def run(
     # get current load and generate data
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
-    # local planning
+    # define target operating point and initial prices
+    u0 = np.ones((Nn,Nf)) * 0.8
+    p = np.ones((Nn,Nf)) * 0.0
+    # loop over iterations
     total_runtime = 0
     ss = datetime.now()
-    # -- solve subproblem
-    sp = LSP()
-    spr = LSPr()
-    sp_data = deepcopy(data)
-    s = datetime.now()
-    (
-      sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
-    ) = solve_subproblem(
-      sp_data, 
-      agents, 
-      sp, 
-      solver_name, 
-      general_solver_options, 
-      parallelism
-    )
-    e = datetime.now()
-    if verbose > 1:
-      print(
-        f"    sp: DONE ",
-        f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})", 
-        file = log_stream, 
-        flush = True
-      )
-    total_runtime += sp_runtime["tot"]
-    # define target operating point and initial prices
-    u0 = np.ones((Nn,Nf)) * 0.9
-    p = np.zeros((Nn,Nf))
-    # loop over iterations
     it = 0
     stop_searching = False
     best_solution_so_far = None
@@ -362,41 +311,101 @@ def run(
     best_centralized_cost = 0.0
     best_it_so_far = -1
     best_centralized_it = -1
-    y = np.zeros((Nn,Nn,Nf))
-    omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn,Nf))
+    blackboard = np.array([
+      [loadt[n+1,f+1] for f in range(Nf)] for n in range(Nn)
+    ])
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
-      # compute residual computational capacity
+      if t == 71 and it == 15:
+        print("here")
+      # local planning
+      sp_data = deepcopy(data)
+      # -- extract optimal solution (if provided)
+      if opt_solution is not None:
+        _, _, _, opt_r, _ = encode_solution(
+          Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t-min_run_time
+        )
+        sp_data[None]["r_bar"] = {}
+        for n in range(Nn):
+          for f in range(Nf):
+            sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r[n,f])
+      # -- compute utility
+      utilities = compute_utility(
+        p, sp_data, auction_options, latency, fairness
+      )
+      sp_data[None]["beta"] = {
+        (n1+1,n2+1,f+1): utilities[n1,n2,f] for n1 in range(Nn) \
+                                              for n2 in range(Nn) \
+                                                for f in range(Nf)
+      }
+      if verbose > 2:
+        print(
+          f"        compute utilities: DONE ({utilities})",
+          file = log_stream, 
+          flush = True
+        )
+      # -- residual computing capacity
+      sp_data[None]["c"] = {
+        (n+1,f+1): blackboard[n,f] for n in range(Nn) for f in range(Nf)
+      }
+      # -- solve
       s = datetime.now()
-      capacity, blackboard, ell = compute_residual_capacity(
-        sp_x, y, sp_r, sp_data
+      (
+        sp_data, 
+        sp_x, 
+        sp_y, 
+        sp_z, 
+        sp_omega, 
+        sp_r, 
+        sp_rho, 
+        sp_U, 
+        obj, 
+        tc, 
+        sp_runtime
+      ) = solve_subproblem(
+        sp_data, 
+        agents, 
+        buyer, 
+        solver_name, 
+        general_solver_options, 
+        parallelism
       )
       e = datetime.now()
       if verbose > 1:
         print(
-          f"        compute_residual_capacity: DONE ",
-          f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
-          f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})", 
+          f"        sp: DONE ",
+          f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})", 
           file = log_stream, 
           flush = True
         )
-      total_runtime += (e - s).total_seconds()
+      total_runtime += sp_runtime["tot"]
       # buyers define their bids
       s = datetime.now()
-      bids, memory_bids = define_bids(
-        omega, 
-        blackboard, 
-        p, 
-        sp_data, 
-        neighborhood, 
-        sp_rho,
-        auction_options, 
-        latency,
-        fairness,
-        np.zeros((Nn,Nn))
-      )
+      delta = np.zeros((Nn,Nn,Nf))
+      for n in range(Nn):
+        for f in range(Nf):
+          utilities[n,n,f] = - sp_data[None]["gamma"][(n+1,f+1)]
+          incr_util = np.argsort(utilities[n,:,f])
+          for m in range(Nn):
+            if m != n:
+              idx = np.where(incr_util==m)[0][0]
+              if idx > 0:
+                delta[n,m,f] = utilities[n,m,f] - utilities[
+                  n,incr_util[idx-1],f
+                ]
+              delta[n,m,f] += auction_options["epsilon"]
+      # for (n,f) in zip(*np.nonzero(sp_omega)):
+      #   utilities[n,n,f] = - sp_data[None]["gamma"][(n+1,f+1)]
+      #   incr_util = np.argsort(utilities[n,:,f])
+      #   for m in np.nonzero(sp_y[n,:,f])[0]:
+      #     idx = np.where(incr_util==m)[0][0]
+      #     if idx > 0:
+      #       delta[n,m,f] = utilities[n,m,f] - utilities[
+      #         n,incr_util[idx-1],f
+      #       ]
+      #     delta[n,m,f] += auction_options["epsilon"]
       e = datetime.now()
       if verbose > 1:
         print(
@@ -405,99 +414,138 @@ def run(
           flush = True
         )
         if verbose > 2:
-          print(bids, file = log_stream, flush = True)
+          print(delta, file = log_stream, flush = True)
       total_runtime += (e - s).total_seconds()
       # sellers accept/reject bids
-      if len(bids) > 0:
+      y = np.zeros((Nn,Nn,Nf))
+      z = deepcopy(sp_z)
+      rmp_omega = np.zeros((Nn,Nf))
+      r = deepcopy(sp_r)
+      rmp_xi = np.zeros((Nn,Nn,Nf))
+      u = sp_U
+      rmp_rho = sp_rho
+      if (sp_y > 0).any():
+        rmp_data = prepare_master_data(
+          data, (sp_x, sp_y, sp_z, sp_omega, sp_r, sp_rho)
+        )
+        rmp_data[None]["beta"] = {
+          (n1+1,n2+1,f+1): p[n2,f] + delta[n1,n2,f] for n1 in range(Nn) \
+                                                      for n2 in range(Nn) \
+                                                        for f in range(Nf)
+        }
         s = datetime.now()
-        auction_y, p = evaluate_bids(
-          bids, blackboard, data, ell, p, capacity, u0, auction_options
+        (
+          rmp_data, 
+          _, 
+          rmp_xi, 
+          _, 
+          _, 
+          rmp_r, 
+          rmp_rho, 
+          _, 
+          rmp_obj, 
+          rmp_tc, 
+          rmp_runtime
+        ) = solve_subproblem(
+          rmp_data, 
+          agents, 
+          seller, 
+          solver_name, 
+          general_solver_options, 
+          parallelism
         )
         e = datetime.now()
         if verbose > 1:
           print(
-           f"        evaluate_bids: DONE; runtime = {(e - s).total_seconds()})", 
+           f"        evaluate_bids: DONE; obj = {rmp_obj}; "
+           f"runtime = {rmp_runtime['tot']})", 
            file = log_stream, 
            flush = True
           )
-        total_runtime += (e - s).total_seconds()
+        total_runtime += rmp_runtime['tot']
         # update effective load, number of replicas and fairness matrix
-        y += auction_y
-        rmp_omega = np.zeros((Nn,Nf))
-        for n in range(Nn):
-          for f in range(Nf):
-            rmp_omega[n,f] = y[n,:,f].sum()
-            if rmp_omega[n,f] > 0:
-              fairness[n,f] += 1
-        # -- solve "restricted problem"
-        spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
-          spr, 
-          sp_data, 
-          agents, 
-          solver_name, 
-          general_solver_options, 
-          y, 
-          rmp_omega,
-          parallelism
+        new_p = deepcopy(p)
+        for n1 in range(Nn):
+          for n2 in range(Nn):
+            for f in range(Nf):
+              if rmp_xi[n2,n1,f] > 0.0:
+                new_p[n2,f] = max(
+                  new_p[n2,f], rmp_data[None]["beta"][n1+1,n2+1,f+1]
+                )
+                y[n1,n2,f] = rmp_xi[n2,n1,f]
+                rmp_omega[n1,f] += y[n1,n2,f]
+                if y[n1,n2,f] < sp_y[n1,n2,f]:
+                  z[n1,f] += (sp_y[n1,n2,f] - y[n1,n2,f])
+            if rmp_omega[n1,f] > 0:
+              fairness[n1,f] += 1
+        r += rmp_r
+        # -- check utilization
+        u = compute_utilization(
+          data, {"x": sp_x, "y": y, "r": r, "obj": None}
         )
-        total_runtime += spr_runtime
         if verbose > 1:
           print(
-            f"        solve 'restricted problem': DONE ({spr_tc}; "
-            f"obj: {spr_obj}; runtime = {spr_runtime})", 
+            "        solution updated: DONE ("
+            # f"\n\t\tauct_xi = {rmp_xi.tolist()}; "
+            # f"\n\t\tauct_y = {y.tolist()}; "
+            f"sp_omega = {sp_omega.tolist()}; "
+            f"rmp_omega = {rmp_omega.tolist()}; "
+            f"x = {sp_x.tolist()}; "
+            f"r = {r.tolist()}; "
+            f"rho = {rmp_rho.tolist()}; "
+            f"u = {u.tolist()}); "
+            f"z = {sp_z.tolist()})", 
             file = log_stream, 
             flush = True
           )
-        # -- update solution
-        sp_x, _, sp_r, sp_rho = spr_sol
-        for i in range(Nn):
+        # update prices
+        for j in range(Nn):
           for f in range(Nf):
-            omega[i,f] = sp_omega[i,f] - rmp_omega[i,f]
-            if abs(omega[i,f]) < tolerance:
-              omega[i,f] = 0.0
-        if verbose > 1:
-          print(
-            f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
-            f"omega = {omega.tolist()}; x: {sp_x.tolist()}; "
-            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()})", 
-            file = log_stream, 
-            flush = True
-          )
-      else:
-        # tentatively start additional replicas
+            p[j,f] = (
+              new_p[j,f] + max(
+                0, auction_options["eta"] * (u[j,f] - u0[j,f])
+              )
+            )
+        # compute residual computational capacity
         s = datetime.now()
-        a, sp_rho = start_additional_replicas(
-          memory_bids, sp_r, sp_data, sp_rho
+        capacity, blackboard, ell = compute_residual_capacity(
+          sp_x, np.zeros((Nn,Nn,Nf)), r, sp_data
         )
-        sp_r += a
         e = datetime.now()
-        print(
-          f"        additional replicas started: DONE (a = {a.tolist()}; "
-          f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})", 
-          file = log_stream, 
-          flush = True
-        )
+        if verbose > 1:
+          print(
+            f"        compute_residual_capacity: DONE ",
+            f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
+            f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})", 
+            file = log_stream, 
+            flush = True
+          )
         total_runtime += (e - s).total_seconds()
       # merge solutions and compute the centralized objective value
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, 
-        sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None
-      )
+      csol = {
+        "sp": {
+          "x":    sp_x,
+          "y":    y,
+          "z":    z,
+          "r":    r,
+          "xi":   rmp_xi,
+          "rho":  sp_rho,
+          "U":    u
+        },
+        "rmp": {
+          "x":    sp_x,
+          "y":    y,
+          "z":    z,
+          "r":    r,
+          "xi":   rmp_xi,
+          "rho":  rmp_rho,
+          "U":    u
+        }
+      }
       cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
       )
       # update best solution so far
-      if spr_obj < best_cost_so_far:
-        best_cost_so_far = spr_obj
-        best_solution_so_far = csol
-        best_it_so_far = it
-        if verbose > 0:
-          print(
-            f"        best solution updated; obj = {cobj}",
-            file = log_stream,
-            flush = True
-          )
       if cobj > best_centralized_cost:
         best_centralized_cost = cobj
         best_centralized_solution = csol
@@ -514,10 +562,9 @@ def run(
         it,
         max_iterations,
         blackboard,
-        omega,
+        sp_omega,
         rmp_omega,
-        bids,
-        memory_bids,
+        sp_y,
         tolerance,
         total_runtime,
         time_limit
@@ -539,19 +586,19 @@ def run(
       # -- ...save solution
       else:
         # save solutions
-        sp_complete_solution, _, objf = decode_solutions(
-          sp_data, 
-          best_solution_so_far, 
-          sp_complete_solution, 
-          None
-        )
-        spc_complete_solution, _, _ = decode_solutions(
-          sp_data, 
+        # sp_complete_solution, _, objf = decode_solutions(
+        #   sp_data, 
+        #   best_solution_so_far, 
+        #   sp_complete_solution, 
+        #   None
+        # )
+        spc_complete_solution, _, objc = decode_solutions(
+          data, 
           best_centralized_solution, 
           spc_complete_solution, 
           None
         )
-        obj_dict["LSPr_final"].append(objf)
+        obj_dict["LSPr_final"].append(objc)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} "
           f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
@@ -575,9 +622,9 @@ def run(
         flush = True
       )
   # join
-  sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
-    sp_complete_solution
-  )
+  # sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
+  #   sp_complete_solution
+  # )
   spc_solution, spc_offloaded, spc_detailed_fwd_solution = join_complete_solution(
     spc_complete_solution
   )
@@ -587,22 +634,22 @@ def run(
       min_run_time,
       max_run_time,
       run_time_step,
-      sp_solution, 
-      sp_complete_solution["utilization"], 
-      sp_complete_solution["replicas"], 
-      sp_offloaded,
+      spc_solution, 
+      spc_complete_solution["utilization"], 
+      spc_complete_solution["replicas"], 
+      spc_offloaded,
       # obj_dict["LSP"][max_iterations-1],
       obj_dict["LSPr_final"],
       os.path.join(solution_folder, "sp.png")
     )
-  save_solution(
-    sp_solution,
-    sp_offloaded,
-    sp_complete_solution,
-    sp_detailed_fwd_solution,
-    "LSP",
-    solution_folder
-  )
+  # save_solution(
+  #   sp_solution,
+  #   sp_offloaded,
+  #   sp_complete_solution,
+  #   sp_detailed_fwd_solution,
+  #   "LSP",
+  #   solution_folder
+  # )
   save_solution(
     spc_solution,
     spc_offloaded,
@@ -633,10 +680,14 @@ def run(
 
 
 if __name__ == "__main__":
-  args = parse_arguments()
-  config_file = args.config
-  parallelism = args.parallelism
-  disable_plotting = args.disable_plotting
+  # args = parse_arguments()
+  # config_file = args.config
+  # parallelism = args.parallelism
+  # disable_plotting = args.disable_plotting
+  # config_file = "config_files/config.json"
+  config_file = "/Users/federicafilippini/Documents/GitHub/DFaaSOptimizer/solutions/newmadea_5f_freer_100iter/2026-02-05_09-19-16.174062/config.json"
+  parallelism = 0
+  disable_plotting = False
   # load configuration file
   config = load_configuration(config_file)
   # run
