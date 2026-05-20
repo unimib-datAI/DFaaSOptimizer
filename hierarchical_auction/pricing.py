@@ -11,15 +11,16 @@ from __future__ import annotations
 import numpy as np
 
 from hierarchical_auction.structure import Structure
+from hierarchical_auction.types import FloatArray
 
 
 def compute_structure_price(
   structure: Structure,
-  node_prices: np.ndarray,
-  node_tokens: np.ndarray,
+  node_prices: FloatArray,
+  node_tokens: FloatArray,
   eta: float,
   epsilon: float = 1e-6,
-) -> np.ndarray:
+) -> FloatArray:
   """Compute structure-level execution price (Eq.27).
 
   p̄ = (1/|S|) · Σ_{k∈S} p_k^f

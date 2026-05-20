@@ -1,7 +1,7 @@
 """Standalone runner for the hierarchical multi-structure auction.
 
 Follows the same lifecycle as decentralized_auction.run():
-init → time loop → iteration loop → save.
+init -> time loop -> iteration loop -> save.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Mapping
 from copy import deepcopy
 from datetime import datetime
 from typing import Any
@@ -26,6 +27,9 @@ from decentralized_auction import (
   neigh_dict_to_matrix,
   start_additional_replicas,
 )
+from hierarchical_auction.engine import HierarchicalAuctionEngine
+from hierarchical_auction.types import FloatArray
+from models.sp import LSP, LSPr
 from run_centralized_model import (
   get_current_load,
   init_complete_solution,
@@ -42,10 +46,6 @@ from run_faasmacro import (
   solve_subproblem,
 )
 from utilities import load_configuration
-
-from hierarchical_auction.engine import HierarchicalAuctionEngine
-
-from models.sp import LSP, LSPr
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -74,29 +74,39 @@ def parse_arguments() -> argparse.Namespace:
   return parser.parse_known_args()[0]
 
 
-def build_auction_options(config: dict) -> dict:
+def build_auction_options(config: Mapping[str, Any]) -> dict[str, object]:
   solver_options = config.get("solver_options", {})
   auction = solver_options.get("auction", {})
   return {
     "epsilon": auction.get("epsilon", 0.01),
     "eta": auction.get("eta", [0.5, 0.3, 0.1]),
-    "zeta": auction.get("zeta", 0.1),   # consumed by evaluate_bids (level-1 price dampening)
+    "zeta": auction.get("zeta", 0.1),
     "latency_weight": auction.get("latency_weight", 0.0),
     "fairness_weight": auction.get("fairness_weight", 0.0),
   }
 
 
-def compute_offloaded_demand(y: np.ndarray) -> np.ndarray:
+def compute_offloaded_demand(y: FloatArray) -> FloatArray:
   """Return total offloaded demand per buyer node/function."""
   return y.sum(axis=1)
 
 
-def _extract_latency(graph: Any) -> np.ndarray:
+def bids_for_stopping(
+  bids: pd.DataFrame,
+  hierarchical_allocations_count: int,
+) -> pd.DataFrame:
+  """Avoid treating a productive hierarchical round as no-progress."""
+  if len(bids) > 0 or hierarchical_allocations_count <= 0:
+    return bids
+  return pd.DataFrame({"hierarchical_progress": [hierarchical_allocations_count]})
+
+
+def _extract_latency(graph: Any) -> FloatArray:
   return nx_adjacency_matrix(graph, weight="network_latency").toarray()
 
 
 def run(
-  config: dict,
+  config: dict[str, Any],
   parallelism: int = -1,
   log_on_file: bool = False,
   disable_plotting: bool = False,
@@ -164,7 +174,8 @@ def run(
     sp = LSP()
     spr = LSPr()
     (
-      sp_data, sp_x, _, sp_z, sp_omega, sp_r, sp_rho, _, obj, tc, sp_runtime,
+      sp_data, sp_x, _, _sp_z, sp_omega, sp_r, sp_rho, _sp_u,
+      _obj, _tc, sp_runtime,
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism,
     )
@@ -216,13 +227,12 @@ def run(
         rmp_omega = compute_offloaded_demand(y)
         fairness += (rmp_omega > 0).astype(fairness.dtype)
 
-        spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
+        spr_sol, _spr_obj, _spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism,
         )
         total_runtime += spr_runtime if isinstance(spr_runtime, (int, float)) else 0.0
 
-        # spr_sol = [x, y, z, omega, r, rho] from merge_agents_solutions
         sp_x = spr_sol[0]
         sp_r = spr_sol[4]
         sp_rho = spr_sol[5]
@@ -233,6 +243,10 @@ def run(
           memory_bids, sp_r, sp_data, sp_rho,
         )
         sp_r += a
+
+      capacity, blackboard, ell = compute_residual_capacity(
+        sp_x, y, sp_r, sp_data,
+      )
 
       result = engine.run_higher_levels(
         y=y,
@@ -246,7 +260,7 @@ def run(
       rmp_omega = compute_offloaded_demand(y)
 
       if result.accepted_allocations:
-        spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
+        spr_sol, _spr_obj, _spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism,
         )
@@ -260,9 +274,12 @@ def run(
         omega = sp_omega - rmp_omega
         omega[np.abs(omega) < tolerance] = 0.0
 
+      stopping_bids = bids_for_stopping(
+        bids, len(result.accepted_allocations),
+      )
       stop_searching, why_stop_searching = check_stopping_criteria(
         it, max_iterations, blackboard, omega, rmp_omega,
-        bids, memory_bids, tolerance, total_runtime, time_limit,
+        stopping_bids, memory_bids, tolerance, total_runtime, time_limit,
       )
 
       csol = combine_solutions(
@@ -301,7 +318,6 @@ def run(
             os.path.join(solution_folder, "LSPc"), t,
           )
 
-  # Post-processing
   spc_solution, spc_offloaded, spc_detailed_fwd_solution = join_complete_solution(
     spc_complete_solution,
   )

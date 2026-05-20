@@ -1,11 +1,11 @@
 import pyomo.environ as pyo
-
 from models.model import (
   BaseAbstractModel,
   BaseLoadManagementModel,
   BaseCentralizedModel,
   LoadManagementModel,
   PYO_VAR_TYPE,
+  _solver_option_name,
 )
 from models.sp import (
   SPAbstractModel,
@@ -28,6 +28,45 @@ from models.auction_models import (
   SellerNodeModel,
   BuyerNodeModel_fixedr,
 )
+import models.model as model_module
+
+
+class FakeSolveResults:
+  def __init__(self):
+    self.solver = type(
+      "FakeSolverStatus",
+      (),
+      {
+        "status": model_module.SolverStatus.ok,
+        "termination_condition": model_module.TerminationCondition.optimal,
+      },
+    )()
+    self.solution = []
+
+
+class FakeInstance:
+  OBJ = 0
+
+  def component_objects(self, *_args, **_kwargs):
+    return []
+
+
+class FakeSolver:
+  def __init__(self, fail_on_warmstart=False):
+    self.options = {}
+    self.fail_on_warmstart = fail_on_warmstart
+    self.solve_kwargs = []
+
+  def solve(self, _instance, **kwargs):
+    self.solve_kwargs.append(kwargs)
+    if self.fail_on_warmstart and "warmstart" in kwargs:
+      raise ValueError("key 'warmstart' not defined")
+    return FakeSolveResults()
+
+
+class WarmstartModel(BaseAbstractModel):
+  def _provide_initial_solution(self, instance, initial_solution):
+    return instance
 
 
 def test_base_abstract_model_has_name_and_model():
@@ -120,6 +159,50 @@ def test_base_abstract_model_generate_instance():
 def test_base_abstract_model_solve_method_exists():
   m = BaseAbstractModel()
   assert hasattr(m, "solve")
+
+
+def test_solve_does_not_pass_disabled_warmstart(monkeypatch):
+  solver = FakeSolver()
+  monkeypatch.setattr(model_module.pyo, "SolverFactory", lambda _name: solver)
+
+  solution = BaseAbstractModel().solve(FakeInstance(), {}, solver_name="glpk")
+
+  assert solution["solution_exists"] is True
+  assert solver.solve_kwargs == [{}]
+
+
+def test_solve_maps_glpk_time_limit_option(monkeypatch):
+  solver = FakeSolver()
+  monkeypatch.setattr(model_module.pyo, "SolverFactory", lambda _name: solver)
+
+  solution = BaseAbstractModel().solve(FakeInstance(), {"TimeLimit": 7}, solver_name="glpk")
+
+  assert solution["solution_exists"] is True
+  assert solver.options == {"tmlim": 7}
+
+
+def test_solver_option_name_keeps_time_limit_for_non_glpk():
+  assert _solver_option_name("gurobi", "TimeLimit") == "TimeLimit"
+
+
+def test_solve_passes_enabled_warmstart_for_initial_solution(monkeypatch):
+  solver = FakeSolver()
+  monkeypatch.setattr(model_module.pyo, "SolverFactory", lambda _name: solver)
+
+  solution = WarmstartModel().solve(FakeInstance(), {}, initial_solution={}, solver_name="gurobi")
+
+  assert solution["solution_exists"] is True
+  assert solver.solve_kwargs == [{"warmstart": True}]
+
+
+def test_solve_retries_without_warmstart_when_solver_rejects_it(monkeypatch):
+  solver = FakeSolver(fail_on_warmstart=True)
+  monkeypatch.setattr(model_module.pyo, "SolverFactory", lambda _name: solver)
+
+  solution = WarmstartModel().solve(FakeInstance(), {}, initial_solution={}, solver_name="glpk")
+
+  assert solution["solution_exists"] is True
+  assert solver.solve_kwargs == [{"warmstart": True}, {}]
 
 
 def test_base_load_management_model_inherits_from_base_abstract():
@@ -309,5 +392,4 @@ def test_buyer_node_model_fixedr_fixes_replicas():
 
 
 def test_pyo_var_type_is_non_negative_reals():
-  from models.model import PYO_VAR_TYPE
   assert PYO_VAR_TYPE == pyo.NonNegativeReals

@@ -7,16 +7,18 @@ it copies inputs and returns new arrays.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 
-from hierarchical_auction.types import AcceptedAllocation
+from hierarchical_auction.types import AcceptedAllocation, FloatArray
 
 
 def apply_allocations(
-  y: np.ndarray,
-  omega: np.ndarray,
-  allocations: list[AcceptedAllocation],
-) -> tuple[np.ndarray, np.ndarray]:
+  y: FloatArray,
+  omega: FloatArray,
+  allocations: Sequence[AcceptedAllocation],
+) -> tuple[FloatArray, FloatArray]:
   """Apply accepted allocations to y and residual demand.
 
   Parameters

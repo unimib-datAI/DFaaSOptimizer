@@ -11,13 +11,14 @@ from __future__ import annotations
 import numpy as np
 
 from hierarchical_auction.structure import Structure
+from hierarchical_auction.types import FloatArray
 
 
 class StructureGraph:
 
   def __init__(
     self,
-    neighborhood: np.ndarray,
+    neighborhood: FloatArray,
     max_depth: int = 5,
   ) -> None:
     self._neighborhood = neighborhood

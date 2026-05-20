@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from hierarchical_auction.types import FloatArray
+
 
 @dataclass
 class Structure:
@@ -20,9 +22,9 @@ class Structure:
   adjacent_structures: set[int]
   num_functions: int
 
-  residual_demand: np.ndarray = field(init=False)
-  structure_price: np.ndarray = field(init=False)
-  indicative_tokens: np.ndarray = field(init=False)
+  residual_demand: FloatArray = field(init=False)
+  structure_price: FloatArray = field(init=False)
+  indicative_tokens: FloatArray = field(init=False)
 
   def __post_init__(self) -> None:
     self.residual_demand = np.zeros(self.num_functions, dtype=float)

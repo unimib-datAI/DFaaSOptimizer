@@ -8,7 +8,9 @@ resolves conflicts, and maps accepted tokens to concrete y flows.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import cast
 
 import numpy as np
 
@@ -21,14 +23,19 @@ from hierarchical_auction.pricing import (
 from hierarchical_auction.structure import Structure
 from hierarchical_auction.structure_graph import StructureGraph
 from hierarchical_auction.token_manager import CapacityTokenManager
-from hierarchical_auction.types import AcceptedAllocation, TokenRequest
+from hierarchical_auction.types import (
+  AcceptedAllocation,
+  AuctionOptions,
+  FloatArray,
+  TokenRequest,
+)
 
 
 @dataclass
 class LevelResult:
   """Output of a single run through higher levels."""
-  y: np.ndarray
-  omega: np.ndarray
+  y: FloatArray
+  omega: FloatArray
   accepted_allocations: list[AcceptedAllocation] = field(default_factory=list)
 
 
@@ -36,11 +43,11 @@ class HierarchicalAuctionEngine:
 
   def __init__(
     self,
-    neighborhood: np.ndarray,
+    neighborhood: FloatArray,
     num_functions: int,
-    service_quantum: np.ndarray,
+    service_quantum: FloatArray,
     max_depth: int = 3,
-    auction_options: dict | None = None,
+    auction_options: AuctionOptions | None = None,
   ) -> None:
     self._neighborhood = neighborhood
     self._num_nodes = neighborhood.shape[0]
@@ -50,7 +57,7 @@ class HierarchicalAuctionEngine:
       (num_functions,),
     )
     self.max_depth = max_depth
-    self._options = auction_options or {}
+    self._options = dict(auction_options or {})
 
     self._structure_graph = StructureGraph(
       neighborhood, max_depth=max_depth
@@ -62,12 +69,12 @@ class HierarchicalAuctionEngine:
 
   def run_higher_levels(
     self,
-    y: np.ndarray,
-    omega: np.ndarray,
-    residual_capacity: np.ndarray,
-    node_prices: np.ndarray,
-    latency: np.ndarray,
-    fairness: np.ndarray,
+    y: FloatArray,
+    omega: FloatArray,
+    residual_capacity: FloatArray,
+    node_prices: FloatArray,
+    latency: FloatArray,
+    fairness: FloatArray,
   ) -> LevelResult:
     """Execute higher-level (ℓ ≥ 2) auctions.
 
@@ -172,7 +179,7 @@ class HierarchicalAuctionEngine:
   def _aggregate_residual_demand(
     self,
     structures: dict[int, Structure],
-    omega: np.ndarray,
+    omega: FloatArray,
   ) -> None:
     """Ω_{S_i^(ℓ)}^f = Σ_{k∈S_i^(ℓ)} ω_k^{f,res}  (Eq.24)."""
     for s in structures.values():
@@ -203,7 +210,7 @@ class HierarchicalAuctionEngine:
     eta_raw = self._options.get("eta", 0.5)
     if isinstance(eta_raw, (int, float)):
       return float(eta_raw)
-    eta_list = list(eta_raw)
+    eta_list = list(cast(Sequence[float], eta_raw))
     idx = min(level - 1, len(eta_list) - 1)
     return float(eta_list[idx])
 
@@ -211,11 +218,11 @@ class HierarchicalAuctionEngine:
     self,
     buyer_structures: dict[int, Structure],
     all_structures: dict[int, Structure],
-    node_prices: np.ndarray,
+    node_prices: FloatArray,
     token_manager: CapacityTokenManager,
-    latency: np.ndarray,
-    fairness: np.ndarray,
-    omega: np.ndarray,
+    latency: FloatArray,
+    fairness: FloatArray,
+    omega: FloatArray,
     eta: float,
     epsilon: float,
     latency_weight: float,
@@ -275,6 +282,8 @@ class HierarchicalAuctionEngine:
               latency_weight=latency_weight,
               fairness_weight=fairness_weight,
             )
+            if effective <= 0.0:
+              continue
             candidates.append((effective, seller_node, available))
 
           candidates.sort(reverse=True)

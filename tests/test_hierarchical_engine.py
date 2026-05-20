@@ -143,6 +143,43 @@ def test_higher_level_auction_prefers_best_effective_seller():
   assert result.omega[0, 0] == 0.0
 
 
+def test_higher_level_auction_rejects_non_positive_effective_bid():
+  neighborhood = np.array([
+    [0, 1, 0],
+    [1, 0, 1],
+    [0, 1, 0],
+  ], dtype=float)
+  engine = HierarchicalAuctionEngine(
+    neighborhood=neighborhood,
+    num_functions=1,
+    service_quantum=np.array([1.0]),
+    max_depth=2,
+    auction_options={
+      "epsilon": 0.01,
+      "eta": [0.0, 0.0],
+      "latency_weight": 1.0,
+      "fairness_weight": 0.0,
+    },
+  )
+
+  result = engine.run_higher_levels(
+    y=np.zeros((3, 3, 1)),
+    omega=np.array([[2.0], [0.0], [0.0]]),
+    residual_capacity=np.array([[0.0], [0.0], [5.0]]),
+    node_prices=np.zeros((3, 1)),
+    latency=np.array([
+      [0.0, 0.0, 10.0],
+      [0.0, 0.0, 0.0],
+      [0.0, 0.0, 0.0],
+    ]),
+    fairness=np.zeros((3, 1)),
+  )
+
+  assert result.accepted_allocations == []
+  assert result.y[0, 2, 0] == 0.0
+  assert result.omega[0, 0] == 2.0
+
+
 def test_price_computed_correctly_in_zero_price_two_function_network():
   """Regression: price computation must not rely on zero sentinel.
 

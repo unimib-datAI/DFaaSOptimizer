@@ -1,8 +1,10 @@
 import numpy as np
+import pandas as pd
 
 from hierarchical_auction.runner import (
   build_auction_options,
   compute_offloaded_demand,
+  bids_for_stopping,
 )
 
 
@@ -50,6 +52,22 @@ def test_compute_offloaded_demand_sums_seller_axis():
     [7.0, 0.0],
     [0.0, 5.0],
   ]))
+
+
+def test_bids_for_stopping_keeps_loop_alive_after_hierarchical_progress():
+  bids = bids_for_stopping(
+    pd.DataFrame(),
+    hierarchical_allocations_count=2,
+  )
+  assert len(bids) == 1
+
+
+def test_bids_for_stopping_keeps_empty_bids_when_no_progress():
+  bids = bids_for_stopping(
+    pd.DataFrame(),
+    hierarchical_allocations_count=0,
+  )
+  assert len(bids) == 0
 
 
 def test_extract_graph_latency_returns_numpy_array_with_edge_weights():

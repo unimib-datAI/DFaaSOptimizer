@@ -91,6 +91,7 @@ def test_generate_weights_with_initialization_time():
   assert gamma.shape == (2, 1)
   assert delta.shape == (2, 1)
   assert beta[0, 1, 0] >= 0
+  assert np.isfinite(gamma).all()
 
 
 def test_generate_weights_homogeneous():

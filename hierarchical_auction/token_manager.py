@@ -1,47 +1,47 @@
 """CapacityTokenManager: collect requests, resolve conflicts, commit.
 
-Each node k owns T_k^f = floor(C_k^f / Δ_k^f) indivisible tokens.
+Each node k owns T_k^f = floor(C_k^f / Delta_k^f) indivisible tokens.
 Multiple structures may request the same (k,f); resolution happens
 after all requests are collected for an auction round.
-Commits are cumulative — accepted tokens are permanently subtracted.
+Commits are cumulative: accepted tokens are permanently subtracted.
 """
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 
-from hierarchical_auction.types import AcceptedAllocation, TokenRequest
+from hierarchical_auction.types import AcceptedAllocation, FloatArray, IntArray, TokenRequest
 
 
 class CapacityTokenManager:
-
   def __init__(
     self,
-    residual_capacity: np.ndarray,
-    service_quantum: np.ndarray,
+    residual_capacity: FloatArray,
+    service_quantum: FloatArray,
   ) -> None:
     self._num_nodes, self._num_functions = residual_capacity.shape
     sq = np.broadcast_to(
       np.asarray(service_quantum, dtype=float),
       residual_capacity.shape,
     )
+    if (sq <= 0).any():
+      raise ValueError("service_quantum must be positive")
+    self._service_quantum = sq
+    residual_capacity = np.maximum(residual_capacity, 0.0)
     self._initial_tokens = np.floor(
       residual_capacity / np.maximum(sq, 1e-12)
     ).astype(int)
     self._current_tokens = self._initial_tokens.copy()
 
-    # Pending requests: list[list[list[TokenRequest]]]
     self._pending: list[list[list[TokenRequest]]] = [
       [[] for _ in range(self._num_functions)]
       for _ in range(self._num_nodes)
     ]
 
-  # ------------------------------------------------------------------
-  # Queries
-  # ------------------------------------------------------------------
-
   @property
-  def tokens(self) -> np.ndarray:
+  def tokens(self) -> IntArray:
     return self._current_tokens
 
   def available_tokens(self, node: int, function: int) -> int:
@@ -52,10 +52,6 @@ class CapacityTokenManager:
   ) -> list[TokenRequest]:
     return list(self._pending[node][function])
 
-  # ------------------------------------------------------------------
-  # Lifecycle: request → resolve → commit
-  # ------------------------------------------------------------------
-
   def request(self, req: TokenRequest) -> None:
     """Register a token request without reducing availability."""
     if req.tokens <= 0:
@@ -65,24 +61,22 @@ class CapacityTokenManager:
   def resolve_node_function(
     self, node: int, function: int
   ) -> list[AcceptedAllocation]:
-    """Resolve pending requests for (node, function).
-
-    Sorts by descending bid_value, accepts greedily until
-    available tokens are exhausted.  Does NOT commit.
-    """
+    """Resolve pending requests for (node, function)."""
     pending = self._pending[node][function]
     if not pending:
       return []
 
     sorted_reqs = sorted(pending, key=lambda r: r.bid_value, reverse=True)
-    available = self._current_tokens[node, function]
+    remaining = self._current_tokens[node, function]
     accepted: list[AcceptedAllocation] = []
-    remaining = available
 
     for req in sorted_reqs:
       take = min(req.tokens, remaining)
       if take > 0:
-        accepted_quantity = req.quantity * (take / req.tokens)
+        accepted_quantity = min(
+          req.quantity,
+          take * self._service_quantum[node, function],
+        )
         accepted.append(AcceptedAllocation(
           level=req.level,
           buyer_structure=req.buyer_structure,
@@ -90,7 +84,7 @@ class CapacityTokenManager:
           seller_node=req.seller_node,
           function=req.function,
           tokens=take,
-          quantity=accepted_quantity,
+          quantity=float(accepted_quantity),
           bid_value=req.bid_value,
         ))
         remaining -= take
@@ -99,12 +93,8 @@ class CapacityTokenManager:
 
     return accepted
 
-  def commit(self, allocations: list[AcceptedAllocation]) -> None:
-    """Permanently subtract accepted token counts from current tokens.
-
-    Also clears pending requests for each (seller_node, function) that
-    was committed.
-    """
+  def commit(self, allocations: Sequence[AcceptedAllocation]) -> None:
+    """Permanently subtract accepted token counts from current tokens."""
     committed: dict[tuple[int, int], int] = {}
     for a in allocations:
       key = (a.seller_node, a.function)
@@ -117,6 +107,6 @@ class CapacityTokenManager:
       self._pending[node][function].clear()
 
   def check_global_feasibility(self) -> bool:
-    """Verify Eq.26: committed ≤ initial tokens for every (k,f)."""
+    """Verify Eq.26: committed <= initial tokens for every (k,f)."""
     committed = self._initial_tokens - self._current_tokens
     return bool((committed >= 0).all() and (committed <= self._initial_tokens).all())
