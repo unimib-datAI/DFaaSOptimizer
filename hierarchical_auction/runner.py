@@ -306,7 +306,7 @@ def run(
           best_centralized_solution if best_centralized_solution is not None else csol,
           spc_complete_solution, None,
         )
-        obj_dict["LSPr_final"].append(cobj)
+        obj_dict["LSPr_final"].append(best_centralized_cost)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} (it: {it}; "
           f"best centralized it: {best_centralized_it}; "
