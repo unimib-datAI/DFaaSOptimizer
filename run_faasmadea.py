@@ -19,7 +19,7 @@ from run_faasmacro import (
 from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
-from models.sp import LSP, LSPr, LSP_fixedr
+from models.sp import LSP, LSPr, LSP_fixedr, LSPr_withbeta
 from models.model import PYO_VAR_TYPE
 
 from networkx import adjacency_matrix
@@ -500,7 +500,7 @@ def run(
           sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r[n,f])
     # -- solve subproblem
     sp = LSP() if opt_solution is None else LSP_fixedr()
-    spr = LSPr()
+    spr = LSPr()#_withbeta()
     s = datetime.now()
     (
       sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime

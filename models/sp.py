@@ -300,6 +300,41 @@ class LSPr(LSPr_v0):
     )
 
 
+class LSPr_withbeta(LSPr):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSPr_withbeta"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # objective function weights
+    self.model.beta = pyo.Param(
+      self.model.N, self.model.N, self.model.F, 
+      within = pyo.Reals, default = 0.9
+    )
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.model.OBJ = pyo.Objective(
+      rule = self.minimize_processing_cost_withbeta
+    )
+  
+  @staticmethod
+  def minimize_processing_cost_withbeta(model):
+    return - (
+      sum(
+        (
+          model.alpha[model.whoami,f] * model.x[f] + 
+          sum(
+            model.beta[model.whoami,j,f] * model.y_bar[model.whoami,j,f] \
+              for j in model.N
+          ) -
+          model.gamma[model.whoami,f] * model.z[f]
+        ) / model.incoming_load[model.whoami,f] for f in model.F
+      )
+    )
+
+
 ##############################################################################
 # TEMPORARILY FIX r
 ##############################################################################
