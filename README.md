@@ -134,13 +134,12 @@ options:
 > exploit multithreading. Keep `j` small to avoid issues with aggressive 
 > over-commitment.
 
-### Hierarchical model on planar graphs
+### Comparing approaches on planar graphs
 
-The hierarchical auction model can be run on randomly-generated planar graphs
-using [SageMath](https://www.sagemath.org). A ready-to-use configuration file
-is provided at [`config_files/planar_hierarchical.json`](config_files/planar_hierarchical.json),
-which runs the hierarchical model on planar degree-3 graphs with
-Nn ∈ {10, 20, 30, 40, 50} nodes.
+A ready-to-use configuration file is provided at
+[`config_files/planar_comparison.json`](config_files/planar_comparison.json),
+which runs all three approaches on randomly-generated planar degree-3 graphs
+with Nn ∈ {10, 20, 30, 40, 50} nodes.
 
 > [!NOTE]
 > Planar graph generation requires SageMath. Install it first via the
@@ -149,14 +148,14 @@ Nn ∈ {10, 20, 30, 40, 50} nodes.
 
 ```
 conda activate sage_venv
-uv run run.py \
-  -c config_files/planar_hierarchical.json \
-  --methods hierarchical \
+python run.py \
+  -c config_files/planar_comparison.json \
+  --methods centralized faas-macro hierarchical \
   --n_experiments 3 \
   --loop_over Nn
 ```
 
-Results are saved under `solutions/planar_hierarchical/`.
+Results are saved under `solutions/planar_comparison/`.
 
 ### Run a series of experiments with the two approaches
 
