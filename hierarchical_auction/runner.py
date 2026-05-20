@@ -157,6 +157,7 @@ def run(
   spc_complete_solution = init_complete_solution()
   obj_dict: dict[str, list[Any]] = {"LSPr_final": []}
   tc_dict: dict[str, list[Any]] = {"LSPr": []}
+  runtime_list: list[float] = []
 
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
@@ -312,6 +313,7 @@ def run(
           f"best centralized it: {best_centralized_it}; "
           f"total runtime: {total_runtime})"
         )
+        runtime_list.append(total_runtime)
         if t % checkpoint_interval == 0 or t == max_steps - 1:
           save_checkpoint(
             spc_complete_solution,
@@ -330,6 +332,9 @@ def run(
   )
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv"),
+  )
+  pd.DataFrame({"tot": runtime_list}).to_csv(
+    os.path.join(solution_folder, "runtime.csv"), index=False,
   )
 
   if verbose > 0:

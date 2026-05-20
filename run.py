@@ -175,7 +175,7 @@ def load_termination_condition(
           c = f"reached time limit ({c2})"
         criterion.append(c)
         iteration.append(int(i))
-        deviation.append(float(d) if d != "None" else d)
+        deviation.append(float(d) if d is not None and d != "None" else None)
         best_it.append(int(b) if b is not None else b)
       tc.drop("0", axis = "columns", inplace = True)
       tc["criterion"] = criterion
