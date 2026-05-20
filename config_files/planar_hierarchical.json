@@ -1,0 +1,66 @@
+{
+  "base_solution_folder": "solutions/planar_hierarchical",
+  "verbose": 1,
+  "seed": 42,
+  "max_steps": 8,
+  "min_run_time": 1,
+  "max_run_time": 1,
+  "run_time_step": 1,
+  "solver_name": "gurobi",
+  "solver_options": {
+    "general": {
+      "TimeLimit": 120,
+      "OutputFlag": 0
+    },
+    "auction": {
+      "epsilon": 0.01,
+      "eta": [0.5, 0.3, 0.15],
+      "zeta": 0.1,
+      "latency_weight": 0.0,
+      "fairness_weight": 0.0
+    }
+  },
+  "max_iterations": 20,
+  "patience": 5,
+  "sw_patience": 5,
+  "checkpoint_interval": 1,
+  "max_hierarchy_depth": 3,
+  "tolerance": 1e-6,
+  "limits": {
+    "Nn": {
+      "values": [10, 20, 30, 40, 50]
+    },
+    "Nf": {
+      "min": 2,
+      "max": 2
+    },
+    "neighborhood": {
+      "k": 3,
+      "shape": "planar"
+    },
+    "demand": {
+      "values": [1.0, 1.2]
+    },
+    "memory_capacity": {
+      "min": 12,
+      "max": 12
+    },
+    "memory_requirement": {
+      "values": [2, 3]
+    },
+    "max_utilization": {
+      "min": 0.65,
+      "max": 0.75
+    },
+    "load": {
+      "trace_type": "fixed_sum",
+      "values": ["auto"]
+    },
+    "weights": {
+      "alpha": {"min": 1.0, "max": 1.5},
+      "beta_multiplier": {"min": 1.5, "max": 2.5},
+      "gamma": {"min": 0.05, "max": 0.15},
+      "delta_multiplier": {"min": 0.1, "max": 0.2}
+    }
+  }
+}
