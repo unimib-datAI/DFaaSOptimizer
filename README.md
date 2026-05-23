@@ -72,9 +72,10 @@ pip install -r requirements.txt
 ### Install with conda (required for planar graphs generation)
 
 ```
-conda create -n sage_venv -c conda-forge sage
+conda create -n sage_venv -c conda-forge --yes python=3.12 sage
 conda activate sage_venv
-conda install -c conda-forge pip
+conda install -c conda-forge --yes gfortran
+conda install -c conda-forge --yes pip
 pip install -r requirements.txt
 ```
 
