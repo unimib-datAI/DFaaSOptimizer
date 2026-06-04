@@ -371,7 +371,7 @@ def dev_plot_by_key(
     models: list
   ):
   nrows = 3 if rej is not None else 2
-  ncols = len(models) - 1
+  ncols = max(1, len(models) - 1)
   f1, axs = plt.subplots(
     nrows = nrows, 
     ncols = ncols, 
@@ -393,12 +393,13 @@ def dev_plot_by_key(
       ax2 = axs.T
   cidx = 0
   for model in models:
-    if "FaaS-" in model:
+    if "FaaS-" in model or "dev" in obj.columns:
+      colname = f"dev_{model}" if "FaaS-" in model else "dev"
       bplots = [None] * nrows
       fontsize = 21
       bplots[0] = (
-        f"dev_{model}",
-        obj[[key, f"dev_{model}"]].plot.box(
+        colname,
+        obj[[key, colname]].plot.box(
           by = key,
           grid = True,
           ax = axs[0,cidx],
@@ -410,8 +411,8 @@ def dev_plot_by_key(
         )
       )
       bplots[1] = (
-        f"dev_{model}",
-        runtime[[key, f"dev_{model}"]].plot.box(
+        colname,
+        runtime[[key, colname]].plot.box(
           by = key,
           grid = True,
           ax = axs[1,cidx],
@@ -438,20 +439,24 @@ def dev_plot_by_key(
       )
       # axis properties
       # -- y
+      ylabel = "Objective deviation"
+      if "FaaS-" in model:
+        ylabel += f"\n(({model} - LMM) / LMM) [%]"
       axs[0,cidx].set_ylabel(
-        f"Objective deviation\n(({model} - LMM) / LMM) [%]",
-        fontsize = fontsize
+        ylabel, fontsize = fontsize
       )
       axs[0,cidx].set_title(None)
+      ylabel = "Runtime deviation"
+      if "FaaS-" in model:
+        ylabel += f"\n({model} / LMM) [x]"
       axs[1,cidx].set_ylabel(
-        f"Runtime deviation\n({model} / LMM) [x]",
-        fontsize = fontsize
+        ylabel, fontsize = fontsize
       )
       axs[1,cidx].set_title(None)
       if rej is not None:
         bplots[2] = (
-          f"dev_{model}",
-          rej[[key, f"dev_{model}"]].plot.box(
+          colname,
+          rej[[key, colname]].plot.box(
             by = key,
             grid = True,
             ax = axs[2,cidx],
@@ -468,9 +473,11 @@ def dev_plot_by_key(
           linewidth = 2,
           color = "k"
         )
+        ylabel = "Cloud offloading deviation"
+        if "FaaS-" in model:
+          ylabel += f"\n({model} - LMM) [%]"
         axs[2,cidx].set_ylabel(
-          f"Cloud offloading deviation\n({model} - LMM) [%]",
-          fontsize = fontsize
+          ylabel, fontsize = fontsize
         )
         axs[2,cidx].set_title(None)
       # -- x
