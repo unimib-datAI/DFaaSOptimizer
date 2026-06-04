@@ -264,6 +264,7 @@ def compare_single_model(
     postprocessing_folders: list, 
     str_format: str, 
     key_label: str,
+    models: list,
     plot_folder: str,
     baseline = None,
     filter_by = None,
@@ -274,37 +275,45 @@ def compare_single_model(
   all_runtime = pd.DataFrame()
   for postprocessing_folder in postprocessing_folders:
     print(postprocessing_folder)
-    # -- objective function value
-    obj = pd.read_csv(
-      os.path.join(postprocessing_folder, "postprocessing", "obj.csv")
-    )
-    obj.rename(columns = {"obj": "LoadManagementModel"}, inplace = True)
-    # -- runtime
-    runtime = pd.read_csv(
-      os.path.join(postprocessing_folder, "postprocessing", "runtime.csv")
-    )
-    runtime.rename(columns= {"runtime": "LoadManagementModel"}, inplace = True)
-    # add info
-    key, key_val = parse(str_format, os.path.basename(postprocessing_folder))
-    obj[key] = int(key_val)
-    runtime[key] = int(key_val)
-    if filter_by is not None and filter_by in obj and filter_by in runtime:
-      if keep_only is not None:
-        obj = obj[obj[filter_by] == keep_only]
-        runtime = runtime[runtime[filter_by] == keep_only]
-      elif drop_value is not None:
-        obj = obj[obj[filter_by] != drop_value]
-        runtime = runtime[runtime[filter_by] != drop_value]
-    # merge
-    all_obj = pd.concat([all_obj, obj])
-    all_runtime = pd.concat([all_runtime, runtime])
+    tokens = parse(str_format, os.path.basename(postprocessing_folder))
+    if tokens is not None:
+      # -- objective function value
+      obj = pd.read_csv(
+        os.path.join(postprocessing_folder, "postprocessing", "obj.csv")
+      )
+      obj.rename(columns = {"obj": "LoadManagementModel"}, inplace = True)
+      # -- runtime
+      runtime = pd.read_csv(
+        os.path.join(postprocessing_folder, "postprocessing", "runtime.csv")
+      )
+      runtime.rename(
+        columns= {"runtime": "LoadManagementModel"}, inplace = True
+      )
+      # add info
+      key, key_val = tokens
+      obj[key] = int(key_val)
+      runtime[key] = int(key_val)
+      if filter_by is not None and filter_by in obj and filter_by in runtime:
+        if keep_only is not None:
+          obj = obj[obj[filter_by] == keep_only]
+          runtime = runtime[runtime[filter_by] == keep_only]
+        elif drop_value is not None:
+          obj = obj[obj[filter_by] != drop_value]
+          runtime = runtime[runtime[filter_by] != drop_value]
+      # merge
+      all_obj = pd.concat([all_obj, obj])
+      all_runtime = pd.concat([all_runtime, runtime])
+    else:
+      print(
+        f"\tSKIPPED: {postprocessing_folder} does not adhere to parse format"
+      )
   # plot
   os.makedirs(plot_folder, exist_ok = True)
   plot_by_key(
     all_obj, 
     all_runtime, 
     None,
-    ["LoadManagementModel"],
+    models,
     key, 
     key_label, 
     plot_folder
@@ -347,7 +356,9 @@ def compare_single_model(
         )
         df[key] = key_val
         runtime_dev = pd.concat([runtime_dev, df], ignore_index = True)
-    dev_plot_by_key(obj_dev, runtime_dev, None, key, key_label, plot_folder)
+    dev_plot_by_key(
+      obj_dev, runtime_dev, None, key, key_label, plot_folder, models
+    )
 
 
 def dev_plot_by_key(
@@ -1010,6 +1021,7 @@ if __name__ == "__main__":
       postprocessing_folders, 
       folder_parse_format,
       loop_over_label,
+      models,
       common_output_folder,
       baseline = single_model_baseline,
       filter_by = filter_by,
