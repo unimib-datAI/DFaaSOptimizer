@@ -420,11 +420,12 @@ def find_best_iterations(
         ax = axs[0],
         grid = True,
         marker = ".",
-        markersize = 10,
-        linewidth = 2,
+        markersize = 20,
+        linewidth = 4,
         # label = f"t = {t}"
         label = None,
-        legend = False
+        legend = False,
+        fontsize = 24
       )
       axs[0].axvline(
         x = last_it[-1],
@@ -443,11 +444,12 @@ def find_best_iterations(
         ax = axs[1],
         grid = True,
         marker = ".",
-        markersize = 10,
-        linewidth = 2,
+        markersize = 20,
+        linewidth = 4,
         # label = f"t = {t}"
         label = None,
-        legend = False
+        legend = False,
+        fontsize = 24
       )
       axs[1].axvline(
         x = last_it[idx],
@@ -458,6 +460,8 @@ def find_best_iterations(
       if len(best_sol_df["social_welfare"]) == 0:
         last_it.append(last_it[-1] + data["best_solution_it"].max())
       idx += 1
+  axs[1].set_xlabel("Iteration", fontsize = 24)
+  axs[1].set_ylabel("Total profit", fontsize = 24)
   plt.savefig(
     os.path.join(output_folder, "best_solution_obj.png"),
     dpi = 300,
