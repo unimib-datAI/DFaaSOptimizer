@@ -719,7 +719,7 @@ def run(
             file = log_stream,
             flush = True
           )
-        sw_queue.append(abs(spr_obj))
+      sw_queue.append(abs(spr_obj))
       if cobj > best_centralized_cost:
         best_centralized_cost = cobj
         best_centralized_solution = deepcopy(csol)
