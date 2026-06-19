@@ -116,6 +116,7 @@ def check_stopping_criteria(
     a: np.array,
     bids: pd.DataFrame,
     memory_bids: pd.DataFrame,
+    sw_queue: deque,
     tolerance: float,
     total_runtime: float,
     time_limit: float
@@ -137,6 +138,18 @@ def check_stopping_criteria(
   elif len(bids) == 0 and len(memory_bids) == 0:
     stop = True
     why_stopping = "no available or convenient sellers"
+  if not stop and len(sw_queue) >= sw_queue.maxlen:
+    stop = True
+    why_stopping = "SW deviation < tol"
+    last_sw = None
+    for sw in sw_queue:
+      if last_sw is not None:
+        sw_deviation = (abs(sw - last_sw) / abs(last_sw))
+        if sw_deviation >= tolerance:
+          stop = False
+          why_stopping = f"SW deviation: {sw_deviation}"
+          break
+      last_sw = sw
   elif total_runtime >= time_limit:
     stop = True
     why_stopping = f"reached time limit: {total_runtime} >= {time_limit}"
@@ -444,6 +457,7 @@ def run(
   checkpoint_interval = config["checkpoint_interval"]
   plot_interval = config.get("plot_interval", max_iterations)
   patience = config["patience"]
+  sw_patience = config.get("sw_patience", patience)
   # generate solution folder
   now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
   solution_folder = f"{base_solution_folder}/{now}"
@@ -538,6 +552,7 @@ def run(
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn,Nf))
     n_accepted_queue = deque(maxlen = patience)
+    sw_queue = deque(maxlen = sw_patience)
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
@@ -704,6 +719,7 @@ def run(
             file = log_stream,
             flush = True
           )
+        sw_queue.append(abs(spr_obj))
       if cobj > best_centralized_cost:
         best_centralized_cost = cobj
         best_centralized_solution = deepcopy(csol)
@@ -725,6 +741,7 @@ def run(
         additional_replicas,
         bids,
         memory_bids,
+        sw_queue,
         tolerance,
         total_runtime,
         time_limit
