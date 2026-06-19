@@ -706,7 +706,11 @@ def run(
         csol["sp"]["r"], csol["sp"]["U"], sp_data
       )
       e = datetime.now()
-      print(f"        check_feasibility: DONE ({feas[0]}; {feas[1]}; runtime = {(e-s).total_seconds()})", file = log_stream, flush = True)
+      print(
+        f"        check_feasibility: DONE ({feas[0]}; {feas[1]}; runtime = {(e-s).total_seconds()})", 
+        file = log_stream, 
+        flush = True
+      )
       assert feas[0],feas[1]
       # update best solution so far
       if spr_obj < best_cost_so_far or it == 0:
