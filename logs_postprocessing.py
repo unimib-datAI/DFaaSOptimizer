@@ -384,12 +384,12 @@ def parse_faasmadea_log_file(
             # load sp info
             if "sp: DONE" in lines[it_row_idx]:
               sp_runtime = None
-              if "runtime" in lines[t_row_idx]:
+              if "runtime" in lines[it_row_idx]:
                 _, _, sp_runtime = parse.parse(
                   "        sp: DONE  ({}; obj = {}; runtime = {})\n", 
-                  lines[t_row_idx]
+                  lines[it_row_idx]
                 )
-              df["sp_runtime"].append(float(runtime) if sp_runtime else None)
+              df["sp_runtime"].append(float(sp_runtime) if sp_runtime else None)
             elif "define_bids" in lines[it_row_idx]:
               runtime = None
               if "runtime" in lines[it_row_idx]:
@@ -652,7 +652,7 @@ def parse_faasmadea0_log_file(
               best_solution_df["centralized"]["Nn"].append(Nn)
             it_row_idx += 1
           # save iteration info
-          df["sp_runtime"].append(float(runtime) if sp_runtime else None)
+          df["sp_runtime"].append(float(sp_runtime) if sp_runtime else None)
           df["iteration"].append(it)
           df["time"].append(t)
           df["exp"].append(exp)

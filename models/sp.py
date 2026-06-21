@@ -1,4 +1,4 @@
-from models.model import BaseLoadManagementModel, PYO_VAR_TYPE
+from models.model import BaseLoadManagementModel, PYO_VAR_TYPE, PYO_PARAM_TYPE
 
 import pyomo.environ as pyo
 
@@ -74,9 +74,7 @@ class LSP_v0(SPAbstractModel):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.minimize_processing_cost_v0
-    )
+    self.set_objective(rule = self.minimize_processing_cost_v0)
   
   @staticmethod
   def no_traffic_loss_v0(model, f):
@@ -147,9 +145,7 @@ class LSP(LSP_v0):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.minimize_processing_cost
-    )
+    self.set_objective(rule = self.minimize_processing_cost)
   
   @staticmethod
   def no_traffic_loss(model, f):
@@ -181,12 +177,12 @@ class LSPr_v0(SPAbstractModel):
     ###########################################################################
     # assigned offloading
     self.model.omega_bar = pyo.Param(
-      self.model.N, self.model.F, 
-      within = PYO_VAR_TYPE
+      self.model.N, self.model.F,
+      within = PYO_PARAM_TYPE
     )
     self.model.y_bar = pyo.Param(
-      self.model.N, self.model.N, self.model.F, 
-      within = PYO_VAR_TYPE
+      self.model.N, self.model.N, self.model.F,
+      within = PYO_PARAM_TYPE
     )
     ###########################################################################
     # Constraints
@@ -206,9 +202,7 @@ class LSPr_v0(SPAbstractModel):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.minimize_processing_cost_v0
-    )
+    self.set_objective(rule = self.minimize_processing_cost_v0)
   
   @staticmethod
   def no_traffic_loss_v0(model, f):
@@ -277,9 +271,7 @@ class LSPr(LSPr_v0):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.minimize_processing_cost
-    )
+    self.set_objective(rule = self.minimize_processing_cost)
   
   @staticmethod
   def no_traffic_loss(model, f):

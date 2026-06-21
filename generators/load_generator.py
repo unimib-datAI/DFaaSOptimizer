@@ -139,14 +139,14 @@ class LoadGenerator:
         input_requests[agent] = requests
     elif trace_type.startswith("fixed_sum"):
       total_workload = 0.0
+      values = list(limits.values())
+      numeric_values = [v["max"] if isinstance(v, dict) else v for v in values]
       if trace_type == "fixed_sum":
-        total_workload = sum(list(limits.values()))/len(list(limits.values()))
+        total_workload = sum(numeric_values) / len(numeric_values)
       else:
-        total_workload = min(list(limits.values())) if trace_type.endswith(
+        total_workload = min(numeric_values) if trace_type.endswith(
           "min"
-        ) else max(list(limits.values()))
-      if isinstance(total_workload, dict):
-        total_workload = total_workload["max"]
+        ) else max(numeric_values)
       input_requests = self._impose_system_workload(
         total_workload, input_requests
       )
@@ -190,4 +190,3 @@ class LoadGenerator:
       plt.close()
     else:
       plt.show()
-

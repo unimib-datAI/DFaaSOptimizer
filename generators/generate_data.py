@@ -187,7 +187,15 @@ def generate_neighborhood(
   ) -> Tuple[np.array, nx.Graph]:
   neighborhood = np.zeros((Nn, Nn))
   graph = None
-  if "p" in limits["neighborhood"]:
+  if (
+      limits["neighborhood"].get("type") == "planar"
+      and limits["neighborhood"].get("degree") == 3
+    ):
+    if Nn < 6 or Nn % 2 != 0:
+      raise ValueError("planar degree-3 neighborhood requires an even Nn >= 6")
+    graph = nx.circular_ladder_graph(Nn // 2)
+    neighborhood = nx.adjacency_matrix(graph).toarray()
+  elif "p" in limits["neighborhood"]:
     for n1 in range(Nn):
       for n2 in range(n1+1,Nn):
         neighborhood[n1,n2] = rng.binomial(1, limits["neighborhood"]["p"])
@@ -328,27 +336,39 @@ def generate_weights(
             beta[n1,n2,f] = -1
           beta[n2,n1,f] = beta[n1,n2,f]
           max_price = max(max_price, beta[n2,n1,f])
-    gamma[Nn - 1,f] = generate_random_float(
-      rng, limits["weights"]["cloud_network_latency"]
-    ) + (
-      data_size[f] / cloud_bandwidth
-    )
+    for f in range(Nf):
+      gamma[Nn - 1,f] = generate_random_float(
+        rng, limits["weights"]["cloud_network_latency"]
+      ) + (
+        data_size[f] / cloud_bandwidth
+      )
     min_g = gamma.min()
     max_g = gamma.max()
+    gamma_range = max_g - min_g
+    price_range = max_price - min_price
     # -- normalize
-    alpha = [1 - ((a - min_price) / (max_price - min_price)) for a in alpha]
+    alpha = [
+      0.0 if price_range == 0 else 1 - ((a - min_price) / price_range)
+      for a in alpha
+    ]
     for n1 in range(Nn - 1):
       for f in range(Nf):
-        gamma[n1,f] = (gamma[n1,f] - min_g) / (max_g - min_g)
+        gamma[n1,f] = (
+          0.0 if gamma_range == 0 else (gamma[n1,f] - min_g) / gamma_range
+        )
         for n2 in range(n1 + 1, Nn):
           if beta[n1,n2,f] > 0:
-            beta[n1,n2,f] = 1 - (
-              (beta[n1,n2,f] - min_price) / (max_price - min_price)
+            beta[n1,n2,f] = (
+              0.0 if price_range == 0
+              else 1 - ((beta[n1,n2,f] - min_price) / price_range)
             )
           else:
             beta[n1,n2,f] = 0
           beta[n2,n1,f] = beta[n1,n2,f]
-    gamma[Nn - 1,f] = (gamma[Nn - 1,f] - min_g) / (max_g - min_g)
+    for f in range(Nf):
+      gamma[Nn - 1,f] = (
+        0.0 if gamma_range == 0 else (gamma[Nn - 1,f] - min_g) / gamma_range
+      )
     delta = beta.mean(axis = 1)
   return alpha, beta, gamma, delta
 

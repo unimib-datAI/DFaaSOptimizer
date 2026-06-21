@@ -12,6 +12,12 @@ PYO_VAR_TYPE = pyo.NonNegativeIntegers
 PYO_PARAM_TYPE = pyo.NonNegativeReals
 
 
+def _solver_option_name(solver_name: str, option_name: str) -> str:
+  if solver_name in {"glpk", "glpsol"} and option_name == "TimeLimit":
+    return "tmlim"
+  return option_name
+
+
 class BaseAbstractModel():
   def __init__(self):
     self.model = pyo.AbstractModel()
@@ -23,6 +29,11 @@ class BaseAbstractModel():
   
   def generate_instance(self, data: dict):
     return self.model.create_instance(data)
+
+  def set_objective(self, rule, sense = pyo.minimize) -> None:
+    if hasattr(self.model, "OBJ"):
+      self.model.del_component(self.model.OBJ)
+    self.model.OBJ = pyo.Objective(rule = rule, sense = sense)
   
   def solve(
       self, 
@@ -34,7 +45,7 @@ class BaseAbstractModel():
     # initialize solver and set options
     solver = pyo.SolverFactory(solver_name)
     for k, v in solver_options.items():
-      solver.options[k] = v
+      solver.options[_solver_option_name(solver_name, k)] = v
     # provide initial solution (if any)
     warmstart = False
     if initial_solution is not None:
@@ -42,7 +53,13 @@ class BaseAbstractModel():
       warmstart = True
     # solve
     s = datetime.now()
-    results = solver.solve(instance, warmstart = warmstart)
+    solve_kwargs = {"warmstart": True} if warmstart else {}
+    try:
+      results = solver.solve(instance, **solve_kwargs)
+    except ValueError as exc:
+      if not warmstart or "warmstart" not in str(exc):
+        raise
+      results = solver.solve(instance)
     e = datetime.now()
     # check solver status
     get_solution_ok = results.solver.status == SolverStatus.ok
@@ -226,9 +243,7 @@ class LoadManagementModel(BaseCentralizedModel):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.maximize_processing, sense = pyo.maximize
-    )
+    self.set_objective(rule = self.maximize_processing, sense = pyo.maximize)
   
   @staticmethod
   def utilization_equilibrium(model, n, f):
