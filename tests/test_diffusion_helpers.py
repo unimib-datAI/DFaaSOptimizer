@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import pytest
 
 from decentralized_diffusion import define_assignments, evaluate_assignments
 

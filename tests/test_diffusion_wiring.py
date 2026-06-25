@@ -31,3 +31,9 @@ def test_compare_results_palette_includes_madig():
 
   source = inspect.getsource(compare_results)
   assert '"FaaS-MADiG"' in source
+
+
+def test_set_solution_folder_tolerates_missing_method_key():
+  solution_folders = {"experiments_list": []}  # simulates a pre-feature experiments.json
+  run.set_solution_folder(solution_folders, "faas-diffuse", 0, "/some/folder")
+  assert solution_folders["faas-diffuse"][0] == "/some/folder"

@@ -213,7 +213,7 @@ def run(
     parallelism: int,
     log_on_file: bool = False,
     disable_plotting: bool = False,
-  ):
+  ) -> str:
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
   limits = config["limits"]

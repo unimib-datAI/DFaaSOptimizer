@@ -117,12 +117,13 @@ def generate_experiments_list(exp_values, seed, n_experiments):
 def set_solution_folder(
     solution_folders: dict, method: str, experiment_idx: int, folder: str
   ):
+  folders = solution_folders.setdefault(method, [])
   if experiment_idx is None:
-    solution_folders[method].append(folder)
+    folders.append(folder)
   else:
-    while len(solution_folders[method]) <= experiment_idx:
-      solution_folders[method].append(None)
-    solution_folders[method][experiment_idx] = folder
+    while len(folders) <= experiment_idx:
+      folders.append(None)
+    folders[experiment_idx] = folder
 
 
 def load_obj_value(solution_folder: str) -> pd.DataFrame:
