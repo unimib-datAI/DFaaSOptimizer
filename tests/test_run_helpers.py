@@ -1,9 +1,11 @@
 from pathlib import Path
+import json
 
 import numpy as np
 import pandas as pd
 import pytest
 
+import run
 from run import (
   generate_experiments_list,
   load_obj_value,
@@ -145,3 +147,46 @@ def test_get_current_load_maps_agents_and_functions():
   assert out[(2, 1)] == 4.0
   assert out[(1, 2)] == 6.0
   assert out[(2, 2)] == 8.0
+
+
+def test_run_updates_existing_method_slot_when_resuming(tmp_path: Path, monkeypatch):
+  base_folder = tmp_path / "runs"
+  base_folder.mkdir()
+  (base_folder / "experiments.json").write_text(
+    """
+{
+  "experiments_list": [[2, 123]],
+  "centralized": ["centralized_existing"],
+  "faas-macro": [null],
+  "faas-macro-v0": [],
+  "faas-madea": [],
+  "hierarchical": []
+}
+""".strip(),
+  )
+  config = {
+    "seed": 123,
+    "verbose": 0,
+    "base_solution_folder": str(base_folder),
+    "limits": {
+      "Nn": {"values": [2]},
+      "neighborhood": {},
+    },
+  }
+
+  monkeypatch.setattr(run, "run_iterations", lambda *args, **kwargs: "macro_new")
+  monkeypatch.setattr(run, "results_postprocessing", lambda *args, **kwargs: None)
+
+  run.run(
+    config,
+    str(base_folder),
+    n_experiments = 1,
+    methods = ["faas-macro"],
+    fix_r = False,
+    sp_parallelism = 0,
+    enable_plotting = False,
+    loop_over = "Nn",
+  )
+
+  out = json.loads((base_folder / "experiments.json").read_text())
+  assert out["faas-macro"] == ["macro_new"]

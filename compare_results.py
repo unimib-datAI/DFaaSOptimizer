@@ -228,6 +228,23 @@ def compare_results(
     if rej is not None:
       rej.to_csv(os.path.join(postprocessing_folder, "rejections.csv"))
     runtime.to_csv(os.path.join(postprocessing_folder, "runtime.csv"))
+  helper_dev_cols = {"obj": [], "runtime": [], "rej": []}
+  for model in models:
+    if model != "LoadManagementModel" and "dev" in obj and f"dev_{model}" not in obj:
+      obj[f"dev_{model}"] = obj["dev"]
+      helper_dev_cols["obj"].append(f"dev_{model}")
+    if (
+        model != "LoadManagementModel" and "dev" in runtime and
+          f"dev_{model}" not in runtime
+      ):
+      runtime[f"dev_{model}"] = runtime["dev"]
+      helper_dev_cols["runtime"].append(f"dev_{model}")
+    if (
+        rej is not None and model != "LoadManagementModel" and "dev" in rej and
+          f"dev_{model}" not in rej
+      ):
+      rej[f"dev_{model}"] = rej["dev"]
+      helper_dev_cols["rej"].append(f"dev_{model}")
   dev_plot_by_key(
     obj, runtime, rej, key, key_label, postprocessing_folder, models
   )
@@ -252,6 +269,10 @@ def compare_results(
     key_label, 
     postprocessing_folder
   )
+  obj.drop(columns = helper_dev_cols["obj"], inplace = True)
+  runtime.drop(columns = helper_dev_cols["runtime"], inplace = True)
+  if rej is not None:
+    rej.drop(columns = helper_dev_cols["rej"], inplace = True)
   return obj, rej, runtime
 
 
@@ -374,7 +395,7 @@ def dev_plot_by_key(
     )
     ax2 = np.atleast_2d(ax2)
     if ncols == 1:
-      ax2 = axs.T
+      ax2 = ax2.T
   cidx = 0
   for model in models:
     if "FaaS-" in model:

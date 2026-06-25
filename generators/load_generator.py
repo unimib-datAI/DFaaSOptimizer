@@ -123,7 +123,8 @@ class LoadGenerator:
         if trace_type == "clipped":
           # Clip the excess values respecting the minimum and maximum values
           # for the input requests observation.
-          np.clip(requests, minr, maxr, out = requests)
+          clipped = np.clip(requests.astype(float), minr, maxr)
+          requests = clipped.astype(np.int32) if only_integer_values else clipped
         elif trace_type == "sinusoidal":
           # Rescale
           in_min = requests.min()

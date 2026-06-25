@@ -17,7 +17,7 @@ def get_faasmacro_runtime(
       runtime_cols = []
       for col in t_data.columns:
         if col.endswith("runtime"):
-          if "MACrO" in method or (not col.startswith("sp")):
+          if method == "" or "MACrO" in method or (not col.startswith("sp")):
             runtime_cols.append(col)
       time_data = t_data.loc[:,runtime_cols].copy(
         deep = True
@@ -293,6 +293,8 @@ def parse_faasmacro_log_file(
             df["wallclock_time"] += [float(wct)] * n_iterations
             t_row_idx += 1
             n_iterations = 0
+        else:
+          t_row_idx += 1
       # add number of nodes
       df["Nn"] = [Nn] * len(df["exp"])
       # merge and move to the next time step
@@ -403,10 +405,18 @@ def parse_faasmadea_log_file(
             elif "evaluate_bids" in lines[it_row_idx]:
               runtime = None
               if "runtime" in lines[it_row_idx]:
-                _, runtime = parse.parse(
+                parsed_eval = parse.parse(
                   "        evaluate_bids: DONE; obj = {}; runtime = {})\n",
                   lines[it_row_idx]
                 )
+                if parsed_eval is None:
+                  parsed_eval = parse.parse(
+                    "        evaluate_bids: DONE; runtime = {})\n",
+                    lines[it_row_idx]
+                  )
+                  runtime = parsed_eval[0] if parsed_eval else None
+                else:
+                  _, runtime = parsed_eval
               df["evaluate_bids_runtime"].append(
                 float(runtime) if runtime else None
               )
@@ -471,6 +481,8 @@ def parse_faasmadea_log_file(
             df["wallclock_time"] += [float(wct)] * n_iterations
             t_row_idx += 1
             n_iterations = 0
+        else:
+          t_row_idx += 1
       # add number of nodes
       df["Nn"] = [Nn] * len(df["exp"])
       # correct potential issues in array lengths
@@ -488,6 +500,8 @@ def parse_faasmadea_log_file(
             lines[t_row_idx].startswith("All solutions saved")
         ):
         row_idx += 1
+    else:
+      row_idx += 1
   best_solution_df["social_welfare"] = pd.concat(
     [
       best_sol_df.get("social_welfare", pd.DataFrame()), 
@@ -541,11 +555,13 @@ def parse_faasmadea0_log_file(
       # load sp info
       sp_runtime = None
       if "sp" in lines[t_row_idx] and "runtime" in lines[t_row_idx]:
-        _, _, sp_runtime = parse.parse(
-          "    sp: DONE ({}; obj = {}; runtime = {})\n", 
+        parsed_sp = parse.parse(
+          "    sp: DONE{}({}; obj = {}; runtime = {})\n", 
           lines[t_row_idx]
         )
-      t_row_idx += 1
+        if parsed_sp is not None:
+          _, _, _, sp_runtime = parsed_sp
+          t_row_idx += 1
       # loop over iterations
       df = {
         "exp": [],
@@ -675,6 +691,8 @@ def parse_faasmadea0_log_file(
             df["wallclock_time"] += [float(wct)] * n_iterations
             t_row_idx += 1
             n_iterations = 0
+        else:
+          t_row_idx += 1
       # add number of nodes
       df["Nn"] = [Nn] * len(df["exp"])
       # correct potential issues in array lengths
@@ -693,6 +711,8 @@ def parse_faasmadea0_log_file(
             lines[t_row_idx].startswith("All solutions saved")
         ):
         row_idx += 1
+    else:
+      row_idx += 1
   best_solution_df["social_welfare"] = pd.concat(
     [
       best_sol_df.get("social_welfare", pd.DataFrame()), 

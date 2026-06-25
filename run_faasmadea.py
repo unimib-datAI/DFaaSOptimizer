@@ -111,15 +111,21 @@ def check_stopping_criteria(
     it: int,
     max_iterations: int,
     blackboard: np.array,
-    omega: np.array,
-    rmp_omega: np.array,
-    a: np.array,
-    bids: pd.DataFrame,
-    memory_bids: pd.DataFrame,
-    tolerance: float,
-    total_runtime: float,
-    time_limit: float
+    omega: np.array = None,
+    rmp_omega: np.array = None,
+    a: np.array = None,
+    bids: pd.DataFrame = None,
+    memory_bids: pd.DataFrame = None,
+    tolerance: float = 1e-6,
+    total_runtime: float = 0.0,
+    time_limit: float = float("inf"),
+    sp_omega: np.array = None,
+    sp_y: np.array = None
   ) -> Tuple[bool, str]:
+  if omega is None:
+    omega = sp_omega
+  if a is None:
+    a = np.zeros_like(rmp_omega) if rmp_omega is not None else None
   stop = False
   why_stopping = None
   if it >= max_iterations - 1:
@@ -131,15 +137,27 @@ def check_stopping_criteria(
   elif (omega <= tolerance).all():
     stop = True
     why_stopping = "all load assigned"
-  elif (rmp_omega <= tolerance).all() and (a <= tolerance).all():
+  elif (
+      rmp_omega is not None and a is not None and
+        (rmp_omega <= tolerance).all() and (a <= tolerance).all()
+    ):
     stop = True
     why_stopping = "load cannot be assigned"
-  elif len(bids) == 0 and len(memory_bids) == 0:
+  elif (
+      bids is not None and memory_bids is not None and
+        len(bids) == 0 and len(memory_bids) == 0
+    ):
     stop = True
     why_stopping = "no available or convenient sellers"
   elif total_runtime >= time_limit:
     stop = True
     why_stopping = f"reached time limit: {total_runtime} >= {time_limit}"
+  elif (
+      sp_omega is not None and rmp_omega is not None and sp_y is not None and
+        (np.abs(sp_omega - rmp_omega) <= tolerance).all()
+    ):
+    stop = True
+    why_stopping = "feasible solution found"
   return stop, why_stopping
 
 
@@ -150,7 +168,6 @@ def compute_residual_capacity(
   Nf = data[None]["Nf"][None]
   # loop over nodes and functions
   cap = np.zeros((Nn,Nf))
-  c = np.zeros((Nn,Nf))
   residual_capacity = np.zeros((Nn,Nf))
   ell = np.zeros((Nn,Nf))
   for n in range(Nn):
@@ -161,10 +178,46 @@ def compute_residual_capacity(
       cap[n,f] = r[n,f] * (
         data[None]["max_utilization"][f+1] / data[None]["demand"][(n+1,f+1)]
       )
-      # residual capacity (the blackboard does not consider y)
-      c[n,f] = max(0.0, cap[n,f] - x[n,f])
       residual_capacity[n,f] = max(0.0, cap[n,f] - ell[n,f])
-  return cap, c, residual_capacity, ell
+  return cap, residual_capacity, ell
+
+
+def data_dict_to_matrix(data_dict: dict, Nn: int, Nf: int = 0) -> np.array:
+  data_mat = np.zeros((Nn,Nn))
+  if Nf > 0:
+    data_mat = np.zeros((Nn,Nn,Nf))
+  for n1 in range(Nn):
+    for n2 in range(Nn):
+      if n1 != n2:
+        if Nf == 0:
+          data_mat[n1,n2] = data_dict[(n1+1,n2+1)]
+        else:
+          for f in range(Nf):
+            data_mat[n1,n2,f] = data_dict[(n1+1,n2+1,f+1)]
+  return data_mat
+
+
+def compute_utility(
+    p: np.array, 
+    data: dict,
+    auction_options: dict,
+    latency: np.array,
+    fairness: np.array
+  ) -> np.array:
+  Nn = data[None]["Nn"][None]
+  Nf = data[None]["Nf"][None]
+  utility = np.zeros((Nn,Nn,Nf))
+  for i in range(Nn):
+    for j in range(Nn):
+      for f in range(Nf):
+        price = p[j,f] if p.ndim == 2 else p[i,j,f]
+        utility[i,j,f] = (
+          data[None]["beta"][(i+1,j+1,f+1)] - 
+          price - 
+          auction_options["latency_weight"] * latency[i,j] - 
+          auction_options["fairness_weight"] * fairness[i,f]
+        )
+  return utility
 
 
 def define_bids(
@@ -282,18 +335,40 @@ def evaluate_bids(
     bids: pd.DataFrame, 
     blackboard: np.array, 
     data: dict, 
-    last_y: np.array,
-    ell: np.array, 
-    p: np.array, 
-    capacity: np.array, 
-    u0: np.array, 
-    auction_options: dict,
-    initial_rho: np.array,
-    r: np.array,
-    tentatively_start_replicas: bool
+    last_y: np.array = None,
+    ell: np.array = None, 
+    p: np.array = None, 
+    capacity: np.array = None, 
+    u0: np.array = None, 
+    auction_options: dict = None,
+    initial_rho: np.array = None,
+    r: np.array = None,
+    tentatively_start_replicas: bool = None
   ) -> np.array:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
+  extended_return = (
+    last_y is not None or initial_rho is not None or
+      r is not None or tentatively_start_replicas is not None
+  )
+  if last_y is None:
+    last_y = np.zeros((Nn,Nn,Nf))
+  if ell is None:
+    ell = np.zeros((Nn,Nf))
+  if p is None:
+    p = np.zeros((Nn,Nf))
+  if capacity is None:
+    capacity = np.ones((Nn,Nf))
+  if u0 is None:
+    u0 = np.zeros((Nn,Nf))
+  if auction_options is None:
+    auction_options = {"eta": 0.0, "zeta": 0.0}
+  if initial_rho is None:
+    initial_rho = np.zeros((Nn,))
+  if r is None:
+    r = np.zeros((Nn,Nf))
+  if tentatively_start_replicas is None:
+    tentatively_start_replicas = False
   # loop over agents and functions
   potential_sellers, functions_to_share = np.nonzero(blackboard)
   if tentatively_start_replicas:
@@ -379,7 +454,9 @@ def evaluate_bids(
       p[j,f] = min_b + auction_options["eta"] * (u - u0[j,f])
     else:
       p[j,f] *= (1 - auction_options["zeta"])
-  return y, p, additional_replicas, len(potential_sellers)
+  if extended_return:
+    return y, p, additional_replicas, len(potential_sellers)
+  return y, p
 
 
 def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
@@ -543,9 +620,10 @@ def run(
         print(f"    it = {it}", file = log_stream, flush = True)
       # compute residual computational capacity
       s = datetime.now()
-      capacity, blackboard, residual_capacity, ell = compute_residual_capacity(
+      capacity, residual_capacity, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data
       )
+      blackboard = np.maximum(0.0, capacity - sp_x)
       e = datetime.now()
       if verbose > 1:
         print(

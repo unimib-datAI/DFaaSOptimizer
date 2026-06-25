@@ -321,7 +321,6 @@ def test_run_results_postprocessing_aggregates_synthetic_experiment(tmp_path):
     ]
   }).to_csv(macro / "termination_condition.csv")
 
-  run.base_solution_folder = str(tmp_path)
   solution_folders = {
     "experiments_list": [[2, 123]],
     "centralized": [str(centralized)],
@@ -340,6 +339,22 @@ def test_run_results_postprocessing_aggregates_synthetic_experiment(tmp_path):
   assert (post_folder / "runtime.csv").exists()
   assert (post_folder / "rejections.csv").exists()
   assert (post_folder / "ping_pong_problems.txt").exists()
+
+
+def test_run_results_postprocessing_ignores_generate_only(tmp_path):
+  solution_folders = {
+    "experiments_list": [[2, 123]],
+    "centralized": [str(tmp_path / "generated_instance")],
+  }
+
+  run.results_postprocessing(
+    solution_folders,
+    str(tmp_path),
+    loop_over = "Nn",
+    methods = ["generate_only"],
+  )
+
+  assert (tmp_path / "postprocessing" / "ping_pong_problems.txt").exists()
 
 
 def test_postprocessing_history_and_boxplot_helpers(tmp_path):
@@ -389,6 +404,33 @@ def test_postprocessing_history_and_boxplot_helpers(tmp_path):
 
   assert (tmp_path / "history.png").exists()
   assert (tmp_path / "runtime_box.png").exists()
+
+
+def test_postprocessing_plot_history_handles_single_node_single_function(tmp_path):
+  input_requests = {0: {0: np.array([2.0, 3.0])}}
+  solution = pd.DataFrame({
+    "n0_f0_loc": [1.0, 2.0],
+    "n0_f0_fwd": [0.0, 0.0],
+    "n0_f0": [0.0, 0.0],
+  })
+  utilization = pd.DataFrame({"n0_f0": [0.5, 0.6]})
+  replicas = pd.DataFrame({"n0_f0": [1.0, 1.0]})
+  offloaded = pd.DataFrame({"n0_f0_accepted": [0.0, 0.0]})
+
+  postprocessing.plot_history(
+    input_requests,
+    min_run_time = 0,
+    max_run_time = 2,
+    run_time_step = 1,
+    solution = solution,
+    utilization = utilization,
+    replicas = replicas,
+    offloaded = offloaded,
+    obj_values = [10.0, 9.0],
+    plot_filename = str(tmp_path / "history-single.png"),
+  )
+
+  assert (tmp_path / "history-single.png").exists()
 
 
 def test_what_if_analyze_final_results_writes_deviation_outputs(tmp_path):

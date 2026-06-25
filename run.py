@@ -112,6 +112,17 @@ def generate_experiments_list(exp_values, seed, n_experiments):
   return [[exp_value, int(s)] for s in seed_list for exp_value in exp_list]
 
 
+def set_solution_folder(
+    solution_folders: dict, method: str, experiment_idx: int, folder: str
+  ):
+  if experiment_idx is None:
+    solution_folders[method].append(folder)
+  else:
+    while len(solution_folders[method]) <= experiment_idx:
+      solution_folders[method].append(None)
+    solution_folders[method][experiment_idx] = folder
+
+
 def load_obj_value(solution_folder: str) -> pd.DataFrame:
   obj = pd.DataFrame()
   if os.path.exists(os.path.join(solution_folder, "obj.csv")):
@@ -175,7 +186,7 @@ def load_termination_condition(
           c = f"reached time limit ({c2})"
         criterion.append(c)
         iteration.append(int(i))
-        deviation.append(float(d) if d is not None and d != "None" else None)
+        deviation.append(float(d) if d is not None and d != "None" else d)
         best_it.append(int(b) if b is not None else b)
       tc.drop("0", axis = "columns", inplace = True)
       tc["criterion"] = criterion
@@ -223,6 +234,7 @@ def results_postprocessing(
     loop_over: str,
     methods: list
   ):
+  methods = [m for m in methods if m != "generate_only"]
   # prepare folder to store plots
   plot_folder = os.path.join(base_folder, "postprocessing")
   os.makedirs(plot_folder, exist_ok = True)
@@ -232,11 +244,9 @@ def results_postprocessing(
   all_tc = pd.DataFrame()
   ping_pong_list = []
   # loop over experiments
-  for tokens in zip(
-      solution_folders["experiments_list"], 
-      *[solution_folders[m] for m in methods]
+  for exp_idx, exp_description_tuple in enumerate(
+      solution_folders["experiments_list"]
     ):
-    exp_description_tuple = tokens[0]
     print(f"Postprocessing exp: {exp_description_tuple}")
     # prepare folder to store results
     exp_description = "_".join([str(s) for s in exp_description_tuple])
@@ -253,10 +263,14 @@ def results_postprocessing(
       mcolors.TABLEAU_COLORS["tab:green"],
       mcolors.TABLEAU_COLORS["tab:pink"]
     ]
-    for method, method_folder in zip(methods, tokens[1:]):
+    for method in methods:
+      method_folders = solution_folders.get(method, [])
+      method_folder = (
+        method_folders[exp_idx] if exp_idx < len(method_folders) else None
+      )
       if method_folder is not None:
         abs_folders.append(
-          reconcile_paths(base_solution_folder, method_folder)
+          reconcile_paths(base_folder, method_folder)
         )
         # -- load results
         # ---- local_count, fwd_count, rej_count, replicas, ping_pong
@@ -962,7 +976,9 @@ def run(
           disable_plotting = disable_plotting,
           generate_only = generate_only
         )
-        solution_folders["centralized"].append(c_folder)
+        set_solution_folder(
+          solution_folders, "centralized", experiment_idx, c_folder
+        )
       else:
         if experiment_idx is not None:
           c_folder = solution_folders["centralized"][experiment_idx]
@@ -977,7 +993,9 @@ def run(
           disable_plotting = disable_plotting,
           v0 = True
         )
-        solution_folders["faas-macro-v0"].append(i_folder_v0)
+        set_solution_folder(
+          solution_folders, "faas-macro-v0", experiment_idx, i_folder_v0
+        )
       # -- solve iterative model
       if run_i:
         i_folder = run_iterations(
@@ -986,7 +1004,9 @@ def run(
           log_on_file = log_on_file, 
           disable_plotting = disable_plotting
         )
-        solution_folders["faas-macro"].append(i_folder)
+        set_solution_folder(
+          solution_folders, "faas-macro", experiment_idx, i_folder
+        )
       # -- solve auction
       if run_a:
         a_folder = run_auction(
@@ -995,7 +1015,9 @@ def run(
           log_on_file = log_on_file,
           disable_plotting = disable_plotting
         )
-        solution_folders["faas-madea"].append(a_folder)
+        set_solution_folder(
+          solution_folders, "faas-madea", experiment_idx, a_folder
+        )
       # -- solve hierarchical
       if run_h:
         h_folder = run_hierarchical(
@@ -1004,7 +1026,9 @@ def run(
           log_on_file = log_on_file,
           disable_plotting = disable_plotting
         )
-        solution_folders["hierarchical"].append(h_folder)
+        set_solution_folder(
+          solution_folders, "hierarchical", experiment_idx, h_folder
+        )
       # -- save info
       if experiment_idx is None:
         solution_folders["experiments_list"].append([exp_value, seed])

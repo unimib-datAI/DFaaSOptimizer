@@ -308,7 +308,8 @@ def plot_history(
     nrows = Nn, 
     ncols = 2 * Nf + 3, 
     sharex = True,
-    figsize = ((2 * Nf + 3) * 8, 6 * Nn)
+    figsize = ((2 * Nf + 3) * 8, 6 * Nn),
+    squeeze = False
   )
   for function, traces in input_requests_traces.items():
     for agent, incoming_load in traces.items():

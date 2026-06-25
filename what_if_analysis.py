@@ -41,8 +41,11 @@ def parse_arguments() -> argparse.Namespace:
 
 
 def add_time(
-    best_sol_df: pd.DataFrame, loop_over: str, logs_df: pd.DataFrame
+    best_sol_df: pd.DataFrame, loop_over: str = "Nn", logs_df: pd.DataFrame = None
   ) -> pd.DataFrame:
+  if logs_df is None:
+    logs_df = loop_over
+    loop_over = "Nn"
   columns = ["exp",loop_over,"time","iteration"]
   if loop_over != "Nn":
     columns += ["Nn"]
@@ -158,7 +161,7 @@ def analyze_final_results(
 
 
 def compute_minmaxavg_in_milestone(
-    tvals: pd.DataFrame, milestone: float
+    tvals: pd.DataFrame, milestone: float, loop_over: str = "Nn"
   ) -> pd.DataFrame:
   columns = [loop_over,"obj","measured_total_time","dev","centralized_dev"]
   metrics_by_milestones = pd.DataFrame()
@@ -306,7 +309,9 @@ def compute_progressive_deviation(
           markersize = 10
         )
         # -- add to metrics
-        mmm = compute_minmaxavg_in_milestone(tvals_at_max, milestones[idx])
+        mmm = compute_minmaxavg_in_milestone(
+          tvals_at_max, milestones[idx], loop_over
+        )
         metrics_by_milestones = pd.concat(
           [metrics_by_milestones, mmm], ignore_index = True
         )
@@ -326,7 +331,7 @@ def compute_progressive_deviation(
         markersize = 10
       )
       # -- add to metrics
-      mmm = compute_minmaxavg_in_milestone(tvals_at_max, 3600)
+      mmm = compute_minmaxavg_in_milestone(tvals_at_max, 3600, loop_over)
       metrics_by_milestones = pd.concat(
         [metrics_by_milestones, mmm], ignore_index = True
       )
@@ -350,7 +355,7 @@ def compute_progressive_deviation(
 
 
 def find_best_iterations(
-    experiment_folder: str, loop_over: str
+    experiment_folder: str, loop_over: str = "Nn"
   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
   # build folder to store the analysis outcomes
   output_folder = os.path.join(experiment_folder, "postprocessing")
@@ -364,22 +369,31 @@ def find_best_iterations(
     Nn = int(data["None"]["Nn"]["None"])
   # get the "loop_over" value
   loop_over_val = None
-  with open(
-      os.path.join(experiment_folder, "config.json"), "r"
-    ) as istream:
-    base_config = json.load(istream)
-    exp_values = base_config["limits"].get(loop_over)
-    if exp_values is None:
-      exp_values = base_config["limits"]["neighborhood"][loop_over]
-      loop_over_val = exp_values
-    else:
-      loop_over_val = exp_values["min"]
+  config_path = os.path.join(experiment_folder, "config.json")
+  if os.path.exists(config_path):
+    with open(config_path, "r") as istream:
+      base_config = json.load(istream)
+      exp_values = base_config["limits"].get(loop_over)
+      if exp_values is None:
+        exp_values = base_config["limits"]["neighborhood"][loop_over]
+        loop_over_val = exp_values
+      else:
+        loop_over_val = exp_values["min"]
+  else:
+    loop_over_val = Nn if loop_over == "Nn" else None
   # check the method to consider
   method_name = None
-  with open(os.path.join(experiment_folder, "obj.csv"), "r") as istream:
-    mname = istream.readline()
-    method_name = "faas-macro" if "MACrO" in mname else (
-      "faas-madea" if "MADeA" in mname else "centralized"
+  obj_path = os.path.join(experiment_folder, "obj.csv")
+  if os.path.exists(obj_path):
+    with open(obj_path, "r") as istream:
+      mname = istream.readline()
+      method_name = "faas-macro" if "MACrO" in mname else (
+        "faas-madea" if "MADeA" in mname else "centralized"
+      )
+  else:
+    files = os.listdir(experiment_folder)
+    method_name = "faas-macro" if "LSP_solution.csv" in files else (
+      "faas-madea" if "LSPc_solution.csv" in files else "centralized"
     )
   # parse logs file
   exp = os.path.basename(experiment_folder)
@@ -513,4 +527,3 @@ if __name__ == "__main__":
   loop_over = args.loop_over
   milestones = [int(m) for m in args.milestones]
   main(base_folder, loop_over, milestones)
-

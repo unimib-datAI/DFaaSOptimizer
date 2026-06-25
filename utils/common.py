@@ -21,7 +21,7 @@ def delete_tuples(_dict: dict):
   """Delete tuple keys recursively from all of the dictionaries"""
   serializable_dict = {}
   for key, value in _dict.items():
-    new_key = key if not isinstance(key, tuple) is not None else str(key)
+    new_key = str(key) if isinstance(key, tuple) or key is None else key
     if isinstance(value, dict):
       serializable_dict[new_key] = delete_tuples(value)
     else:

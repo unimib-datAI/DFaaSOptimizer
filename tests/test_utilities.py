@@ -32,11 +32,13 @@ def test_delete_tuples_converts_tuple_keys_recursively():
   raw = {
     (1, 2): {"nested": {(3, 4): 7}},
     "k": 8,
+    3: "int-key",
   }
   out = delete_tuples(raw)
   assert "(1, 2)" in out
   assert "(3, 4)" in out["(1, 2)"]["nested"]
   assert out["k"] == 8
+  assert out[3] == "int-key"
 
 
 @pytest.mark.parametrize(
