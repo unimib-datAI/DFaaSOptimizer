@@ -123,6 +123,64 @@ def define_assignments(
   return pd.DataFrame(bids), pd.DataFrame(memory_bids), len(potential_buyers)
 
 
-def evaluate_assignments(*args, **kwargs):
-  """Placeholder for evaluate_assignments (to be implemented in later tasks)."""
-  pass
+def evaluate_assignments(
+    bids: pd.DataFrame,
+    residual_capacity: np.array,
+    data: dict,
+    ell: np.array,
+    r: np.array,
+    initial_rho: np.array,
+    tentatively_start_replicas: bool,
+  ) -> Tuple[np.array, np.array, int]:
+  """Price-free counterpart of run_faasmadea.evaluate_bids.
+
+  Pure greedy capacity fill: sellers serve buyers by descending ``utility``
+  (tie-break on buyer index ``i`` for reproducibility). No min_b tracking, no
+  price update, no last_y replacement swap. The price-free
+  tentatively_start_replicas branch is kept for parity with the baseline.
+  """
+  Nn = data[None]["Nn"][None]
+  Nf = data[None]["Nf"][None]
+  potential_sellers, functions_to_share = np.nonzero(residual_capacity)
+  if tentatively_start_replicas:
+    potential_sellers, functions_to_share = ensure_memory_sellers(
+      potential_sellers, functions_to_share, np.nonzero(initial_rho)[0], Nf
+    )
+  y = np.zeros((Nn, Nn, Nf))
+  additional_replicas = np.zeros((Nn, Nf))
+  rho = deepcopy(initial_rho)
+  for j, f in zip(potential_sellers, functions_to_share):
+    j = int(j)
+    f = int(f)
+    bids_for_j = bids[(bids["j"] == j) & (bids["f"] == f)].sort_values(
+      by=["utility", "i"], ascending=[False, True]
+    )
+    remaining_capacity = int(residual_capacity[j, f])
+    next_bid_idx = 0
+    while next_bid_idx < len(bids_for_j) and remaining_capacity > 0:
+      q = min(remaining_capacity, bids_for_j.iloc[next_bid_idx]["d"])
+      y[int(bids_for_j.iloc[next_bid_idx]["i"]), j, f] += q
+      remaining_capacity -= q
+      next_bid_idx += 1
+    # price-free tentative replica start (decides on utilization, not price)
+    if (
+        remaining_capacity == 0
+        and (next_bid_idx > 0 or len(bids_for_j) > 0)
+        and tentatively_start_replicas
+      ):
+      max_a = int(rho[j] / data[None]["memory_requirement"][f + 1])
+      if max_a > 0:
+        a = 1
+        while next_bid_idx < len(bids_for_j) and a <= max_a:
+          q = bids_for_j.iloc[next_bid_idx]["d"]
+          u = data[None]["demand"][(j + 1, f + 1)] * (
+            ell[j, f] + y[:, j, f].sum() + q
+          ) / (r[j, f] + a)
+          if u <= data[None]["max_utilization"][f + 1]:
+            y[int(bids_for_j.iloc[next_bid_idx]["i"]), j, f] += q
+            next_bid_idx += 1
+            additional_replicas[j, f] = a
+            rho[j] -= (a * data[None]["memory_requirement"][f + 1])
+          else:
+            a += 1
+  return y, additional_replicas, len(potential_sellers)

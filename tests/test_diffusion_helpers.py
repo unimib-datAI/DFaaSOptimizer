@@ -72,3 +72,47 @@ def test_define_assignments_requests_replicas_when_no_capacity_seller():
 
   assert len(bids) == 0
   assert list(memory_bids[["i", "j", "f"]].iloc[0]) == [0, 1, 0]
+
+
+def test_evaluate_assignments_respects_capacity_and_tiebreaks_by_buyer():
+  data = _base_data(Nn=3, Nf=1)
+  # two buyers tie on utility for seller 1; capacity only fits one fully
+  bids = pd.DataFrame({
+    "i": [2, 0],
+    "j": [1, 1],
+    "f": [0, 0],
+    "d": [2.0, 2.0],
+    "utility": [5.0, 5.0],
+  })
+  residual_capacity = np.zeros((3, 1)); residual_capacity[1, 0] = 3.0
+  ell = np.zeros((3, 1))
+  r = np.zeros((3, 1))
+  rho = np.zeros((3,))
+
+  y, additional_replicas, n_sellers = evaluate_assignments(
+    bids, residual_capacity, data, ell, r, rho,
+    tentatively_start_replicas=False,
+  )
+
+  assert y[:, 1, 0].sum() == 3.0            # never exceeds capacity
+  assert y[0, 1, 0] == 2.0                  # lower buyer index served first
+  assert y[2, 1, 0] == 1.0
+  assert (additional_replicas == 0).all()
+  assert n_sellers == 1
+
+
+def test_evaluate_assignments_is_deterministic_and_returns_no_price():
+  data = _base_data(Nn=3, Nf=1)
+  bids = pd.DataFrame({
+    "i": [2, 0], "j": [1, 1], "f": [0, 0],
+    "d": [2.0, 2.0], "utility": [5.0, 5.0],
+  })
+  residual_capacity = np.zeros((3, 1)); residual_capacity[1, 0] = 3.0
+  args = (bids, residual_capacity, data, np.zeros((3, 1)),
+          np.zeros((3, 1)), np.zeros((3,)))
+
+  first = evaluate_assignments(*args, tentatively_start_replicas=False)
+  second = evaluate_assignments(*args, tentatively_start_replicas=False)
+
+  assert len(first) == 3                    # (y, additional_replicas, n_sellers)
+  assert np.array_equal(first[0], second[0])
