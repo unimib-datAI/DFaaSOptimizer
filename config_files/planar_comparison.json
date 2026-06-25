@@ -18,6 +18,11 @@
       "zeta": 0.1,
       "latency_weight": 0.0,
       "fairness_weight": 0.0
+    },
+    "diffusion": {
+      "latency_weight": 0.0,
+      "fairness_weight": 0.0,
+      "unit_bids": false
     }
   },
   "max_iterations": 20,

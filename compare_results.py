@@ -668,7 +668,8 @@ def plot_by_key(
     "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
-    "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"]
+    "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
+    "FaaS-MADiG": mcolors.CSS4_COLORS["plum"]
   }
   for ridx, (keys, bplot) in enumerate(bplots):
     for cidx, bkey in enumerate(keys):
@@ -816,9 +817,9 @@ def dev_barplot_by_key(
 
 
 def violinplot_by_key(
-    obj: pd.DataFrame, 
-    runtime: pd.DataFrame, 
-    rej: pd.DataFrame, 
+    obj: pd.DataFrame,
+    runtime: pd.DataFrame,
+    rej: pd.DataFrame,
     models: list,
     key: str,
     label: str,
@@ -828,7 +829,8 @@ def violinplot_by_key(
     "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
-    "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"]
+    "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
+    "FaaS-MADiG": mcolors.CSS4_COLORS["plum"]
   }
   nrows = 1
   ncols = 3 if rej is not None else 2
