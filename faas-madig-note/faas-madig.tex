@@ -1,0 +1,226 @@
+% =====================================================================
+% FaaS-MADiG: price-free greedy-diffusion variant of FaaS-MADeA.
+% This file is meant to be \input{} (or pasted) into the paper.
+% It assumes the paper's notation (N, F, C_i^f, rho_i, omega_i^f,
+% beta_{ij}^f, gamma_i^f, p_i^f, ...) is already defined.
+% Cross-references are written as plain text "Eq.~(7)", "Alg.~4", etc.;
+% convert them to \ref{} once the labels of the host paper are known.
+% =====================================================================
+
+\section{FaaS-MADiG: a price-free greedy-diffusion variant}
+\label{sec:madig}
+
+\textsc{FaaS-MADiG} (Multi-Agent Distributed Greedy) is a \emph{price-free}
+ablation of the \textsc{FaaS-MADeA} auction. It leaves the decentralized
+per-iteration loop unchanged: at each control period $t$ every node $i$ still
+solves its local problem~(P2) to fix the replicas $r_i^f$, the locally executed
+load $x_i^f$, and the residual demand $\omega_i^f(h)$ to offload; it still
+advertises on the neighbour-accessible blackboard its residual execution
+capacity $C_i^f(h)=\max\{0,\mathrm{Cap}_i^f(h)-x_i^f(h)\}$~(Eq.~(12)) and its
+memory slack $\rho_i(h)$~(Eq.~(13)); and it still re-solves the restricted
+problem after coordination. \textsc{FaaS-MADiG} replaces \emph{only} the market
+layer---bidding, pricing, and the price update of Eqs.~(7)--(8) and
+Algorithms~2--3---with a deterministic greedy diffusion that consumes the same
+one-hop residual-capacity announcements. Its purpose is to isolate the
+contribution of the price signal: \emph{does congestion pricing improve the
+allocation over a plain greedy rule that uses exactly the same local
+information?}
+
+% =====================================================================
+% BEGIN self-contained notation recap.
+% Reproduces the relevant rows of the paper's Table 2 (FRALB) and Table 3
+% (auction) plus Eqs. (1),(2),(12),(13), so the note is readable on its own.
+% REMOVE this whole subsection when inserting into the paper, where the
+% notation and these equations are already defined.
+% =====================================================================
+\subsection{Notation and capacity model}
+\label{sec:madig-notation}
+
+Each control period $t$ runs auction iterations $h=0,1,\dots,H_{\max}$ in
+parallel. Before coordination, every node $i$ solves a local problem~(P2)
+that, for each function $f\in\mathcal{F}_i$, splits the incoming workload
+$\lambda_i^f$ into locally processed load $x_i^f$, horizontally offloaded
+demand $\omega_i^f$, and Cloud-forwarded load $z_i^f$, and fixes the number of
+replicas $r_i^f$. Replicas obey the memory budget and provide capacity
+\begin{equation}
+  \sum_{f\in\mathcal{F}_i} r_i^f\,\mathrm{RAM}^f \le \mathrm{RAM}_i,
+  \qquad
+  \mathrm{Cap}_i^f = \frac{r_i^f\,U^f_{\max}}{D_i^f}\ \text{[req/s]} ,
+  \tag{1,2}
+\end{equation}
+from which each node advertises, on a neighbour-accessible blackboard, its
+residual execution capacity and its memory slack:
+\begin{equation}
+  C_i^f(h) = \max\!\big\{0,\ \mathrm{Cap}_i^f(h) - x_i^f(h)\big\},
+  \qquad
+  \rho_i(h) = \mathrm{RAM}_i - \sum_{f\in\mathcal{F}_i} r_i^f(h)\,\mathrm{RAM}^f \ge 0 .
+  \tag{12,13}
+\end{equation}
+Table~\ref{tab:madig-notation} collects the symbols used below.
+
+\begin{table}[t]
+\centering
+\caption{Notation used in this section (subset of the paper's Tables~2--3).}
+\label{tab:madig-notation}
+\small
+\begin{tabular}{@{}l l p{0.62\linewidth}@{}}
+\toprule
+\multicolumn{3}{@{}l}{\textit{Sets}}\\
+Nodes / neighbours & $\mathcal{N}$, $N_i$ & computing nodes; one-hop neighbours of $i$.\\
+Functions & $\mathcal{F}_i$ & functions deployable on $i$; $\mathcal{F}=\bigcup_i \mathcal{F}_i$.\\
+Candidate sellers & $A_i^f(h)$ & neighbours of $i$ with positive score for $f$, $A_i^f(h)\subseteq N_i$.\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Parameters and weights}}\\
+Input workload & $\lambda_i^f$ & incoming request rate for $f$ at $i$ [req/s].\\
+Memory cap / demand & $\mathrm{RAM}_i$, $\mathrm{RAM}^f$ & node memory; per-replica memory of $f$ [MB].\\
+Service demand & $D_i^f$ & average execution time of $f$ at $i$ [s].\\
+Max utilization & $U^f_{\max}$ & stability threshold, $U^f_{\max}\in[0,1)$.\\
+Local / offload / Cloud profit & $\alpha_i^f$, $\beta_{ij}^f$, $\gamma_i^f$ & profit of local exec.; profit of offloading $i\!\to\! j$; Cloud-offloading penalty (per req/s).\\
+Communication latency & $L_{ij}$ & horizontal-offloading latency between $i$ and $j$.\\
+Weights & $w_{\mathrm{lat}}$, $w_{\mathrm{fair}}$ & importance of latency and of fairness.\\
+Max iterations & $H_{\max}$ & auction iterations per control period.\\
+Price params \emph{(MADeA only)} & $\varepsilon$, $\zeta$ & min.\ bid increment; idle-seller price discount $\zeta\in(0,1)$.\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Variables and state at iteration $h$}}\\
+Replicas & $r_i^f$ & number of $f$ replicas on $i$, $r_i^f\in\mathbb{N}_0$.\\
+Local / forwarded / Cloud load & $x_i^f$, $y_{ij}^f$, $z_i^f$ & locally served; forwarded $i\!\to\! j$; Cloud-offloaded [req/s].\\
+Offloaded demand & $\omega_i^f$ & horizontal demand still to place [req/s].\\
+Effective load & $\ell_i^f$ & load to be served at $i$ for $f$ [req/s].\\
+Capacity / residual / slack & $\mathrm{Cap}_i^f$, $C_i^f$, $\rho_i$ & exec.\ capacity (Eq.~2); residual exec.\ capacity (Eq.~12); memory slack (Eq.~13).\\
+Congestion ratio & $\kappa_i^f$ & utilization ratio for $f$ on $i$, $\kappa_i^f\in[0,1]$.\\
+Fairness term & $\phi_i^f$ & penalty on nodes that offload excessively.\\
+Execution price \emph{(MADeA only)} & $p_i^f$ & shadow cost of residual capacity; \textbf{removed} in \textsc{FaaS-MADiG}.\\
+Coordination score & $s_{ij}^f$ & price-free preference of buyer $i$ for seller $j$ (Eq.~\eqref{eq:madig-score}).\\
+\bottomrule
+\end{tabular}
+\end{table}
+% ===================== END self-contained notation recap =====================
+
+\subsection{Price-free coordination score}
+\label{sec:madig-score}
+
+At iteration $h$, an overloaded buyer $i$ (with $\omega_i^f(h)>0$) ranks each
+neighbour $j$ advertising residual capacity $C_j^f(h)\ge 1$ by the
+\emph{same} localized utility of Eq.~(7) with the execution price removed:
+\begin{equation}
+  s_{ij}^f(h)\;=\;u_{ij}^f(h)+p_j^f(h)
+  \;=\;\beta_{ij}^f\;-\;w_{\mathrm{lat}}\,L_{ij}\;-\;w_{\mathrm{fair}}\,\phi_i^f(h),
+  \label{eq:madig-score}
+\end{equation}
+and retains the same convenience threshold used by \textsc{FaaS-MADeA},
+\begin{equation}
+  j\in A_i^f(h)\iff s_{ij}^f(h)>-\,\gamma_i^f,
+  \label{eq:madig-threshold}
+\end{equation}
+where $\beta_{ij}^f$ is the reward of serving $i$'s load for $f$ at $j$,
+$L_{ij}$ the one-hop network latency, $\phi_i^f(h)$ the fairness penalty, and
+$\gamma_i^f$ the vertical (Cloud) offloading cost that sets the
+break-even point against Cloud forwarding. Dropping the $-p_j^f(h)$ term
+removes the only quantity the auction feeds back \emph{across} iterations;
+every other component of the buyer's preference, and the seller it prefers, are
+left untouched.
+
+\subsection{Greedy diffusion}
+\label{sec:madig-greedy}
+
+Two deterministic rules replace the auction's bid/clear cycle. On the buyer
+side (Algorithm~\ref{alg:madig-buyer}), node $i$ sorts its candidate sellers by
+descending score~\eqref{eq:madig-score} and greedily claims residual capacity
+until its demand $\omega_i^f(h)$ is met or the neighbourhood is saturated; any
+shortfall triggers \emph{price-free} replica-expansion requests to neighbours
+with memory slack $\rho_j(h)>0$, exactly as in \textsc{FaaS-MADeA}. On the
+seller side (Algorithm~\ref{alg:madig-seller}), node $j$ serves incoming
+requests in descending-score order---ties broken by the buyer index $i$ for
+reproducibility---up to its residual capacity $C_j^f(h)$. If capacity is
+exhausted while expansion requests remain and memory permits, the seller
+\emph{tentatively} starts replicas through the unchanged mechanism of
+Algorithm~4, which is gated by the utilization test $\kappa_j^f\le 1$ (i.e.
+$u\le U^f_{\max}$) and therefore needs no price.
+
+\begin{algorithm}
+\caption{\textsc{FaaS-MADiG} --- buyer greedy assignment (replaces Alg.~2)}
+\label{alg:madig-buyer}
+\begin{algorithmic}[1]
+\Require residual demand $\omega_i^f(h)$, neighbour residuals $C_j^f(h)$ and
+         memory slacks $\rho_j(h)$ on the blackboard
+\For{each function $f$ with $\omega_i^f(h)>0$}
+  \State $A_i^f(h)\gets\{\,j\in N_i: C_j^f(h)\ge 1 \text{ and } s_{ij}^f(h)>-\gamma_i^f\,\}$
+  \State sort $A_i^f(h)$ by \textbf{descending} $s_{ij}^f(h)$
+  \State $o\gets 0$ \Comment{load already placed}
+  \For{$j\in A_i^f(h)$ \textbf{while} $o<\omega_i^f(h)$}
+     \State $d\gets\min\!\big(C_j^f(h),\,\omega_i^f(h)-o\big)$ \Comment{unit bids if enabled}
+     \State emit assignment request $(i\!\to\! j,f,d)$;\quad $o\gets o+d$
+  \EndFor
+  \If{$o<\omega_i^f(h)$} \Comment{capacity insufficient}
+     \For{$j\in N_i$ with $\rho_j(h)>0$ and $j$ not already a capacity seller}
+        \State emit \emph{price-free} replica-expansion request $(i\!\to\! j,f)$
+     \EndFor
+  \EndIf
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
+\caption{\textsc{FaaS-MADiG} --- seller greedy fill (replaces Alg.~3)}
+\label{alg:madig-seller}
+\begin{algorithmic}[1]
+\Require requests received by $j$, residual capacity $C_j^f(h)$, memory slack $\rho_j(h)$
+\For{each function $f$ with $C_j^f(h)>0$ \textbf{or} pending expansion requests}
+  \State sort received requests by $\big(\text{descending } s_{ij}^f(h),\ \text{ascending } i\big)$
+  \State $c\gets C_j^f(h)$
+  \While{requests remain \textbf{and} $c>0$}
+     \State $q\gets\min(c,\,d_{\text{req}})$;\quad $y_{ij}^f\mathrel{+}= q$;\quad $c\gets c-q$
+  \EndWhile
+  \If{$c=0$ \textbf{and} expansion requests remain \textbf{and} $\rho_j(h)>0$}
+     \State tentatively start replicas as in Alg.~4 \Comment{utilization test $\kappa_j^f\le1$; no price}
+  \EndIf
+\EndFor
+\State \textbf{no} price update, \textbf{no} bid-price tracking, \textbf{no} reassignment of previously served load
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{What is removed and what is kept}
+\label{sec:madig-ablation}
+
+\noindent\textbf{Removed} (the price machinery of Eqs.~(7)--(8) and
+Algorithms~2--3): the price term $-p_j^f(h)$ in the utility; the per-unit
+bidding price $b_{ij}^f$ and minimum increment $\varepsilon$; the
+congestion-based price update of Eq.~(8) and the idle-seller discount $\zeta$;
+and the price-gated reassignment of load already granted to another buyer.
+
+\noindent\textbf{Kept} (identical to \textsc{FaaS-MADeA}): the local
+problem~(P2); the advertising of residual execution capacity $C_i^f(h)$ and
+memory slack $\rho_i(h)$ (Eqs.~(12)--(13)); the convenience threshold
+$\gamma_i^f$ and the fairness penalty $\phi_i^f$; the price-free replica
+expansion of Algorithm~4; and the restricted-problem re-solve after each
+coordination round.
+
+\subsection{Rationale and properties}
+\label{sec:madig-rationale}
+
+\paragraph{Clean ablation.} Because the buyer already ranks sellers greedily by
+utility in \textsc{FaaS-MADeA}, the \emph{only} behavioural difference of
+\textsc{FaaS-MADiG} is the absence of the price signal---the cross-iteration
+congestion feedback and the seller-side price arbitration. Any performance gap
+between the two is therefore attributable to that signal alone, which makes
+\textsc{FaaS-MADiG} a controlled baseline rather than an unrelated heuristic.
+
+\paragraph{Determinism and termination.} With prices removed, the score
+\eqref{eq:madig-score} is constant within a control period $t$, the
+tie-break on the buyer index makes the seller fill deterministic, and residual
+capacity is consumed monotonically within each iteration. The stopping criteria
+of \textsc{FaaS-MADeA} carry over unchanged (no residual capacity, all load
+assigned, $H_{\max}$ reached, or no convenient seller). Removing the
+price-gated reassignment also removes the main source of inter-iteration
+oscillation, so a price-free run need not damp prices to stabilize.
+
+\paragraph{Fair runtime comparison.} Heuristic time is amortized per agent
+(the per-iteration cost is divided by the number of participating
+buyers/sellers, as in \textsc{FaaS-MADeA}), and only the MILP solves are charged
+in full. Wall-clock differences between the two methods thus reflect the cost of
+the coordination mechanism, not of the implementation.
+
+\paragraph{Communication.} \textsc{FaaS-MADiG} uses the same one-hop blackboard
+as \textsc{FaaS-MADeA} (advertising $C_i^f(h)$ and $\rho_i(h)$), but exchanges
+\emph{no} prices and runs \emph{no} price-update round, so its per-iteration
+message footprint is strictly smaller.
