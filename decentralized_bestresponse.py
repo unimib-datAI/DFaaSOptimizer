@@ -134,3 +134,34 @@ def best_response_sweep(
     y_increment, pd.DataFrame(memory_bids), len(active),
     placed_total, reopt_runtime,
   )
+
+
+def reoptimize_node(
+    node: int,
+    omega_ub_row: np.array,
+    sp_data: dict,
+    solver_name: str,
+    general_solver_options: dict,
+    parallelism: int,
+    use_fixed_r: bool,
+  ) -> Tuple[np.array, float]:
+  """Capped local best response for one node.
+
+  Deep-copies sp_data, sets the per-function offloading cap omega_ub to the
+  accessible neighbour residual capacity, and re-solves ONLY ``node`` with
+  LSP_capped (or LSP_capped_fixedr when fixed replicas are active). Returns the
+  node's re-optimized omega row and the solve runtime. Only this omega row is
+  consumed by the caller; the capped solve's x/z/r are diagnostic.
+  """
+  Nf = sp_data[None]["Nf"][None]
+  node_data = deepcopy(sp_data)
+  node_data[None]["omega_ub"] = {
+    (f + 1): float(omega_ub_row[f]) for f in range(Nf)
+  }
+  model = LSP_capped_fixedr() if use_fixed_r else LSP_capped()
+  result = solve_subproblem(
+    node_data, [node], model, solver_name, general_solver_options, parallelism
+  )
+  sp_omega = result[4]
+  runtime = result[10]["tot"]
+  return np.array(sp_omega[node, :], dtype=float), float(runtime)
