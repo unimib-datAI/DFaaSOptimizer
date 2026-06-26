@@ -156,7 +156,7 @@ placement ($d=1$).
      \If{$\tilde C_{j^\star}<1$} remove $j^\star$ from $A_i^f(h)$ \EndIf
   \EndWhile
   \If{$o<\omega_i^f(h)$}
-     \For{$j\in N_i$ with $\rho_j(h)>0$ and $j$ not already a capacity seller}
+     \For{$j\in N_i$ with $\rho_j(h)>0$} \Comment{both still-serving and memory-only neighbours, as in FaaS-MADiG}
         \State emit \emph{price-free} replica-expansion request $(i\!\to\! j,f)$
      \EndFor
   \EndIf

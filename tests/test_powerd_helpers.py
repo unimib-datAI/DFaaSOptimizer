@@ -130,6 +130,32 @@ def test_sample_assignments_requests_replicas_when_no_capacity_seller():
   assert list(memory_bids[["i", "j", "f"]].iloc[0]) == [0, 1, 0]
 
 
+def test_sample_assignments_replica_bid_for_capacity_and_memory_seller():
+  # parity with define_assignments: a neighbour that is BOTH a capacity seller
+  # and has free memory (rho>0) must receive a replica-expansion memory bid
+  # when demand is unmet -- the second emission block, exercised with rho>0.
+  data = _base_data(Nn=3, Nf=1)
+  data[None]["beta"][(1, 2, 1)] = 3.0
+  data[None]["beta"][(1, 3, 1)] = 2.0
+  omega = np.zeros((3, 1)); omega[0, 0] = 10.0   # more than total capacity
+  blackboard = np.zeros((3, 1)); blackboard[1, 0] = 2; blackboard[2, 0] = 2
+  rho = np.zeros((3,)); rho[1] = 4.0; rho[2] = 4.0  # both sellers have free RAM
+  common = (omega, blackboard, data, _full_neighborhood(3), rho)
+  geo = (np.zeros((3, 3)), np.zeros((3, 1)))
+
+  sampled_bids, sampled_mem, _ = sample_assignments(
+    *common, _opts(d=99, criterion="score"), *geo,
+    force_memory_bids=False, rng=np.random.default_rng(0))
+  greedy_bids, greedy_mem, _ = define_assignments(
+    *common, _opts(d=99, criterion="score"), *geo, force_memory_bids=False)
+
+  assert len(sampled_mem) > 0   # the capacity+memory block fired
+  pd.testing.assert_frame_equal(
+    sampled_mem.reset_index(drop=True), greedy_mem.reset_index(drop=True))
+  pd.testing.assert_frame_equal(
+    sampled_bids.reset_index(drop=True), greedy_bids.reset_index(drop=True))
+
+
 def test_sample_assignments_unit_bids_emits_one_unit_per_request():
   data = _base_data(Nn=2, Nf=1)
   omega = np.zeros((2, 1)); omega[0, 0] = 3.0

@@ -109,8 +109,10 @@ For each `(i,f)` with `omega_i^f > 0`:
      decrement `remaining_blackboard[j*]`; remove `j*` from the candidate pool
      only when its advertised capacity is locally exhausted.
 3. If `assigned < omega_i^f` (or `force_memory_bids`), emit **price-free
-   replica-expansion bids** to neighbours with `rho_j > 0` and no spare
-   capacity — identical to FaaS-MADiG.
+   replica-expansion bids** to neighbours with `rho_j > 0` — both same-node
+   capacity sellers that ran out of capacity and memory-only neighbours,
+   identical to FaaS-MADiG (two emission blocks). This keeps the difference
+   from FaaS-MADiG to buyer visibility alone.
 
 Degeneracy check: when `d ≥ |candidates|`, the sample is the whole candidate set
 and `criterion="score"` reduces to FaaS-MADiG's greedy buyer rule for all

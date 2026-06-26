@@ -63,6 +63,7 @@ def test_powerd_runner_produces_expected_artifacts(tmp_path):
   )
 
   obj = pd.read_csv(Path(folder, "obj.csv"))
+  assert len(obj) >= 1
   assert "FaaS-MAPoD" in obj.columns
   assert np.isfinite(pd.to_numeric(obj["FaaS-MAPoD"], errors="coerce")).all()
 
@@ -86,5 +87,6 @@ def test_powerd_runner_is_reproducible_for_same_seed(tmp_path):
   obj_a = pd.read_csv(Path(folder_a, "obj.csv"))["FaaS-MAPoD"].to_numpy()
   obj_b = pd.read_csv(Path(folder_b, "obj.csv"))["FaaS-MAPoD"].to_numpy()
 
+  assert obj_a.shape[0] >= 1
   assert obj_a.shape == obj_b.shape
   assert np.allclose(obj_a, obj_b)

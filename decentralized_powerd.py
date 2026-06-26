@@ -118,6 +118,12 @@ def sample_assignments(
       remaining[j_star] -= q
       if remaining[j_star] < 1:
         candidates.remove(j_star)
+    if assigned < omega[i, f]:
+      for j in sorted(score, key=lambda k: -score[k]):
+        if j in potential_memory_sellers:
+          memory_bids["i"].append(i)
+          memory_bids["j"].append(int(j))
+          memory_bids["f"].append(f)
     if assigned < omega[i, f] or force_memory_bids:
       for j in potential_memory_sellers - potential_capacity_sellers:
         memory_bids["i"].append(i)
