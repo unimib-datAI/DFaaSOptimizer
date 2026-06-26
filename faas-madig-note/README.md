@@ -13,6 +13,10 @@ notation and style of `Decentralized_FaaS_coordination.pdf`.
   (13), so the note can be read without the original paper. That subsection is
   fenced by `BEGIN/END self-contained notation recap` comments — **delete it
   when inserting into the paper**, where the notation is already defined.
+- `references.bib` — bibliography for the *Positioning with respect to the
+  literature* subsection (diffusion LB, greedy edge/FaaS offloading, auction
+  baseline). Merge these entries into the paper's `.bib` (or re-key the
+  `\citep{}` commands) when inserting.
 - `main.tex` — a minimal standalone wrapper used only to compile a preview PDF.
 - `.gitignore` — ignores LaTeX build artifacts.
 

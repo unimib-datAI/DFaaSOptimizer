@@ -224,3 +224,57 @@ the coordination mechanism, not of the implementation.
 as \textsc{FaaS-MADeA} (advertising $C_i^f(h)$ and $\rho_i(h)$), but exchanges
 \emph{no} prices and runs \emph{no} price-update round, so its per-iteration
 message footprint is strictly smaller.
+
+\subsection{Positioning with respect to the literature}
+\label{sec:madig-related}
+
+We make explicit that \textsc{FaaS-MADiG} is, by design, an instance of a
+well-established family of distributed load-balancing rules, used here as a
+\emph{controlled} baseline rather than as a novel algorithm. Stating its lineage
+clarifies that the contribution it supports is methodological---isolating the
+effect of congestion pricing---and not a new heuristic.
+
+\paragraph{Similarities.} The buyer-side push of residual demand to one-hop
+neighbours ranked by a local gradient is exactly the \emph{diffusion} paradigm of
+Cybenko~\citep{cybenko1989}, in which an overloaded node iteratively sends excess
+load to its less-loaded neighbours; the sender-initiated form we use is a
+single-round simplification of the sender-initiated diffusion (SID) strategy
+catalogued by Willebeek-LeMair and Reeves~\citep{willebeek1993}. Greedy and
+heuristic offloading is likewise common in Edge/FaaS load management---for
+instance greedy, locality-driven load balancing inside FaaS
+dispatchers~\citep{leechoi2021} and decentralized multi-agent edge load
+balancing~\citep{nezami2021}---although those works differ in mechanism
+(dispatcher-level cache-locality scheduling, and collective-learning plan
+selection with randomly sampled candidate hosts, respectively) rather than
+instantiating the same one-hop residual-offload rule. Finally, the relation to
+\textsc{FaaS-MADeA} is precise: \textsc{FaaS-MADiG} is the \emph{price-frozen}
+special case of a Bertsekas-style auction~\citep{bertsekas1988}. Removing the
+cross-iteration price update---together with the $\varepsilon$ bid increment and
+the $\varepsilon$-complementary-slackness mechanism it serves---collapses the
+bidding-and-clearing cycle of
+Algorithms~\ref{alg:madig-buyer}--\ref{alg:madig-seller} to a single greedy pass
+in which each buyer claims its best available residual capacity and \emph{no}
+previously served load is re-awarded. In this sense \textsc{FaaS-MADiG}
+\emph{is} \textsc{FaaS-MADeA} with the market layer removed.
+
+\paragraph{Differences.} Three elements separate \textsc{FaaS-MADiG} from the
+textbook rules above. \emph{(i) Determinism over the full neighbourhood.} Unlike
+randomized power-of-$d$-choices balancing~\citep{mitzenmacher2001}, which probes
+a random sample of $d$ candidates, \textsc{FaaS-MADiG} scans the entire one-hop
+candidate set $A_i^f(h)$ and breaks ties deterministically, yielding reproducible
+runs without seed averaging. \emph{(ii) Joint balancing and provisioning.}
+Classical diffusion migrates load over a \emph{fixed} resource graph;
+\textsc{FaaS-MADiG} additionally triggers memory-slack-based replica expansion
+(Algorithm~4), coupling load balancing with capacity provisioning---a feature
+inherited from the \textsc{FaaS-MADeA} framework rather than from diffusion.
+\emph{(iii) Objective-aligned, optimization-coupled ranking.} The score
+\eqref{eq:madig-score} ranks neighbours by the model's economic weights
+($\beta_{ij}^f$, $\gamma_i^f$, latency $L_{ij}$, fairness $\phi_i^f$) rather than
+by raw queue length, and every offloading round is re-validated by the local
+problem~(P2) and the restricted re-solve, so the diffusion is steered by the
+social-welfare objective instead of by local load alone.
+
+\paragraph{Takeaway.} As an isolated coordination rule, \textsc{FaaS-MADiG}
+instantiates the diffusion / greedy one-hop-offloading paradigm and is not
+claimed as novel; its value is as a price-free ablation that attributes any
+performance gap with respect to \textsc{FaaS-MADeA} to congestion pricing alone.
