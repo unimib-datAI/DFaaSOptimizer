@@ -96,15 +96,15 @@ def sample_assignments(
         candidates.append(j)
     # buyer-local view of advertised capacity, decremented as we bid, so we
     # never request more from a seller than the buyer has observed locally
-    remaining = {j: int(blackboard[j, f]) for j in candidates}
+    remaining = {j: blackboard[j, f] for j in candidates}
     assigned = 0
     while assigned < omega[i, f] and len(candidates) > 0:
       sample_size = min(d, len(candidates))
       sample = rng.choice(candidates, size=sample_size, replace=False)
       if criterion == "capacity":
-        j_star = int(max(sample, key=lambda j: (remaining[int(j)], -int(j))))
+        j_star = int(max(sample, key=lambda k: (remaining[int(k)], -int(k))))
       else:
-        j_star = int(max(sample, key=lambda j: (score[int(j)], -int(j))))
+        j_star = int(max(sample, key=lambda k: (score[int(k)], -int(k))))
       if unit_bids:
         q = 1
       else:

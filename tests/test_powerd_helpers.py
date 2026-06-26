@@ -100,7 +100,6 @@ def test_sample_assignments_capacity_criterion_prefers_largest_capacity():
 
 def test_sample_assignments_threshold_excludes_unconvenient_seller():
   data = _base_data(Nn=2, Nf=1)
-  data[None]["beta"][(1, 2, 1)] = 0.0
   data[None]["gamma"][(1, 1)] = 0.05    # score 0.0 > -0.05 holds; flip sign below
   data[None]["beta"][(1, 2, 1)] = -1.0  # score -1.0 <= -0.05 => excluded
   omega = np.zeros((2, 1)); omega[0, 0] = 1.0
