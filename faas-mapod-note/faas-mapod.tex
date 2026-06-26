@@ -1,0 +1,249 @@
+% =====================================================================
+% FaaS-MAPoD: randomized power-of-d-choices variant of FaaS-MADiG.
+% This file is meant to be \input{} (or pasted) into the paper.
+% It assumes the paper's notation (N, F, C_i^f, rho_i, omega_i^f,
+% beta_{ij}^f, gamma_i^f, ...) is already defined.
+% Cross-references are written as plain text "Eq.~(7)", "Alg.~4", etc.;
+% convert them to \ref{} once the labels of the host paper are known.
+% =====================================================================
+
+\section{FaaS-MAPoD: a randomized power-of-$d$-choices variant}
+\label{sec:mapod}
+
+\textsc{FaaS-MAPoD} (Multi-Agent Power-of-$d$) is the randomized,
+\emph{partial-visibility} sibling of \textsc{FaaS-MADiG}. It keeps every
+price-free ingredient of \textsc{FaaS-MADiG}---the local problem~(P2), the
+one-hop blackboard advertising residual execution capacity
+$C_i^f(h)=\max\{0,\mathrm{Cap}_i^f(h)-x_i^f(h)\}$~(Eq.~(12)) and memory slack
+$\rho_i(h)$~(Eq.~(13)), the convenience threshold $\gamma_i^f$, the fairness
+penalty $\phi_i^f$, the price-free replica expansion of Algorithm~4, and the
+restricted re-solve after each round. It changes \emph{only} how an overloaded
+buyer chooses where to offload: instead of scanning its entire one-hop
+candidate set $A_i^f(h)$ (as \textsc{FaaS-MADiG} does), it probes a random
+sample of just $d$ candidates per offloading step and serves the best of that
+sample---the classical \emph{power-of-$d$-choices} rule. Its purpose is to
+isolate the value of full neighbourhood visibility: \emph{how much does scanning
+the whole neighbourhood (FaaS-MADiG) buy over probing a random sample of $d$?}
+
+% =====================================================================
+% BEGIN self-contained notation recap.
+% Reproduces the relevant rows of the paper's Table 2 (FRALB) and Table 3
+% (auction) plus Eqs. (1),(2),(12),(13), so the note is readable on its own.
+% REMOVE this whole subsection when inserting into the paper, where the
+% notation and these equations are already defined.
+% =====================================================================
+\subsection{Notation and capacity model}
+\label{sec:mapod-notation}
+
+Each control period $t$ runs auction iterations $h=0,1,\dots,H_{\max}$ in
+parallel. Before coordination, every node $i$ solves a local problem~(P2)
+that, for each function $f\in\mathcal{F}_i$, splits the incoming workload
+$\lambda_i^f$ into locally processed load $x_i^f$, horizontally offloaded
+demand $\omega_i^f$, and Cloud-forwarded load $z_i^f$, and fixes the number of
+replicas $r_i^f$. Replicas obey the memory budget and provide capacity
+\begin{equation}
+  \sum_{f\in\mathcal{F}_i} r_i^f\,\mathrm{RAM}^f \le \mathrm{RAM}_i,
+  \qquad
+  \mathrm{Cap}_i^f = \frac{r_i^f\,U^f_{\max}}{D_i^f}\ \text{[req/s]} ,
+  \tag{1,2}
+\end{equation}
+from which each node advertises, on a neighbour-accessible blackboard, its
+residual execution capacity and its memory slack:
+\begin{equation}
+  C_i^f(h) = \max\!\big\{0,\ \mathrm{Cap}_i^f(h) - x_i^f(h)\big\},
+  \qquad
+  \rho_i(h) = \mathrm{RAM}_i - \sum_{f\in\mathcal{F}_i} r_i^f(h)\,\mathrm{RAM}^f \ge 0 .
+  \tag{12,13}
+\end{equation}
+Table~\ref{tab:mapod-notation} collects the symbols used below.
+
+\begin{table}[t]
+\centering
+\caption{Notation used in this section (subset of the paper's Tables~2--3).}
+\label{tab:mapod-notation}
+\small
+\begin{tabular}{@{}l l p{0.62\linewidth}@{}}
+\toprule
+\multicolumn{3}{@{}l}{\textit{Sets}}\\
+Nodes / neighbours & $\mathcal{N}$, $N_i$ & computing nodes; one-hop neighbours of $i$.\\
+Functions & $\mathcal{F}_i$ & functions deployable on $i$; $\mathcal{F}=\bigcup_i \mathcal{F}_i$.\\
+Candidate sellers & $A_i^f(h)$ & neighbours of $i$ with positive score for $f$, $A_i^f(h)\subseteq N_i$.\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Parameters and weights}}\\
+Input workload & $\lambda_i^f$ & incoming request rate for $f$ at $i$ [req/s].\\
+Memory cap / demand & $\mathrm{RAM}_i$, $\mathrm{RAM}^f$ & node memory; per-replica memory of $f$ [MB].\\
+Service demand & $D_i^f$ & average execution time of $f$ at $i$ [s].\\
+Max utilization & $U^f_{\max}$ & stability threshold, $U^f_{\max}\in[0,1)$.\\
+Local / offload / Cloud profit & $\alpha_i^f$, $\beta_{ij}^f$, $\gamma_i^f$ & profit of local exec.; profit of offloading $i\!\to\! j$; Cloud-offloading penalty (per req/s).\\
+Communication latency & $L_{ij}$ & horizontal-offloading latency between $i$ and $j$.\\
+Weights & $w_{\mathrm{lat}}$, $w_{\mathrm{fair}}$ & importance of latency and of fairness.\\
+Max iterations & $H_{\max}$ & auction iterations per control period.\\
+Price params \emph{(MADeA only)} & $\varepsilon$, $\zeta$ & min.\ bid increment; idle-seller price discount $\zeta\in(0,1)$.\\
+Sample size & $d$ & number of neighbours probed per offloading step (power-of-$d$).\\
+Selection criterion & --- & \texttt{score} (max $s_{ij}^f$) or \texttt{capacity} (max $C_j^f$).\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Variables and state at iteration $h$}}\\
+Replicas & $r_i^f$ & number of $f$ replicas on $i$, $r_i^f\in\mathbb{N}_0$.\\
+Local / forwarded / Cloud load & $x_i^f$, $y_{ij}^f$, $z_i^f$ & locally served; forwarded $i\!\to\! j$; Cloud-offloaded [req/s].\\
+Offloaded demand & $\omega_i^f$ & horizontal demand still to place [req/s].\\
+Effective load & $\ell_i^f$ & load to be served at $i$ for $f$ [req/s].\\
+Capacity / residual / slack & $\mathrm{Cap}_i^f$, $C_i^f$, $\rho_i$ & exec.\ capacity (Eq.~2); residual exec.\ capacity (Eq.~12); memory slack (Eq.~13).\\
+Congestion ratio & $\kappa_i^f$ & utilization ratio for $f$ on $i$, $\kappa_i^f\in[0,1]$.\\
+Fairness term & $\phi_i^f$ & penalty on nodes that offload excessively.\\
+Execution price \emph{(MADeA only)} & $p_i^f$ & shadow cost of residual capacity; \textbf{removed} in \textsc{FaaS-MADiG}.\\
+Coordination score & $s_{ij}^f$ & price-free preference of buyer $i$ for seller $j$ (Eq.~\eqref{eq:mapod-score}).\\
+\bottomrule
+\end{tabular}
+\end{table}
+% ===================== END self-contained notation recap =====================
+
+\subsection{Power-of-$d$ coordination}
+\label{sec:mapod-coordination}
+
+At iteration $h$, an overloaded buyer $i$ (with $\omega_i^f(h)>0$) admits the
+same candidate sellers as \textsc{FaaS-MADiG}: those advertising residual
+capacity $C_j^f(h)\ge 1$ and passing the convenience threshold,
+\begin{equation}
+  A_i^f(h)=\{\,j\in N_i : C_j^f(h)\ge 1 \ \text{and}\ s_{ij}^f(h)>-\gamma_i^f\,\},
+  \qquad
+  s_{ij}^f(h)=\beta_{ij}^f-w_{\mathrm{lat}}L_{ij}-w_{\mathrm{fair}}\phi_i^f(h),
+  \label{eq:mapod-score}
+\end{equation}
+where $s_{ij}^f(h)$ is exactly the \textsc{FaaS-MADiG} score (the
+\textsc{FaaS-MADeA} utility with the price term removed). The difference is the
+\emph{visibility}: rather than ranking all of $A_i^f(h)$, the buyer repeatedly
+draws a uniform random sample $S\subseteq A_i^f(h)$ of size $\min(d,|A_i^f(h)|)$,
+\emph{without replacement}, and selects from $S$ the seller
+\begin{equation}
+  j^\star=
+  \begin{cases}
+    \arg\max_{j\in S}\ s_{ij}^f(h), & \text{criterion}=\texttt{score},\\[2pt]
+    \arg\max_{j\in S}\ C_j^f(h),     & \text{criterion}=\texttt{capacity},
+  \end{cases}
+  \label{eq:mapod-criterion}
+\end{equation}
+with ties broken by the lower node id for reproducibility. The \texttt{score}
+criterion ablates only the buyer's \emph{visibility} relative to
+\textsc{FaaS-MADiG}; the \texttt{capacity} criterion is the textbook
+shortest-queue (largest-spare-capacity) power-of-$d$ rule. In the default
+\emph{batched} form the buyer claims $\min(C_{j^\star}^f(h),\ \omega_i^f(h)-o)$
+from $j^\star$, removes it from the pool, and repeats until its demand is met or
+the candidate set is empty; in the \emph{per-unit} form (\texttt{unit\_bids})
+each unit of $\omega_i^f(h)$ draws a fresh sample of $d$, recovering the classic
+per-arrival power-of-$d$-choices. Any residual demand triggers the same
+price-free replica-expansion requests to neighbours with memory slack
+$\rho_j(h)>0$ as in \textsc{FaaS-MADiG}.
+
+When $d\ge|A_i^f(h)|$ the sample is the whole candidate set, and (for
+distinct scores) the \texttt{score} criterion reduces exactly to
+\textsc{FaaS-MADiG}'s greedy buyer rule---so \textsc{FaaS-MAPoD} interpolates
+between full-visibility greedy diffusion ($d=|A_i^f(h)|$) and blind random
+placement ($d=1$).
+
+\begin{algorithm}
+\caption{\textsc{FaaS-MAPoD} --- buyer power-of-$d$ sampling (replaces the FaaS-MADiG buyer rule)}
+\label{alg:mapod-buyer}
+\begin{algorithmic}[1]
+\Require residual demand $\omega_i^f(h)$, blackboard residuals $C_j^f(h)$ and memory slacks $\rho_j(h)$, sample size $d$, criterion, RNG
+\For{each function $f$ with $\omega_i^f(h)>0$}
+  \State $A_i^f(h)\gets\{\,j\in N_i: C_j^f(h)\ge 1 \text{ and } s_{ij}^f(h)>-\gamma_i^f\,\}$
+  \State $o\gets 0$;\quad maintain a local view $\tilde C_j\gets C_j^f(h)$ for $j\in A_i^f(h)$
+  \While{$o<\omega_i^f(h)$ \textbf{and} $A_i^f(h)\ne\emptyset$}
+     \State draw a uniform sample $S\subseteq A_i^f(h)$, $|S|=\min(d,|A_i^f(h)|)$, without replacement
+     \State $j^\star\gets\arg\max_{j\in S} s_{ij}^f(h)$ \textbf{if} criterion${}=\texttt{score}$ \textbf{else} $\arg\max_{j\in S}\tilde C_j$ \Comment{tie-break: lower id}
+     \State $q\gets 1$ \textbf{if} \texttt{unit\_bids} \textbf{else} $\min(\tilde C_{j^\star},\,\omega_i^f(h)-o)$
+     \State emit assignment request $(i\!\to\! j^\star,f,q)$ with score $s_{ij^\star}^f(h)$;\quad $o\gets o+q$;\quad $\tilde C_{j^\star}\gets\tilde C_{j^\star}-q$
+     \If{$\tilde C_{j^\star}<1$} remove $j^\star$ from $A_i^f(h)$ \EndIf
+  \EndWhile
+  \If{$o<\omega_i^f(h)$}
+     \For{$j\in N_i$ with $\rho_j(h)>0$ and $j$ not already a capacity seller}
+        \State emit \emph{price-free} replica-expansion request $(i\!\to\! j,f)$
+     \EndFor
+  \EndIf
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+The seller side is \emph{unchanged}: requests received by $j$ are cleared by
+\textsc{FaaS-MADiG}'s greedy fill (the \texttt{evaluate\_assignments} routine of
+Section~\ref{sec:madig-greedy}), which serves buyers in descending-score order
+up to the true residual capacity $C_j^f(h)$, tentatively starts replicas under
+the utilization test $\kappa_j^f\le 1$, and re-awards incumbent load only to a
+higher-score buyer. Consequently cross-buyer conflicts---when several buyers
+sample the same seller---are resolved identically to \textsc{FaaS-MADiG}; only
+the buyer's \emph{probe} is randomized.
+
+\subsection{What is removed and what is kept}
+\label{sec:mapod-ablation}
+
+\noindent\textbf{Removed} (relative to \textsc{FaaS-MADeA}): the entire price
+machinery, exactly as in \textsc{FaaS-MADiG}. \textbf{Removed} (relative to
+\textsc{FaaS-MADiG}): \emph{full neighbourhood visibility}---the buyer now sees
+only a random size-$d$ sample per step rather than the whole candidate set.
+
+\noindent\textbf{Kept} (identical to \textsc{FaaS-MADiG}): the local
+problem~(P2); the advertising of $C_i^f(h)$ and $\rho_i(h)$ (Eqs.~(12)--(13));
+the score~\eqref{eq:mapod-score} and the convenience threshold $\gamma_i^f$; the
+fairness penalty $\phi_i^f$; the price-free replica expansion of Algorithm~4;
+the score-ordered seller clearing and reassignment; and the restricted
+re-solve after each coordination round.
+
+\subsection{Rationale and properties}
+\label{sec:mapod-rationale}
+
+\paragraph{Visibility ablation.} Because \textsc{FaaS-MAPoD} shares its score,
+threshold, seller clearing, and provisioning with \textsc{FaaS-MADiG}, the
+\emph{only} behavioural difference is how many neighbours the buyer inspects per
+step. Any performance gap is therefore attributable to partial visibility
+alone, placing \textsc{FaaS-MAPoD} at the random/partial-visibility end of the
+\emph{market $\to$ greedy $\to$ random} spectrum
+(\textsc{FaaS-MADeA} $\to$ \textsc{FaaS-MADiG} $\to$ \textsc{FaaS-MAPoD}).
+
+\paragraph{Reproducibility.} The sampling generator is seeded once per run from
+the experiment seed, so a run is fully reproducible; statistical variance across
+the random draws is obtained by repeating experiments (the campaign's
+$n_{\text{experiments}}$ replicates, each with its own seed and instance) rather
+than by in-run averaging.
+
+\paragraph{Communication.} Each offloading step inspects at most $d$ neighbours,
+so \textsc{FaaS-MAPoD} has the smallest probe footprint of the three methods:
+it reads $O(d)$ blackboard entries per step instead of the full one-hop
+neighbourhood, while exchanging no prices.
+
+\subsection{Positioning with respect to the literature}
+\label{sec:mapod-related}
+
+We state plainly that the buyer rule of \textsc{FaaS-MAPoD} \emph{is} the
+power-of-$d$-choices load-balancing rule of
+Mitzenmacher~\citep{mitzenmacher2001}, applied to one-hop FRALB offloading; it
+is, by design, \emph{less} novel than \textsc{FaaS-MADiG} and is included as a
+controlled baseline, not as a new algorithm.
+
+\paragraph{Basis.} Probing $d$ uniformly random candidates and dispatching to
+the best is exactly the power-of-$d$-choices paradigm
+of~\citep{mitzenmacher2001}; with the \texttt{capacity} criterion and $d=2$ it
+is the canonical ``power of two choices'' (shortest of two sampled queues). The
+underlying push of excess load to less-loaded neighbours is the diffusion
+paradigm of Cybenko~\citep{cybenko1989} and the sender-initiated strategies
+catalogued by Willebeek-LeMair and Reeves~\citep{willebeek1993}; greedy,
+locality-driven offloading in FaaS/edge dispatchers~\citep{leechoi2021} is a
+full-visibility relative. \textsc{FaaS-MAPoD} and \textsc{FaaS-MADiG} are
+siblings: \textsc{FaaS-MADiG} is the $d\!=\!|A_i^f(h)|$ (full-visibility) limit
+of \textsc{FaaS-MAPoD}, and \textsc{FaaS-MADiG} is itself the price-frozen limit
+of the \textsc{FaaS-MADeA} auction~\citep{bertsekas1988}.
+
+\paragraph{Differences.} Two elements separate \textsc{FaaS-MAPoD} from the
+textbook power-of-$d$ rule. \emph{(i) Objective-aligned selection.} With the
+\texttt{score} criterion the buyer ranks the sample by the model's economic
+weights ($\beta_{ij}^f$, $\gamma_i^f$, latency $L_{ij}$, fairness $\phi_i^f$)
+rather than by raw queue length, and every round is re-validated by the local
+problem~(P2) and the restricted re-solve. \emph{(ii) Joint balancing and
+provisioning.} Beyond migrating load over a fixed graph, \textsc{FaaS-MAPoD}
+triggers memory-slack-based replica expansion (Algorithm~4), inherited from the
+\textsc{FaaS-MADeA}/\textsc{FaaS-MADiG} framework.
+
+\paragraph{Takeaway.} As an isolated coordination rule, \textsc{FaaS-MAPoD}
+instantiates power-of-$d$-choices balancing and is not claimed as novel; its
+value is as a partial-visibility ablation that attributes any gap with respect
+to \textsc{FaaS-MADiG} to full neighbourhood visibility, and as the random
+endpoint of the market$\to$greedy$\to$random spectrum.

@@ -1,0 +1,18 @@
+% Standalone preview wrapper for the FaaS-MAPoD note.
+% The deliverable section lives in faas-mapod.tex and is meant to be
+% \input{} (or pasted) into the host paper; this wrapper only renders it
+% on its own for review.
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage[numbers,square]{natbib}
+\usepackage[margin=1in]{geometry}
+
+\begin{document}
+\input{faas-mapod}
+\bibliographystyle{plainnat}
+\bibliography{references}
+\end{document}
