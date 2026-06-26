@@ -124,8 +124,9 @@ draws a uniform random sample $S\subseteq A_i^f(h)$ of size $\min(d,|A_i^f(h)|)$
 \end{equation}
 with ties broken by the lower node id for reproducibility. The \texttt{score}
 criterion ablates only the buyer's \emph{visibility} relative to
-\textsc{FaaS-MADiG}; the \texttt{capacity} criterion is the textbook
-shortest-queue (largest-spare-capacity) power-of-$d$ rule. In the default
+\textsc{FaaS-MADiG}; the \texttt{capacity} criterion is the spare-capacity
+analogue of the textbook shortest-queue power-of-$d$ rule (exact when sellers
+are homogeneous in service rate). In the default
 \emph{batched} form the buyer claims $\min(C_{j^\star}^f(h),\ \omega_i^f(h)-o)$
 from $j^\star$, removes it from the pool, and repeats until its demand is met or
 the candidate set is empty; in the \emph{per-unit} form (\texttt{unit\_bids})
@@ -213,16 +214,26 @@ neighbourhood, while exchanging no prices.
 \subsection{Positioning with respect to the literature}
 \label{sec:mapod-related}
 
-We state plainly that the buyer rule of \textsc{FaaS-MAPoD} \emph{is} the
-power-of-$d$-choices load-balancing rule of
-Mitzenmacher~\citep{mitzenmacher2001}, applied to one-hop FRALB offloading; it
-is, by design, \emph{less} novel than \textsc{FaaS-MADiG} and is included as a
-controlled baseline, not as a new algorithm.
+We state plainly that the buyer rule of \textsc{FaaS-MAPoD} adopts the
+power-of-$d$-choices \emph{sampling mechanism} of
+Mitzenmacher~\citep{mitzenmacher2001}, applied to one-hop FRALB offloading:
+it probes $d$ uniformly random candidates per step instead of scanning the
+whole neighbourhood. Under the \texttt{capacity} criterion it is that
+load-balancing rule verbatim; under the default \texttt{score} criterion it
+keeps the random-$d$ sampling but selects by the model's economic score rather
+than by load (see Differences~(i) below). It is, by design, \emph{less} novel
+than \textsc{FaaS-MADiG} and is included as a controlled baseline, not as a new
+algorithm.
 
-\paragraph{Basis.} Probing $d$ uniformly random candidates and dispatching to
-the best is exactly the power-of-$d$-choices paradigm
-of~\citep{mitzenmacher2001}; with the \texttt{capacity} criterion and $d=2$ it
-is the canonical ``power of two choices'' (shortest of two sampled queues). The
+\paragraph{Basis.} Probing $d$ uniformly random candidates without replacement
+and dispatching to the best of the sample is the power-of-$d$-choices
+\emph{sampling} paradigm of~\citep{mitzenmacher2001}. Under the \texttt{capacity}
+criterion the buyer routes to the largest-spare-capacity (equivalently,
+least-utilized) seller of the $d$ samples---the spare-capacity analogue of
+Mitzenmacher's shortest-queue rule, exact when sellers are homogeneous in
+service rate; with $d=2$ this is the canonical ``power of two choices''. Under
+the default \texttt{score} criterion the same random-$d$ sampling is kept, but
+selection maximizes the economic score rather than load (Differences~(i)). The
 underlying push of excess load to less-loaded neighbours is the diffusion
 paradigm of Cybenko~\citep{cybenko1989} and the sender-initiated strategies
 catalogued by Willebeek-LeMair and Reeves~\citep{willebeek1993}; greedy,
