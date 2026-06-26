@@ -112,12 +112,12 @@ production capacity loop kept verbatim, every price-dependent piece removed:
   - no `min_b` tracking;
   - no final price update (`p[j,f] = min_b + eta·(u - u0)` and the
     `p[j,f] *= (1 - zeta)` decay) — `eta`, `zeta`, `u0` are not used;
-  - **no previous-assignment replacement swap.** The production swap is gated by
-    `b_arr[next_bid_idx] > p[j,f]`; with prices removed (`p ≡ 0`) that test is
-    almost always true, causing assignment thrashing/oscillation. So the
-    `last_y`-based swap block is **removed**, not re-derived on score. A
-    non-regression unit test documents that, for the intended baseline,
-    omitting the swap does not change accepted load relative to the greedy fill.
+  - **previous-assignment replacement is kept, but price-free.** The production
+    swap is gated by `b_arr[next_bid_idx] > p[j,f]`; with prices removed
+    (`p ≡ 0`) that test is not meaningful. FaaS-MADiG instead compares the
+    candidate buyer's current `utility` with the incumbent buyer's current
+    price-free score and replaces lower-score incumbent load when the seller
+    saturates.
 - `evaluate_assignments` returns `y`, `additional_replicas`, and `n_auctions`
   (`len(potential_sellers)`); **never a price array** (the production
   `evaluate_bids` returns `p` in slot 2 — that slot is dropped here).
@@ -270,10 +270,10 @@ Follow the existing `tests/` patterns (e.g. `test_run_faasmacro_helpers.py`,
     running twice on the same input yields identical `y` (determinism);
   - `tentatively_start_replicas` branch still produces `additional_replicas`
     from `initial_rho`/`r` on the utilization condition;
-  - **non-regression for the dropped swap:** on an input where the production
-    `evaluate_bids` would have triggered the `last_y` replacement, assert the
-    pure greedy fill yields the same total accepted load for the intended
-    baseline (documents that omitting the swap is behavior-preserving here).
+  - score-based replacement: on an input where a seller saturates and a new
+    buyer has higher utility than a previous incumbent in `last_y`, assert the
+    returned `y` delta removes incumbent load and assigns it to the higher-score
+    buyer.
 - **Unit — wiring/postprocessing:**
   - `run.parse_arguments` accepts `faas-diffuse`;
   - `run.results_postprocessing` maps `faas-diffuse` to `LSPc` /
@@ -296,11 +296,10 @@ See `2026-06-25-distributed-heuristic-alternatives.md`.
 ## 9. Open questions / assumptions
 
 - **Convergence without prices.** Greedy diffusion lacks the price signal that
-  damps oscillation. The main thrashing risk — the `last_y` replacement swap
-  firing every iteration once prices are zero — is eliminated by dropping that
-  swap (§3.2). Residual capacity is monotonically consumed within the iteration
-  loop, and `check_stopping_criteria` (no capacity / all assigned / max
-  iterations / time limit) bounds iterations. If empirical oscillation still
-  appears, a simple guard (stop when `y` is unchanged between iterations) can be
-  added — noted as a contingency, not built up front (YAGNI).
+  damps oscillation. The score-based `last_y` replacement keeps MADiG closer to
+  MADeA, but can re-award already served load when a better local score appears.
+  `check_stopping_criteria` (no capacity / all assigned / max iterations / time
+  limit) bounds iterations. If empirical oscillation appears, add a guard such
+  as stopping when `y` is unchanged between iterations or when objective no
+  longer improves — noted as a contingency, not built up front (YAGNI).
 - **Method name** `FaaS-MADiG` is final unless changed during spec review.

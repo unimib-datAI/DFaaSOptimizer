@@ -123,32 +123,67 @@ left untouched.
 \subsection{Greedy diffusion}
 \label{sec:madig-greedy}
 
-Two deterministic rules replace the auction's bid/clear cycle. On the buyer
-side (Algorithm~\ref{alg:madig-buyer}), node $i$ sorts its candidate sellers by
-descending score~\eqref{eq:madig-score} and greedily claims residual capacity
-until its demand $\omega_i^f(h)$ is met or the neighbourhood is saturated; any
+Algorithm~\ref{alg:madig-loop} summarizes the full control-period loop. Inside
+each diffusion iteration, two deterministic rules replace the auction's
+bid/clear cycle. On the buyer side (Algorithm~\ref{alg:madig-buyer}), node $i$
+sorts its candidate sellers by
+descending score~\eqref{eq:madig-score} and greedily claims advertised
+blackboard capacity until its demand $\omega_i^f(h)$ is met or the
+neighbourhood is saturated; any
 shortfall triggers \emph{price-free} replica-expansion requests to neighbours
 with memory slack $\rho_j(h)>0$, exactly as in \textsc{FaaS-MADeA}. On the
 seller side (Algorithm~\ref{alg:madig-seller}), node $j$ serves incoming
 requests in descending-score order---ties broken by the buyer index $i$ for
-reproducibility---up to its residual capacity $C_j^f(h)$. If capacity is
+reproducibility---up to its true residual capacity $C_j^f(h)$. If capacity is
 exhausted while expansion requests remain and memory permits, the seller
 \emph{tentatively} starts replicas through the unchanged mechanism of
 Algorithm~4, which is gated by the utilization test $\kappa_j^f\le 1$ (i.e.
 $u\le U^f_{\max}$) and therefore needs no price.
 
 \begin{algorithm}
+\caption{\textsc{FaaS-MADiG} --- control-period diffusion loop}
+\label{alg:madig-loop}
+\begin{algorithmic}[1]
+\Require workload at period $t$, neighbourhoods $N_i$, maximum iterations $H_{\max}$
+\For{each control period $t$}
+  \State each node solves its local problem (P2), obtaining $x_i^f$, $r_i^f$, $\rho_i$, and residual demand $\omega_i^f$
+  \State initialize assignment tensor $y\gets 0$, fairness counters, best solution trackers, and stopping state
+  \For{$h=0,\ldots,H_{\max}-1$}
+    \State compute advertised blackboard capacity $\bar C_i^f(h)=\max\{0,\mathrm{Cap}_i^f(h)-x_i^f(h)\}$
+    \State compute true residual capacity $C_i^f(h)=\max\{0,\mathrm{Cap}_i^f(h)-\ell_i^f(h)\}$
+    \State buyers generate assignment and replica-expansion requests using Algorithm~\ref{alg:madig-buyer}
+    \If{assignment requests exist}
+      \State sellers greedily accept requests, tentatively start replicas, and apply score-based replacement using Algorithm~\ref{alg:madig-seller}
+      \State update $y$, placed demand, and fairness counters
+      \State re-solve the restricted local problem with fixed $y$ to update $x$, $r$, and $\rho$
+      \State update residual demand $\omega_i^f$
+    \Else
+      \If{replica-expansion requests exist}
+        \State start additional replicas using the same feasibility rule as \textsc{FaaS-MADeA}
+      \EndIf
+    \EndIf
+    \State assemble the decentralized solution and update the best observed objective value
+    \If{the stopping criterion is met}
+      \State \textbf{break}
+    \EndIf
+  \EndFor
+  \State save the best solution, objective value, termination condition, and runtime
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}
 \caption{\textsc{FaaS-MADiG} --- buyer greedy assignment (replaces Alg.~2)}
 \label{alg:madig-buyer}
 \begin{algorithmic}[1]
-\Require residual demand $\omega_i^f(h)$, neighbour residuals $C_j^f(h)$ and
+\Require residual demand $\omega_i^f(h)$, neighbour blackboard residuals $\bar C_j^f(h)$ and
          memory slacks $\rho_j(h)$ on the blackboard
 \For{each function $f$ with $\omega_i^f(h)>0$}
-  \State $A_i^f(h)\gets\{\,j\in N_i: C_j^f(h)\ge 1 \text{ and } s_{ij}^f(h)>-\gamma_i^f\,\}$
+  \State $A_i^f(h)\gets\{\,j\in N_i: \bar C_j^f(h)\ge 1 \text{ and } s_{ij}^f(h)>-\gamma_i^f\,\}$
   \State sort $A_i^f(h)$ by \textbf{descending} $s_{ij}^f(h)$
   \State $o\gets 0$ \Comment{load already placed}
   \For{$j\in A_i^f(h)$ \textbf{while} $o<\omega_i^f(h)$}
-     \State $d\gets\min\!\big(C_j^f(h),\,\omega_i^f(h)-o\big)$ \Comment{unit bids if enabled}
+     \State $d\gets\min\!\big(\bar C_j^f(h),\,\omega_i^f(h)-o\big)$ \Comment{unit bids if enabled}
      \State emit assignment request $(i\!\to\! j,f,d)$;\quad $o\gets o+d$
   \EndFor
   \If{$o<\omega_i^f(h)$} \Comment{capacity insufficient}
@@ -174,8 +209,11 @@ $u\le U^f_{\max}$) and therefore needs no price.
   \If{$c=0$ \textbf{and} expansion requests remain \textbf{and} $\rho_j(h)>0$}
      \State tentatively start replicas as in Alg.~4 \Comment{utilization test $\kappa_j^f\le1$; no price}
   \EndIf
+  \If{$c=0$ \textbf{and} requests remain}
+     \State re-award incumbent load only from buyers with lower current score
+  \EndIf
 \EndFor
-\State \textbf{no} price update, \textbf{no} bid-price tracking, \textbf{no} reassignment of previously served load
+\State \textbf{no} price update and \textbf{no} bid-price tracking
 \end{algorithmic}
 \end{algorithm}
 
@@ -186,7 +224,10 @@ $u\le U^f_{\max}$) and therefore needs no price.
 Algorithms~2--3): the price term $-p_j^f(h)$ in the utility; the per-unit
 bidding price $b_{ij}^f$ and minimum increment $\varepsilon$; the
 congestion-based price update of Eq.~(8) and the idle-seller discount $\zeta$;
-and the price-gated reassignment of load already granted to another buyer.
+and the price-gated reassignment test for load already granted to another
+buyer. The reassignment role itself is retained in price-free form: a saturated
+seller may re-award incumbent load only when the new request has a higher
+current score.
 
 \noindent\textbf{Kept} (identical to \textsc{FaaS-MADeA}): the local
 problem~(P2); the advertising of residual execution capacity $C_i^f(h)$ and
@@ -206,13 +247,15 @@ between the two is therefore attributable to that signal alone, which makes
 \textsc{FaaS-MADiG} a controlled baseline rather than an unrelated heuristic.
 
 \paragraph{Determinism and termination.} With prices removed, the score
-\eqref{eq:madig-score} is constant within a control period $t$, the
-tie-break on the buyer index makes the seller fill deterministic, and residual
-capacity is consumed monotonically within each iteration. The stopping criteria
-of \textsc{FaaS-MADeA} carry over unchanged (no residual capacity, all load
-assigned, $H_{\max}$ reached, or no convenient seller). Removing the
-price-gated reassignment also removes the main source of inter-iteration
-oscillation, so a price-free run need not damp prices to stabilize.
+\eqref{eq:madig-score} is constant within a control period $t$, and the
+tie-break on the buyer index makes the seller fill deterministic. Residual
+capacity is consumed during the initial fill, while score-based reassignment
+preserves the seller's accepted-load total but may move load from a lower-score
+incumbent to a higher-score buyer. The stopping criteria of
+\textsc{FaaS-MADeA} carry over unchanged (no residual capacity, all load
+assigned, $H_{\max}$ reached, or no convenient seller). If score-based
+reassignment induces empirical oscillation, the implementation can add the same
+kind of finite-horizon or no-change stopping guard already used by the runner.
 
 \paragraph{Fair runtime comparison.} Heuristic time is amortized per agent
 (the per-iteration cost is divided by the number of participating
@@ -252,10 +295,11 @@ special case of a Bertsekas-style auction~\citep{bertsekas1988}. Removing the
 cross-iteration price update---together with the $\varepsilon$ bid increment and
 the $\varepsilon$-complementary-slackness mechanism it serves---collapses the
 bidding-and-clearing cycle of
-Algorithms~\ref{alg:madig-buyer}--\ref{alg:madig-seller} to a single greedy pass
-in which each buyer claims its best available residual capacity and \emph{no}
-previously served load is re-awarded. In this sense \textsc{FaaS-MADiG}
-\emph{is} \textsc{FaaS-MADeA} with the market layer removed.
+Algorithms~\ref{alg:madig-buyer}--\ref{alg:madig-seller} to a greedy,
+price-free fill in which each buyer claims its best available residual capacity
+and a saturated seller may re-award incumbent load only to a higher-score buyer.
+In this sense \textsc{FaaS-MADiG} \emph{is} \textsc{FaaS-MADeA} with the market
+layer removed.
 
 \paragraph{Differences.} Three elements separate \textsc{FaaS-MADiG} from the
 textbook rules above. \emph{(i) Determinism over the full neighbourhood.} Unlike

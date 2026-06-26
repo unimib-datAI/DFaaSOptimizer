@@ -4,7 +4,7 @@
 
 **Goal:** Add FaaS-MADiG, a distributed greedy-diffusion heuristic that ablates the price/bidding signal of the production FaaS-MADeA auction, as a fourth comparable method.
 
-**Architecture:** A new standalone runner `decentralized_diffusion.py` mirrors `run_faasmadea.py`. It reuses the local MILP planning (`LSP`/`LSPr`) and every shared helper unchanged (imported from `run_faasmadea`), and replaces only the two market functions with price-free equivalents: `define_assignments` (greedy by utility, no bid price) and `evaluate_assignments` (greedy capacity fill by utility, no price update, no replacement swap). Wiring into `run.py` and `compare_results.py` is purely additive.
+**Architecture:** A new standalone runner `decentralized_diffusion.py` mirrors `run_faasmadea.py`. It reuses the local MILP planning (`LSP`/`LSPr`) and every shared helper unchanged (imported from `run_faasmadea`), and replaces only the two market functions with price-free equivalents: `define_assignments` (greedy by utility, no bid price) and `evaluate_assignments` (greedy capacity fill by utility, no price update, score-based replacement of lower-utility incumbents). Wiring into `run.py` and `compare_results.py` is purely additive.
 
 **Tech Stack:** Python 3.10, NumPy, pandas, Pyomo (Gurobi/GLPK), pytest. 2-space indentation throughout (project style).
 
@@ -14,7 +14,7 @@
 - **New behavior → new function.** Where FaaS-MADiG needs slightly different behavior than the auction, write a NEW function in `decentralized_diffusion.py` (`define_assignments`, `evaluate_assignments`, `run`). Never edit `define_bids`/`evaluate_bids`/`run` in `run_faasmadea.py`.
 - **`run.py` and `compare_results.py` changes must be ADDITIVE only** — new `--methods` choice, new dispatch block, new dict key, new ternary branch. Existing methods' code paths must remain byte-for-byte unchanged. The wiring test (Task 4/5) doubles as a regression guard for the existing methods' labels.
 - **Reuse, don't duplicate.** Import `compute_residual_capacity`, `check_stopping_criteria`, `neigh_dict_to_matrix`, `start_additional_replicas`, `ensure_memory_sellers`, `check_ls_pr_feasibility_from_fixed_y`, `VAR_TYPE` from `run_faasmadea`.
-- **Ablation rule:** no prices anywhere — no `epsilon`/`eta`/`zeta`/`u0`/`p`, no `min_b` tracking, no price update, no `last_y` replacement swap. Keep the price-free `tentatively_start_replicas` branch.
+- **Ablation rule:** no prices anywhere — no `epsilon`/`eta`/`zeta`/`u0`/`p`, no `min_b` tracking, no price update. Keep the price-free `tentatively_start_replicas` branch and use current utility scores, not prices, for any `last_y` replacement.
 - **Method name:** `FaaS-MADiG`. CLI key: `faas-diffuse`. `obj.csv` column: `FaaS-MADiG`. Artifact family (`mkey`): `LSPc`.
 - **Out of scope (v1):** `--fix_r` / `opt_solution` support in the new runner (use plain `LSP()`), and Options B/C from the spec.
 - Spec: `docs/superpowers/specs/2026-06-25-faas-madig-distributed-heuristic-design.md`.
@@ -359,7 +359,8 @@ def evaluate_assignments(
 
   Pure greedy capacity fill: sellers serve buyers by descending ``utility``
   (tie-break on buyer index ``i`` for reproducibility). No min_b tracking, no
-  price update, no last_y replacement swap. The price-free
+  price update; score-based `last_y` replacement may re-award lower-utility
+  incumbent load. The price-free
   tentatively_start_replicas branch is kept for parity with the baseline.
   """
   Nn = data[None]["Nn"][None]

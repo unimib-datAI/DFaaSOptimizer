@@ -1,4 +1,5 @@
 from run_centralized_model import (
+  encode_solution,
   get_current_load,
   init_complete_solution,
   init_problem,
@@ -8,6 +9,7 @@ from run_centralized_model import (
   save_solution,
   update_data,
 )
+from postprocessing import load_solution
 from run_faasmacro import (
   combine_solutions,
   compute_social_welfare,
@@ -26,7 +28,7 @@ from run_faasmadea import (
 from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
-from models.sp import LSP, LSPr
+from models.sp import LSP, LSP_fixedr, LSPr
 
 from networkx import adjacency_matrix
 from collections import deque
@@ -131,16 +133,29 @@ def evaluate_assignments(
     r: np.array,
     initial_rho: np.array,
     tentatively_start_replicas: bool,
+    last_y: np.array = None,
+    diffusion_options: dict = None,
+    latency: np.array = None,
+    fairness: np.array = None,
   ) -> Tuple[np.array, np.array, int]:
   """Price-free counterpart of run_faasmadea.evaluate_bids.
 
   Pure greedy capacity fill: sellers serve buyers by descending ``utility``
-  (tie-break on buyer index ``i`` for reproducibility). No min_b tracking, no
-  price update, no last_y replacement swap. The price-free
-  tentatively_start_replicas branch is kept for parity with the baseline.
+  (tie-break on buyer index ``i`` for reproducibility). No min_b tracking and no
+  price update. When the seller is full and ``last_y`` plus score inputs are
+  provided, a higher-score request may replace a lower-score incumbent, matching
+  the auction's reassignment role without using prices.
   """
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
+  if last_y is None:
+    last_y = np.zeros((Nn, Nn, Nf))
+  if diffusion_options is None:
+    diffusion_options = {"latency_weight": 0.0, "fairness_weight": 0.0}
+  if latency is None:
+    latency = np.zeros((Nn, Nn))
+  if fairness is None:
+    fairness = np.zeros((Nn, Nf))
   potential_sellers, functions_to_share = np.nonzero(residual_capacity)
   if tentatively_start_replicas:
     potential_sellers, functions_to_share = ensure_memory_sellers(
@@ -162,27 +177,57 @@ def evaluate_assignments(
       y[int(bids_for_j.iloc[next_bid_idx]["i"]), j, f] += q
       remaining_capacity -= q
       next_bid_idx += 1
-    # price-free tentative replica start (decides on utilization, not price)
-    if (
-        remaining_capacity == 0
-        and (next_bid_idx > 0 or len(bids_for_j) > 0)
-        and tentatively_start_replicas
+    if remaining_capacity == 0 and (
+        next_bid_idx > 0 or (next_bid_idx == 0 and len(bids_for_j) > 0)
       ):
-      max_a = int(rho[j] / data[None]["memory_requirement"][f + 1])
-      if max_a > 0:
-        a = 1
-        while next_bid_idx < len(bids_for_j) and a <= max_a:
-          q = bids_for_j.iloc[next_bid_idx]["d"]
-          u = data[None]["demand"][(j + 1, f + 1)] * (
-            ell[j, f] + y[:, j, f].sum() + q
-          ) / (r[j, f] + a)
-          if u <= data[None]["max_utilization"][f + 1]:
-            y[int(bids_for_j.iloc[next_bid_idx]["i"]), j, f] += q
+      max_a = 0
+      # price-free tentative replica start (decides on utilization, not price)
+      if tentatively_start_replicas:
+        max_a = int(rho[j] / data[None]["memory_requirement"][f + 1])
+        if max_a > 0:
+          a = 1
+          while next_bid_idx < len(bids_for_j) and a <= max_a:
+            q = bids_for_j.iloc[next_bid_idx]["d"]
+            u = data[None]["demand"][(j + 1, f + 1)] * (
+              ell[j, f] + y[:, j, f].sum() + q
+            ) / (r[j, f] + a)
+            if u <= data[None]["max_utilization"][f + 1]:
+              y[int(bids_for_j.iloc[next_bid_idx]["i"]), j, f] += q
+              next_bid_idx += 1
+              additional_replicas[j, f] = a
+              rho[j] -= (a * data[None]["memory_requirement"][f + 1])
+            else:
+              a += 1
+      if not tentatively_start_replicas or max_a == 0:
+        previous_buyers = list(np.nonzero(last_y[:, j, f])[0])
+        previous_buyers.sort(
+          key = lambda i: (
+            data[None]["beta"][(int(i) + 1, j + 1, f + 1)]
+            - diffusion_options["latency_weight"] * latency[int(i), j]
+            - diffusion_options["fairness_weight"] * fairness[int(i), f],
+            -int(i),
+          )
+        )
+        pbidx = 0
+        while next_bid_idx < len(bids_for_j) and pbidx < len(previous_buyers):
+          incumbent = int(previous_buyers[pbidx])
+          incumbent_score = (
+            data[None]["beta"][(incumbent + 1, j + 1, f + 1)]
+            - diffusion_options["latency_weight"] * latency[incumbent, j]
+            - diffusion_options["fairness_weight"] * fairness[incumbent, f]
+          )
+          removable = last_y[incumbent, j, f] + y[incumbent, j, f]
+          while next_bid_idx < len(bids_for_j) and removable > 0:
+            i = int(bids_for_j.iloc[next_bid_idx]["i"])
+            candidate_score = bids_for_j.iloc[next_bid_idx]["utility"]
+            if incumbent == i or candidate_score <= incumbent_score:
+              break
+            q = min(bids_for_j.iloc[next_bid_idx]["d"], removable)
+            y[incumbent, j, f] -= q
+            y[i, j, f] += q
+            removable -= q
             next_bid_idx += 1
-            additional_replicas[j, f] = a
-            rho[j] -= (a * data[None]["memory_requirement"][f + 1])
-          else:
-            a += 1
+          pbidx += 1
   return y, additional_replicas, len(potential_sellers)
 
 
@@ -222,7 +267,7 @@ def run(
   solver_name = config["solver_name"]
   solver_options = config["solver_options"]
   general_solver_options = solver_options.get("general", {})
-  diffusion_options = solver_options["diffusion"]
+  diffusion_options = dict(solver_options["diffusion"])
   diffusion_options.setdefault(
     "unit_bids", solver_options.get("auction", {}).get("unit_bids", False)
   )
@@ -248,6 +293,11 @@ def run(
   )
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
+  opt_solution, opt_replicas, opt_detailed_fwd = None, None, None
+  if "opt_solution_folder" in config:
+    opt_solution, opt_replicas, opt_detailed_fwd, _, _ = load_solution(
+      config["opt_solution_folder"], "LoadManagementModel"
+    )
   neighborhood = neigh_dict_to_matrix(
     base_instance_data[None]["neighborhood"], Nn
   )
@@ -268,7 +318,15 @@ def run(
     total_runtime = 0
     ss = datetime.now()
     sp_data = deepcopy(data)
-    sp = LSP()
+    if opt_solution is not None:
+      _, _, _, opt_r, _ = encode_solution(
+        Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
+      )
+      sp_data[None]["r_bar"] = {}
+      for n in range(Nn):
+        for f in range(Nf):
+          sp_data[None]["r_bar"][(n + 1, f + 1)] = int(opt_r[n, f])
+    sp = LSP() if opt_solution is None else LSP_fixedr()
     spr = LSPr()
     (
       sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
@@ -315,6 +373,10 @@ def run(
         diffusion_y, additional_replicas, n_sellers = evaluate_assignments(
           bids, residual_capacity, sp_data, ell, sp_r, sp_rho,
           tentatively_start_replicas=(len(memory_bids) == 0),
+          last_y=y,
+          diffusion_options=diffusion_options,
+          latency=latency,
+          fairness=fairness,
         )
         rt = (datetime.now() - s).total_seconds()
         total_runtime += (rt / n_sellers) if n_sellers else rt

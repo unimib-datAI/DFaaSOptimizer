@@ -115,3 +115,40 @@ def test_evaluate_assignments_is_deterministic_and_returns_no_price():
 
   assert len(first) == 3                    # (y, additional_replicas, n_sellers)
   assert np.array_equal(first[0], second[0])
+
+
+def test_evaluate_assignments_replaces_lower_score_incumbent_when_full():
+  data = _base_data(Nn=3, Nf=1)
+  data[None]["beta"][(1, 2, 1)] = 5.0
+  data[None]["beta"][(3, 2, 1)] = 1.0
+  bids = pd.DataFrame({
+    "i": [0, 0, 0],
+    "j": [1, 1, 1],
+    "f": [0, 0, 0],
+    "d": [1.0, 1.0, 1.0],
+    "utility": [5.0, 5.0, 5.0],
+  })
+  residual_capacity = np.zeros((3, 1))
+  residual_capacity[1, 0] = 1.0
+  last_y = np.zeros((3, 3, 1))
+  last_y[2, 1, 0] = 2.0
+
+  delta_y, _, _ = evaluate_assignments(
+    bids,
+    residual_capacity,
+    data,
+    ell = np.zeros((3, 1)),
+    r = np.ones((3, 1)),
+    initial_rho = np.zeros((3,)),
+    tentatively_start_replicas = False,
+    last_y = last_y,
+    diffusion_options = {
+      "latency_weight": 0.0,
+      "fairness_weight": 0.0,
+    },
+    latency = np.zeros((3, 3)),
+    fairness = np.zeros((3, 1)),
+  )
+
+  assert delta_y[0, 1, 0] == 3.0
+  assert delta_y[2, 1, 0] == -2.0
