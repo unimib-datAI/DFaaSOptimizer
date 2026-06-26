@@ -3,6 +3,7 @@ from pathlib import Path
 
 import numpy as np
 import networkx as nx
+import pytest
 
 import decentralized_powerd
 
@@ -114,6 +115,16 @@ def test_methods_choice_accepts_faas_powd(monkeypatch):
   monkeypatch.setattr("sys.argv", argv)
   args = run.parse_arguments()
   assert "faas-powd" in args.methods
+
+
+def test_run_fix_r_help_mentions_diffusion_and_powerd(monkeypatch, capsys):
+  monkeypatch.setattr("sys.argv", ["run.py", "--help"])
+  with pytest.raises(SystemExit):
+    run.parse_arguments()
+
+  out = capsys.readouterr().out
+  assert "FaaS-MADiG" in out
+  assert "FaaS-MAPoD" in out
 
 
 def test_run_module_exposes_powerd_runner():

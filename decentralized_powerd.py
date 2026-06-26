@@ -66,8 +66,15 @@ def sample_assignments(
   id for reproducibility. The score is always stored in the ``utility`` column,
   on which the reused evaluate_assignments later sorts the seller side.
   """
-  d = int(powerd_options["d"])
+  try:
+    d = int(powerd_options["d"])
+  except (TypeError, ValueError) as exc:
+    raise ValueError("powerd d must be an integer >= 1") from exc
+  if d < 1:
+    raise ValueError("powerd d must be >= 1")
   criterion = powerd_options.get("criterion", "score")
+  if criterion not in {"score", "capacity"}:
+    raise ValueError("powerd criterion must be one of: score, capacity")
   unit_bids = powerd_options.get("unit_bids", False)
   potential_buyers, functions_to_share = np.nonzero(omega)
   bids = {"i": [], "j": [], "f": [], "d": [], "utility": []}
@@ -94,6 +101,7 @@ def sample_assignments(
       if s > - data[None]["gamma"][(i + 1, f + 1)]:
         score[j] = s
         candidates.append(j)
+    candidates.sort()
     # buyer-local view of advertised capacity, decremented as we bid, so we
     # never request more from a seller than the buyer has observed locally
     remaining = {j: blackboard[j, f] for j in candidates}
@@ -119,7 +127,7 @@ def sample_assignments(
       if remaining[j_star] < 1:
         candidates.remove(j_star)
     if assigned < omega[i, f]:
-      for j in sorted(score, key=lambda k: -score[k]):
+      for j in sorted(score, key=lambda k: (-score[k], k)):
         if j in potential_memory_sellers:
           memory_bids["i"].append(i)
           memory_bids["j"].append(int(j))

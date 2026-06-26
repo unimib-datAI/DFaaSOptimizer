@@ -74,8 +74,9 @@ def parse_arguments() -> argparse.Namespace:
   )
   parser.add_argument(
     "--fix_r",
-    help = "True to fix the number of replicas in FaaS-MACrO and/or "
-           "FaaS-MADeA according to the optimal centralized solution",
+    help = "True to fix the number of replicas in FaaS-MACrO, FaaS-MADeA, "
+           "FaaS-MADiG, and FaaS-MAPoD according to the optimal centralized "
+           "solution",
     default = False,
     action = "store_true"
   )

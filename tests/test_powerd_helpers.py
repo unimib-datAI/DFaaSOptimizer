@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from decentralized_powerd import sample_assignments
 from decentralized_diffusion import define_assignments
@@ -34,6 +35,59 @@ def _opts(d=2, criterion="score", unit_bids=False):
     "d": d, "criterion": criterion, "unit_bids": unit_bids,
     "latency_weight": 0.0, "fairness_weight": 0.0,
   }
+
+
+def test_sample_assignments_rejects_invalid_sample_size():
+  data = _base_data(Nn=2, Nf=1)
+  omega = np.zeros((2, 1)); omega[0, 0] = 1.0
+  blackboard = np.zeros((2, 1)); blackboard[1, 0] = 1
+  rho = np.zeros((2,))
+
+  with pytest.raises(ValueError, match="powerd d"):
+    sample_assignments(
+      omega, blackboard, data, np.array([[0.0, 1.0], [1.0, 0.0]]), rho,
+      _opts(d=0), np.zeros((2, 2)), np.zeros((2, 1)),
+      force_memory_bids=False, rng=np.random.default_rng(0))
+
+
+def test_sample_assignments_rejects_unknown_criterion():
+  data = _base_data(Nn=2, Nf=1)
+  omega = np.zeros((2, 1)); omega[0, 0] = 1.0
+  blackboard = np.zeros((2, 1)); blackboard[1, 0] = 1
+  rho = np.zeros((2,))
+
+  with pytest.raises(ValueError, match="criterion"):
+    sample_assignments(
+      omega, blackboard, data, np.array([[0.0, 1.0], [1.0, 0.0]]), rho,
+      _opts(criterion="typo"), np.zeros((2, 2)), np.zeros((2, 1)),
+      force_memory_bids=False, rng=np.random.default_rng(0))
+
+
+def test_sample_assignments_samples_candidates_in_sorted_order():
+  class RecordingRng:
+    def __init__(self):
+      self.seen = None
+
+    def choice(self, values, size, replace):
+      self.seen = list(values)
+      return np.array(values[:size])
+
+  data = _base_data(Nn=10, Nf=1)
+  omega = np.zeros((10, 1)); omega[0, 0] = 1.0
+  blackboard = np.zeros((10, 1))
+  for j in [2, 5, 9]:
+    blackboard[j, 0] = 1
+  neighborhood = np.zeros((10, 10))
+  neighborhood[0, [2, 5, 9]] = 1
+  rho = np.zeros((10,))
+  rng = RecordingRng()
+
+  sample_assignments(
+    omega, blackboard, data, neighborhood, rho,
+    _opts(d=3), np.zeros((10, 10)), np.zeros((10, 1)),
+    force_memory_bids=False, rng=rng)
+
+  assert rng.seen == [2, 5, 9]
 
 
 def test_sample_assignments_is_deterministic_given_seed():
