@@ -353,7 +353,7 @@ class LSPr_fixedr(LSPr):
     ###########################################################################
     # assigned offloading
     self.model.r_bar = pyo.Param(
-      self.model.N, self.model.F, 
+      self.model.N, self.model.F,
       within = pyo.NonNegativeIntegers
     )
     ###########################################################################
@@ -362,7 +362,57 @@ class LSPr_fixedr(LSPr):
     self.model.fix_r = pyo.Constraint(
       self.model.F, rule = self.fix_r
     )
-  
+
   @staticmethod
   def fix_r(model, f):
     return model.r[f] == model.r_bar[model.whoami,f]
+
+
+##############################################################################
+# OFFLOADING CAP (for FaaS-MABR-O capped local best response)
+##############################################################################
+
+class LSP_capped(LSP):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSP_capped"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # per-function upper bound on horizontal offloading
+    self.model.omega_ub = pyo.Param(
+      self.model.F, within = pyo.NonNegativeReals, default = 1e9
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.cap_offloading = pyo.Constraint(
+      self.model.F, rule = self.cap_offloading
+    )
+
+  @staticmethod
+  def cap_offloading(model, f):
+    return model.omega[f] <= model.omega_ub[f]
+
+
+class LSP_capped_fixedr(LSP_fixedr):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSP_capped_fixedr"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # per-function upper bound on horizontal offloading
+    self.model.omega_ub = pyo.Param(
+      self.model.F, within = pyo.NonNegativeReals, default = 1e9
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.cap_offloading = pyo.Constraint(
+      self.model.F, rule = self.cap_offloading
+    )
+
+  @staticmethod
+  def cap_offloading(model, f):
+    return model.omega[f] <= model.omega_ub[f]
