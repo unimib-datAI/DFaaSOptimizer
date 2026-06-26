@@ -52,7 +52,7 @@ def parse_arguments() -> argparse.Namespace:
     "--models",
     help = "List of model names",
     nargs = "*",
-    default = ["LoadManagementModel", "FaaS-MACrO", "FaaS-MADeA", "FaaS-MADiG"]
+    default = ["LoadManagementModel", "FaaS-MACrO", "FaaS-MADeA", "FaaS-MADiG", "FaaS-MAPoD"]
   )
   parser.add_argument(
   "--filter_by",
@@ -669,7 +669,8 @@ def plot_by_key(
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
-    "FaaS-MADiG": mcolors.CSS4_COLORS["plum"]
+    "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
+    "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"]
   }
   for ridx, (keys, bplot) in enumerate(bplots):
     for cidx, bkey in enumerate(keys):
@@ -830,7 +831,8 @@ def violinplot_by_key(
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
-    "FaaS-MADiG": mcolors.CSS4_COLORS["plum"]
+    "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
+    "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"]
   }
   nrows = 1
   ncols = 3 if rej is not None else 2

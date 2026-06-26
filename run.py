@@ -5,6 +5,7 @@ from run_faasmacro import run as run_iterations
 from run_faasmadea import run as run_auction
 from hierarchical_auction.runner import run as run_hierarchical
 from decentralized_diffusion import run as run_diffusion
+from decentralized_powerd import run as run_powerd
 from postprocessing import load_models_results
 from utils.common import reconcile_paths
 
@@ -54,6 +55,7 @@ def parse_arguments() -> argparse.Namespace:
       "faas-madea",
       "hierarchical",
       "faas-diffuse",
+      "faas-powd",
       "generate_only"
     ],
     required = True
@@ -265,7 +267,8 @@ def results_postprocessing(
       mcolors.TABLEAU_COLORS["tab:red"],
       mcolors.TABLEAU_COLORS["tab:green"],
       mcolors.TABLEAU_COLORS["tab:pink"],
-      mcolors.TABLEAU_COLORS["tab:purple"]
+      mcolors.TABLEAU_COLORS["tab:purple"],
+      mcolors.TABLEAU_COLORS["tab:brown"]
     ]
     for method in methods:
       method_folders = solution_folders.get(method, [])
@@ -285,7 +288,9 @@ def results_postprocessing(
           "FaaS-MACrO" if method == "faas-macro" else (
             "FaaS-MACrO(v0)" if method == "faas-macro-v0" else (
               "FaaS-MADeA" if method == "faas-madea" else (
-                "FaaS-MADiG" if method == "faas-diffuse" else "HierarchicalAuction"
+                "FaaS-MADiG" if method == "faas-diffuse" else (
+                  "FaaS-MAPoD" if method == "faas-powd" else "HierarchicalAuction"
+                )
               )
             )
           )
@@ -873,7 +878,8 @@ def run(
     "faas-macro-v0": [],
     "faas-madea": [],
     "hierarchical": [],
-    "faas-diffuse": []
+    "faas-diffuse": [],
+    "faas-powd": []
   }
   if os.path.exists(os.path.join(base_solution_folder, "experiments.json")):
     with open(
@@ -894,6 +900,7 @@ def run(
     run_a = False # -- faasmadea
     run_h = False # -- hierarchical
     run_d = False # -- faas-diffuse (FaaS-MADiG)
+    run_p = False # -- faas-powd (FaaS-MAPoD)
     experiment_idx = None
     try:
       experiment_idx = solution_folders["experiments_list"].index(
@@ -935,6 +942,12 @@ def run(
           solution_folders["faas-diffuse"][experiment_idx] is None
         )):
         run_d = True
+      if (not generate_only and "faas-powd" in methods) and ((
+          len(solution_folders.get("faas-powd", [])) <= experiment_idx
+        ) or (
+          solution_folders["faas-powd"][experiment_idx] is None
+        )):
+        run_p = True
     except ValueError:
       run_c = "centralized" in methods
       run_i = "faas-macro" in methods
@@ -942,8 +955,9 @@ def run(
       run_a = "faas-madea" in methods
       run_h = "hierarchical" in methods
       run_d = "faas-diffuse" in methods
+      run_p = "faas-powd" in methods
     # if the experiment is still to run...
-    if run_c or run_i or run_i_v0 or run_a or run_h or run_d or generate_only:
+    if run_c or run_i or run_i_v0 or run_a or run_h or run_d or run_p or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       if loop_over in config["limits"]:
@@ -1054,6 +1068,17 @@ def run(
         )
         set_solution_folder(
           solution_folders, "faas-diffuse", experiment_idx, d_folder
+        )
+      # -- solve power-of-d (FaaS-MAPoD)
+      if run_p:
+        p_folder = run_powerd(
+          config,
+          sp_parallelism,
+          log_on_file = log_on_file,
+          disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "faas-powd", experiment_idx, p_folder
         )
       # -- save info
       if experiment_idx is None:

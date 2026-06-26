@@ -103,3 +103,40 @@ def test_powerd_run_uses_fixed_replicas_without_mutating_options(tmp_path, monke
   # run() applied its defaults to a COPY, not the input config
   assert "d" not in config["solver_options"]["powerd"]
   assert "unit_bids" not in config["solver_options"]["powerd"]
+
+
+import run
+
+
+def test_methods_choice_accepts_faas_powd(monkeypatch):
+  argv = ["run.py", "-c", "config_files/planar_comparison.json",
+          "--methods", "faas-powd"]
+  monkeypatch.setattr("sys.argv", argv)
+  args = run.parse_arguments()
+  assert "faas-powd" in args.methods
+
+
+def test_run_module_exposes_powerd_runner():
+  assert hasattr(run, "run_powerd")
+  assert callable(run.run_powerd)
+
+
+def test_planar_config_has_powerd_section():
+  config = json.loads(Path("config_files/planar_comparison.json").read_text())
+  powerd = config["solver_options"]["powerd"]
+  assert powerd["d"] == 2
+  assert powerd["criterion"] == "score"
+
+
+def test_compare_results_palette_includes_mapod():
+  import inspect
+  import compare_results
+  source = inspect.getsource(compare_results)
+  assert '"FaaS-MAPoD"' in source
+
+
+def test_compare_results_defaults_include_mapod(monkeypatch):
+  monkeypatch.setattr("sys.argv", ["compare_results.py", "-i", "solutions/demo"])
+  import compare_results
+  args = compare_results.parse_arguments()
+  assert "FaaS-MAPoD" in args.models

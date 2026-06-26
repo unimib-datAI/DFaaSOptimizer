@@ -23,6 +23,13 @@
       "latency_weight": 0.0,
       "fairness_weight": 0.0,
       "unit_bids": false
+    },
+    "powerd": {
+      "d": 2,
+      "criterion": "score",
+      "latency_weight": 0.0,
+      "fairness_weight": 0.0,
+      "unit_bids": false
     }
   },
   "max_iterations": 20,
