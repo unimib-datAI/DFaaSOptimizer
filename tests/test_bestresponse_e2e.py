@@ -107,3 +107,17 @@ def test_br_s_reproducible(tmp_path):
   ob = pd.read_csv(Path(fb, "obj.csv"))["FaaS-MABR-S"].to_numpy()
   assert oa.shape == ob.shape and oa.shape[0] >= 1
   assert np.allclose(oa, ob)
+
+
+def test_br_r_reproducible(tmp_path):
+  _require_gurobi()
+  fa = run_br_r(
+    _e2e_config(tmp_path / "a"), parallelism=0, disable_plotting=True
+  )
+  fb = run_br_r(
+    _e2e_config(tmp_path / "b"), parallelism=0, disable_plotting=True
+  )
+  oa = pd.read_csv(Path(fa, "obj.csv"))["FaaS-MABR-R"].to_numpy()
+  ob = pd.read_csv(Path(fb, "obj.csv"))["FaaS-MABR-R"].to_numpy()
+  assert oa.shape == ob.shape and oa.shape[0] >= 1
+  assert np.allclose(oa, ob)

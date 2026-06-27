@@ -134,3 +134,28 @@ def test_sweep_reopt_branch_caps_omega_via_reopt_fn():
   assert calls["ub"] == [10.0]      # accessible neighbour capacity
   assert placed == 2.0              # placed the capped amount, not 4.0
   assert rt == 0.5
+
+
+def test_sweep_emits_block_a_memory_bid_for_capacity_and_memory_seller():
+  # Block A fires when buyer has UNMET demand (shortfall) AND a neighbour is
+  # both a capacity seller that passed the admission threshold (in `score`)
+  # AND a memory seller (rho > 0).
+  # Setup: buyer i=0 wants 5, seller j=1 has capacity 2 → shortfall after
+  # placing 2.  j=1 also has rho=3 → it is a memory seller.
+  # Block A emits (0,1,0) because j=1 is in score AND potential_memory.
+  # Block B emits nothing because potential_memory - potential_capacity = {}
+  # (j=1 has residual_capacity[1,0]=2 >= 1, so it IS in potential_capacity).
+  data = _base_data(Nn=2, Nf=1)
+  omega = np.zeros((2, 1)); omega[0, 0] = 5.0
+  residual = np.zeros((2, 1)); residual[1, 0] = 2.0
+  rho = np.zeros((2,)); rho[1] = 3.0
+  neighborhood = np.array([[0.0, 1.0], [1.0, 0.0]])
+
+  y, mem, n_active, placed, rt = best_response_sweep(
+    omega, residual, data, neighborhood, rho, _opts(),
+    np.zeros((2, 2)), np.zeros((2, 1)), force_memory_bids=False,
+    order="fixed", response="greedy")
+
+  assert placed == 2.0
+  assert len(mem) == 1
+  assert list(mem[["i", "j", "f"]].iloc[0]) == [0, 1, 0]
