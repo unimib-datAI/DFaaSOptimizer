@@ -81,6 +81,8 @@ def best_response_sweep(
     node_order = list(range(Nn))
   for i in node_order:
     neighbours = set(int(j) for j in np.nonzero(neighborhood[i, :])[0])
+    # skip re-optimization for non-buyer nodes: with zero residual demand there
+    # is nothing to offload, and an upper-bound cap cannot raise an omega of 0.
     if response == "reopt" and reopt_fn is not None and np.any(omega[i, :] > 0):
       omega_ub_row = np.array(
         [sum(ledger[j, f] for j in neighbours) for f in range(Nf)]
@@ -93,7 +95,6 @@ def best_response_sweep(
       if omega[i, f] <= 0:
         continue
       score = {}
-      candidates = []
       for j in neighbours:
         if ledger[j, f] >= 1:
           s = (
@@ -103,9 +104,8 @@ def best_response_sweep(
           )
           if s > - data[None]["gamma"][(i + 1, f + 1)]:
             score[j] = s
-            candidates.append(j)
       placed = 0.0
-      for j in sorted(candidates, key=lambda k: (-score[k], k)):
+      for j in sorted(score, key=lambda k: (-score[k], k)):
         if placed >= omega[i, f]:
           break
         q = min(ledger[j, f], omega[i, f] - placed)
@@ -115,9 +115,6 @@ def best_response_sweep(
         ledger[j, f] -= q
         placed += q
         active.add(i)
-      potential_capacity = set(
-        j for j in neighbours if residual_capacity[j, f] >= 1
-      )
       if placed < omega[i, f]:
         for j in sorted(score, key=lambda k: (-score[k], k)):
           if j in potential_memory:
@@ -125,6 +122,9 @@ def best_response_sweep(
             memory_bids["j"].append(j)
             memory_bids["f"].append(f)
       if placed < omega[i, f] or force_memory_bids:
+        potential_capacity = set(
+          j for j in neighbours if residual_capacity[j, f] >= 1
+        )
         for j in sorted(potential_memory - potential_capacity):
           memory_bids["i"].append(i)
           memory_bids["j"].append(j)

@@ -6,11 +6,7 @@ from run_faasmadea import run as run_auction
 from hierarchical_auction.runner import run as run_hierarchical
 from decentralized_diffusion import run as run_diffusion
 from decentralized_powerd import run as run_powerd
-from decentralized_bestresponse import (
-  run_br_s as run_br_s,
-  run_br_r as run_br_r,
-  run_br_o as run_br_o,
-)
+from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
 from postprocessing import load_models_results
 from utils.common import reconcile_paths
 

@@ -4,6 +4,9 @@ config_files/*
 # Data and solution files
 solutions/*
 
+# Superpowers SDD session scratch (plans/briefs/reports/diffs)
+.superpowers/
+
 # MacOS files
 .DS_Store
 */.DS_Store
