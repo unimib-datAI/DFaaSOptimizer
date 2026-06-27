@@ -1,0 +1,202 @@
+% =====================================================================
+% FaaS-MABR: distributed best-response (Gauss-Seidel) heuristics.
+% Meant to be \input{} (or pasted) into the paper. Assumes the paper's
+% notation (N, F, C_i^f, rho_i, omega_i^f, beta_{ij}^f, gamma_i^f, ...).
+% Cross-references are plain text; convert to \ref{} in the host paper.
+% =====================================================================
+
+\section{FaaS-MABR: sequential best-response (Gauss-Seidel) variants}
+\label{sec:mabr}
+
+\textsc{FaaS-MABR} (Multi-Agent Best-Response) is the \emph{sequential}
+counterpart of the \emph{simultaneous} coordination used by \textsc{FaaS-MADiG}
+and \textsc{FaaS-MAPoD}. The auction and its price-free diffusion ablations
+compute every overloaded node's request against a single snapshot of advertised
+capacity and then resolve the resulting cross-node conflicts (a Jacobi-style
+round followed by seller-side clearing). \textsc{FaaS-MABR} instead visits nodes
+in an order and lets each node claim capacity on a \emph{shared residual-capacity
+ledger that is decremented in place}, so a node responds to what earlier nodes
+have already taken. This is the Gauss-Seidel analogue of the same coordination
+problem, and because updates are sequential there are no cross-node conflicts and
+\emph{no seller-clearing phase}. Everything else is inherited from
+\textsc{FaaS-MADiG}: the local problem~(P2) that fixes $x_i^f$, $r_i^f$, and the
+residual demand $\omega_i^f$; the price-free score~$s_{ij}^f$ and the convenience
+threshold $\gamma_i^f$; the price-free replica expansion of Algorithm~4; and the
+restricted re-solve after each round.
+
+% =====================================================================
+% BEGIN self-contained notation recap.
+% Reproduces the relevant rows of the paper's Table 2 (FRALB) and Table 3
+% (auction) plus Eqs. (1),(2),(12),(13), so the note is readable on its own.
+% REMOVE this whole subsection when inserting into the paper, where the
+% notation and these equations are already defined.
+% =====================================================================
+\subsection{Notation and capacity model}
+\label{sec:mabr-notation}
+
+Each control period $t$ runs auction iterations $h=0,1,\dots,H_{\max}$ in
+parallel. Before coordination, every node $i$ solves a local problem~(P2)
+that, for each function $f\in\mathcal{F}_i$, splits the incoming workload
+$\lambda_i^f$ into locally processed load $x_i^f$, horizontally offloaded
+demand $\omega_i^f$, and Cloud-forwarded load $z_i^f$, and fixes the number of
+replicas $r_i^f$. Replicas obey the memory budget and provide capacity
+\begin{equation}
+  \sum_{f\in\mathcal{F}_i} r_i^f\,\mathrm{RAM}^f \le \mathrm{RAM}_i,
+  \qquad
+  \mathrm{Cap}_i^f = \frac{r_i^f\,U^f_{\max}}{D_i^f}\ \text{[req/s]} ,
+  \tag{1,2}
+\end{equation}
+from which each node advertises, on a neighbour-accessible blackboard, its
+residual execution capacity and its memory slack:
+\begin{equation}
+  C_i^f(h) = \max\!\big\{0,\ \mathrm{Cap}_i^f(h) - x_i^f(h)\big\},
+  \qquad
+  \rho_i(h) = \mathrm{RAM}_i - \sum_{f\in\mathcal{F}_i} r_i^f(h)\,\mathrm{RAM}^f \ge 0 .
+  \tag{12,13}
+\end{equation}
+Table~\ref{tab:mabr-notation} collects the symbols used below.
+
+\begin{table}[t]
+\centering
+\caption{Notation used in this section (subset of the paper's Tables~2--3).}
+\label{tab:mabr-notation}
+\small
+\begin{tabular}{@{}l l p{0.62\linewidth}@{}}
+\toprule
+\multicolumn{3}{@{}l}{\textit{Sets}}\\
+Nodes / neighbours & $\mathcal{N}$, $N_i$ & computing nodes; one-hop neighbours of $i$.\\
+Functions & $\mathcal{F}_i$ & functions deployable on $i$; $\mathcal{F}=\bigcup_i \mathcal{F}_i$.\\
+Candidate sellers & $A_i^f(h)$ & neighbours of $i$ with positive score for $f$, $A_i^f(h)\subseteq N_i$.\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Parameters and weights}}\\
+Input workload & $\lambda_i^f$ & incoming request rate for $f$ at $i$ [req/s].\\
+Memory cap / demand & $\mathrm{RAM}_i$, $\mathrm{RAM}^f$ & node memory; per-replica memory of $f$ [MB].\\
+Service demand & $D_i^f$ & average execution time of $f$ at $i$ [s].\\
+Max utilization & $U^f_{\max}$ & stability threshold, $U^f_{\max}\in[0,1)$.\\
+Local / offload / Cloud profit & $\alpha_i^f$, $\beta_{ij}^f$, $\gamma_i^f$ & profit of local exec.; profit of offloading $i\!\to\! j$; Cloud-offloading penalty (per req/s).\\
+Communication latency & $L_{ij}$ & horizontal-offloading latency between $i$ and $j$.\\
+Weights & $w_{\mathrm{lat}}$, $w_{\mathrm{fair}}$ & importance of latency and of fairness.\\
+Max iterations & $H_{\max}$ & auction iterations per control period.\\
+Price params \emph{(MADeA only)} & $\varepsilon$, $\zeta$ & min.\ bid increment; idle-seller price discount $\zeta\in(0,1)$.\\
+Offloading cap & $\omega^{\mathrm{ub}}_i$ & per-function cap on $\omega_i$ in the capped local best response (FaaS-MABR-O).\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Variables and state at iteration $h$}}\\
+Replicas & $r_i^f$ & number of $f$ replicas on $i$, $r_i^f\in\mathbb{N}_0$.\\
+Local / forwarded / Cloud load & $x_i^f$, $y_{ij}^f$, $z_i^f$ & locally served; forwarded $i\!\to\! j$; Cloud-offloaded [req/s].\\
+Offloaded demand & $\omega_i^f$ & horizontal demand still to place [req/s].\\
+Effective load & $\ell_i^f$ & load to be served at $i$ for $f$ [req/s].\\
+Capacity / residual / slack & $\mathrm{Cap}_i^f$, $C_i^f$, $\rho_i$ & exec.\ capacity (Eq.~2); residual exec.\ capacity (Eq.~12); memory slack (Eq.~13).\\
+Congestion ratio & $\kappa_i^f$ & utilization ratio for $f$ on $i$, $\kappa_i^f\in[0,1]$.\\
+Fairness term & $\phi_i^f$ & penalty on nodes that offload excessively.\\
+Execution price \emph{(MADeA only)} & $p_i^f$ & shadow cost of residual capacity; \textbf{removed} in \textsc{FaaS-MADiG}.\\
+Coordination score & $s_{ij}^f$ & price-free preference of buyer $i$ for seller $j$ (Eq.~\eqref{eq:mabr-score}).\\
+\bottomrule
+\end{tabular}
+\end{table}
+% ===================== END self-contained notation recap =====================
+
+\subsection{Sequential best-response sweep}
+\label{sec:mabr-sweep}
+
+At iteration $h$ the coordination is a single \emph{sweep} over the nodes. Let
+$\tilde C_j^f$ be the shared ledger, initialized to the true residual capacity
+$C_j^f(h)$ and decremented in place during the sweep. Visiting the nodes in the
+order $\sigma$ (a fixed index order or a per-sweep random permutation), each node
+$i$, for every $f$ with $\omega_i^f(h)>0$, admits the candidate sellers
+\begin{equation}
+  A_i^f(h)=\{\,j\in N_i : \tilde C_j^f \ge 1 \ \text{and}\ s_{ij}^f(h)>-\gamma_i^f\,\},
+  \qquad
+  s_{ij}^f(h)=\beta_{ij}^f-w_{\mathrm{lat}}L_{ij}-w_{\mathrm{fair}}\phi_i^f(h),
+  \label{eq:mabr-score}
+\end{equation}
+and claims their capacity greedily in descending score order (tie-break: lower
+node id), decrementing $\tilde C_{j}^f$ as it claims, until $\omega_i^f(h)$ is met
+or $A_i^f(h)$ is exhausted. The immediate decrement is what distinguishes
+Gauss-Seidel from the Jacobi snapshot of \textsc{FaaS-MADiG}: in a fixed-order
+sweep a node that acts earlier can consume capacity that a later node would
+otherwise have seen. Unplaced demand triggers the same price-free
+replica-expansion requests to neighbours with memory slack $\rho_j(h)>0$ as in
+\textsc{FaaS-MADiG} (the two-block emission), collected over the whole sweep and
+served by Algorithm~4 afterwards. The inter-sweep restricted re-solve makes the
+overall scheme a Gauss-Seidel relaxation: each sweep best-responds to the state
+left by the previous sweep's re-solve, and the loop stops at a fixed point (a
+sweep that places no new load and emits no expansion requests).
+
+\subsection{The three variants}
+\label{sec:mabr-variants}
+
+\textsc{FaaS-MABR} spans two axes.
+
+\paragraph{Node order.} \textsc{FaaS-MABR-S} sweeps in a fixed ascending node
+order (deterministic, reproducible). \textsc{FaaS-MABR-R} draws a fresh random
+node permutation each sweep from a per-run generator seeded once; statistical
+variance is obtained by repeating experiments, as for \textsc{FaaS-MAPoD}.
+
+\paragraph{Response type.} \textsc{FaaS-MABR-S}/\textsc{-R} use a \emph{sequential
+greedy} response: the node places its residual demand on the ledger as above.
+These are Gauss-Seidel greedy responses, not optimal best responses.
+\textsc{FaaS-MABR-O} uses a \emph{capped local best response}: before placing,
+node $i$ re-solves its local subproblem with the horizontal offloading capped at
+the capacity its neighbours currently still advertise,
+\begin{equation}
+  \omega_i^f \le \omega^{\mathrm{ub}}_{i,f}, \qquad
+  \omega^{\mathrm{ub}}_{i,f}=\sum_{j\in N_i}\tilde C_j^f ,
+  \label{eq:mabr-cap}
+\end{equation}
+so it can reduce its horizontal demand and leave the rest to local execution or
+Cloud forwarding in the subsequent restricted solve. Only the re-optimized
+$\omega_i$ is committed to the sweep before placement; the capped probe's
+$x/z/r$ are diagnostic, and the final feasible state is produced by the
+restricted re-solve with fixed $y$. (The fourth combination, randomized-order
+re-optimization, is not used.)
+
+\begin{algorithm}
+\caption{\textsc{FaaS-MABR} --- one sequential best-response sweep}
+\label{alg:mabr-sweep}
+\begin{algorithmic}[1]
+\Require ledger $\tilde C\gets C(h)$, residual demand $\omega(h)$, order $\sigma$, response $\in\{\text{greedy},\text{reopt}\}$
+\For{each node $i$ in order $\sigma$}
+  \If{response $=$ reopt}
+    \State $\omega^{\mathrm{ub}}_{i,f}\gets\sum_{j\in N_i}\tilde C_j^f$;\quad re-solve node $i$'s capped local problem; commit only $\omega_i$
+  \EndIf
+  \For{each $f$ with $\omega_i^f(h)>0$}
+    \State $A_i^f(h)\gets\{\,j\in N_i:\tilde C_j^f\ge1,\ s_{ij}^f(h)>-\gamma_i^f\,\}$
+    \State place $\omega_i^f(h)$ greedily by descending $s_{ij}^f(h)$ (tie-break lower id), decrementing $\tilde C_j^f$ in place
+    \If{demand remains} emit price-free replica-expansion requests to neighbours with $\rho_j(h)>0$ \EndIf
+  \EndFor
+\EndFor
+\State after the sweep: start additional replicas (Alg.~4); re-solve the restricted problem with fixed $y$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{What is kept and what changes}
+\label{sec:mabr-ablation}
+
+\noindent\textbf{Kept} (identical to \textsc{FaaS-MADiG}): the local
+problem~(P2); the advertised residual capacity and memory slack
+(Eqs.~(12)--(13)); the price-free score~\eqref{eq:mabr-score} and convenience
+threshold $\gamma_i^f$; the fairness penalty $\phi_i^f$; the price-free replica
+expansion of Algorithm~4; and the restricted re-solve.
+
+\noindent\textbf{Changed}: simultaneous (Jacobi) coordination becomes sequential
+(Gauss-Seidel) with an in-place-decremented ledger; the seller-clearing phase is
+removed (sequential updates produce no conflicts); and \textsc{FaaS-MABR-O} adds
+the anticipatory capped local re-optimization of Eq.~\eqref{eq:mabr-cap}.
+
+\subsection{Positioning with respect to the literature}
+\label{sec:mabr-related}
+
+We state plainly that \textsc{FaaS-MABR} instantiates a classical
+distributed-optimization pattern and is not claimed as novel. The sequential,
+in-place-update sweep is the \emph{Gauss-Seidel} relaxation, and the simultaneous
+snapshot of \textsc{FaaS-MADiG}/\textsc{FaaS-MAPoD} is its \emph{Jacobi}
+counterpart; both are textbook iterative schemes for distributed fixed-point
+computation~\citep{bertsekastsitsiklis1989}. \textsc{FaaS-MABR-S}/\textsc{-R} are
+sequential greedy responses (better-response, not exact best-response) dynamics,
+while \textsc{FaaS-MABR-O} computes a per-node capped best response. The
+underlying push of excess load to less-loaded neighbours remains the diffusion
+paradigm of Cybenko~\citep{cybenko1989}, and the relation to the auction is the
+familiar one between Gauss-Seidel relaxation and Bertsekas-style coordinate
+methods~\citep{bertsekas1988}. The value of the family is therefore the
+\emph{sequential-vs-simultaneous} contrast with \textsc{FaaS-MADiG} and the
+re-optimization ablation of \textsc{FaaS-MABR-O}, not a new heuristic.
