@@ -100,7 +100,9 @@ production capacity loop kept verbatim, every price-dependent piece removed:
   `sort_values(by=["utility", "i"], ascending=[False, True])`. The buyer that
   values seller `j` most for function `f` is served first.
 - The capacity-filling loop (`q = min(remaining_capacity, d)`, accumulate into
-  `y`, decrement `remaining_capacity`) is unchanged, and it still respects
+  `y`, decrement `remaining_capacity`) tracks the unserved remainder of every
+  request, including batched requests, and preserves continuous-valued capacity.
+  It still respects
   `residual_capacity[j,f]` (the array passed in this slot by the runner, see §3
   step 1 — `define_assignments` uses `blackboard`, the seller fill uses
   `residual_capacity`).
@@ -112,12 +114,15 @@ production capacity loop kept verbatim, every price-dependent piece removed:
   - no `min_b` tracking;
   - no final price update (`p[j,f] = min_b + eta·(u - u0)` and the
     `p[j,f] *= (1 - zeta)` decay) — `eta`, `zeta`, `u0` are not used;
-  - **previous-assignment replacement is kept, but price-free.** The production
+  - **previous-assignment replacement is kept, but price-free.** Seller/function
+    pairs targeted by a request remain eligible even with zero residual capacity
+    when they have incumbent load that can be re-awarded. The production
     swap is gated by `b_arr[next_bid_idx] > p[j,f]`; with prices removed
     (`p ≡ 0`) that test is not meaningful. FaaS-MADiG instead compares the
     candidate buyer's current `utility` with the incumbent buyer's current
     price-free score and replaces lower-score incumbent load when the seller
-    saturates.
+    saturates. Only incumbent load from `last_y` is replaceable; requests accepted
+    in the current score-ordered clearing retain their ordering.
 - `evaluate_assignments` returns `y`, `additional_replicas`, and `n_auctions`
   (`len(potential_sellers)`); **never a price array** (the production
   `evaluate_bids` returns `p` in slot 2 — that slot is dropped here).
@@ -130,6 +135,10 @@ what this ablation removes — is precisely the price coordination. Replica
 scaling (`start_additional_replicas`, tentative replicas), the
 restricted-problem re-solve, the fairness mechanism, the objective, and all
 stopping criteria are kept aligned with `run_faasmadea.py`.
+
+When `--fix_r` supplies an optimal replica plan, both the initial local solve and
+the restricted re-solve use their fixed-r variants, and coordination receives no
+memory slack. Replica expansion is therefore disabled for the whole run.
 
 ## 4. New module: `decentralized_diffusion.py`
 
@@ -263,6 +272,8 @@ Follow the existing `tests/` patterns (e.g. `test_run_faasmacro_helpers.py`,
     to `run_faasmadea.define_bids`, including `force_memory_bids`.
 - **Unit — `evaluate_assignments`:**
   - total assigned to seller `(j,f)` never exceeds `residual_capacity[j,f]`;
+  - fractional capacity is not truncated and a partially served batched request
+    retains its unserved remainder;
   - higher-`utility` buyers are served first; tie-break is the explicit
     secondary sort on buyer index `i` (assert a constructed tie resolves to the
     lower `i`, not insertion order);
@@ -273,7 +284,7 @@ Follow the existing `tests/` patterns (e.g. `test_run_faasmacro_helpers.py`,
   - score-based replacement: on an input where a seller saturates and a new
     buyer has higher utility than a previous incumbent in `last_y`, assert the
     returned `y` delta removes incumbent load and assigns it to the higher-score
-    buyer.
+    buyer, including when the seller starts with zero residual capacity.
 - **Unit — wiring/postprocessing:**
   - `run.parse_arguments` accepts `faas-diffuse`;
   - `run.results_postprocessing` maps `faas-diffuse` to `LSPc` /

@@ -21,7 +21,6 @@ from run_faasmadea import (
   check_ls_pr_feasibility_from_fixed_y,
   check_stopping_criteria,
   compute_residual_capacity,
-  ensure_memory_sellers,
   neigh_dict_to_matrix,
   start_additional_replicas,
 )
@@ -29,7 +28,7 @@ from decentralized_diffusion import evaluate_assignments
 from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
-from models.sp import LSP, LSP_fixedr, LSPr
+from models.sp import LSP, LSP_fixedr, LSPr, LSPr_fixedr
 
 from networkx import adjacency_matrix
 from collections import deque
@@ -86,9 +85,10 @@ def sample_assignments(
     potential_capacity_sellers = potential_sellers.intersection(
       set(np.where(blackboard[:, f] >= 1)[0])
     )
-    potential_memory_sellers = potential_sellers.intersection(
-      set(np.nonzero(rho)[0])
-    )
+    memory_requirement = data[None]["memory_requirement"][f + 1]
+    potential_memory_sellers = {
+      int(j) for j in potential_sellers if rho[int(j)] >= memory_requirement
+    }
     score = {}
     candidates = []
     for j in potential_capacity_sellers:
@@ -126,7 +126,7 @@ def sample_assignments(
       remaining[j_star] -= q
       if remaining[j_star] < 1:
         candidates.remove(j_star)
-    if assigned < omega[i, f]:
+    if assigned < omega[i, f] or force_memory_bids:
       for j in sorted(score, key=lambda k: (-score[k], k)):
         if j in potential_memory_sellers:
           memory_bids["i"].append(i)
@@ -241,7 +241,7 @@ def run(
         for f in range(Nf):
           sp_data[None]["r_bar"][(n + 1, f + 1)] = int(opt_r[n, f])
     sp = LSP() if opt_solution is None else LSP_fixedr()
-    spr = LSPr()
+    spr = LSPr() if opt_solution is None else LSPr_fixedr()
     (
       sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
     ) = solve_subproblem(
@@ -254,7 +254,7 @@ def run(
     best_centralized_solution = None
     best_cost_so_far = np.inf
     spr_obj = np.inf
-    best_centralized_cost = 0.0
+    best_centralized_cost = -np.inf
     best_it_so_far = -1
     best_centralized_it = -1
     y = np.zeros((Nn, Nn, Nf))
@@ -267,13 +267,16 @@ def run(
         sp_x, y, sp_r, sp_data
       )
       blackboard = np.maximum(0.0, capacity - sp_x)
+      coordination_rho = (
+        sp_rho if opt_solution is None else np.zeros_like(sp_rho)
+      )
       total_runtime += (datetime.now() - s).total_seconds()
       s = datetime.now()
       bids, memory_bids, n_auctions = sample_assignments(
-        omega, blackboard, sp_data, neighborhood, sp_rho,
+        omega, blackboard, sp_data, neighborhood, coordination_rho,
         powerd_options, latency, fairness,
         force_memory_bids=(
-          (sp_rho > 0).any()
+          (coordination_rho > 0).any()
           and len(n_accepted_queue) >= n_accepted_queue.maxlen
           and all(x == n_accepted_queue[0] for x in n_accepted_queue)
         ),
@@ -281,12 +284,12 @@ def run(
       )
       rt = (datetime.now() - s).total_seconds()
       total_runtime += (rt / n_auctions) if n_auctions else rt
-      rmp_omega = np.zeros((Nn, Nf))
+      rmp_omega = y.sum(axis=1)
       additional_replicas = np.zeros((Nn, Nf))
       if len(bids) > 0:
         s = datetime.now()
         diffusion_y, additional_replicas, n_sellers = evaluate_assignments(
-          bids, residual_capacity, sp_data, ell, sp_r, sp_rho,
+          bids, residual_capacity, sp_data, ell, sp_r, coordination_rho,
           tentatively_start_replicas=(len(memory_bids) == 0),
           last_y=y,
           diffusion_options=powerd_options,
@@ -296,11 +299,9 @@ def run(
         rt = (datetime.now() - s).total_seconds()
         total_runtime += (rt / n_sellers) if n_sellers else rt
         y += diffusion_y
-        for n in range(Nn):
-          for f in range(Nf):
-            rmp_omega[n, f] = y[n, :, f].sum()
-            if rmp_omega[n, f] > 0:
-              fairness[n, f] += 1
+        y[np.abs(y) < tolerance] = 0.0
+        rmp_omega = y.sum(axis=1)
+        fairness += (rmp_omega > tolerance)
         n_accepted_queue.append(rmp_omega.sum())
         bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
         if bad_nodes:
@@ -311,11 +312,8 @@ def run(
         )
         total_runtime += spr_runtime
         sp_x, _, _, _, sp_r, sp_rho = spr_sol
-        for i in range(Nn):
-          for f in range(Nf):
-            omega[i, f] = sp_omega[i, f] - rmp_omega[i, f]
-            if abs(omega[i, f]) < tolerance:
-              omega[i, f] = 0.0
+        omega = sp_omega - rmp_omega
+        omega[np.abs(omega) < tolerance] = 0.0
       if len(memory_bids) > 0 and not (additional_replicas > 0).any():
         s = datetime.now()
         additional_replicas, sp_rho = start_additional_replicas(

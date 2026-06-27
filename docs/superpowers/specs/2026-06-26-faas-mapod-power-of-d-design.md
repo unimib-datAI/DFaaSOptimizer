@@ -29,7 +29,7 @@ buy over probing a random sample of `d`?*
 ## 2. Scope decisions (settled during brainstorming)
 
 - **Local planning reused unchanged.** Same as FaaS-MADiG: each node solves the
-  local MILP `LSP`/`LSPr` (or `LSP_fixedr` when `--fix_r` provides an
+  local MILP `LSP`/`LSPr` (or `LSP_fixedr`/`LSPr_fixedr` when `--fix_r` provides an
   `opt_solution_folder`), fixing `r`, `x`, residual `omega`; only the buyer-side
   request generation differs.
 - **Two selection criteria, config-selectable** (`criterion ∈ {"score","capacity"}`):
@@ -66,7 +66,8 @@ generation:
   `start_additional_replicas`, `ensure_memory_sellers`,
   `check_ls_pr_feasibility_from_fixed_y`, `VAR_TYPE`.
 - **Reused unchanged from the current FaaS-MADiG runner path:**
-  `load_solution`, `encode_solution`, `LSP`, `LSP_fixedr`, and `LSPr`, so
+  `load_solution`, `encode_solution`, `LSP`, `LSP_fixedr`, `LSPr`, and
+  `LSPr_fixedr`, so
   `--fix_r` / `opt_solution_folder` behaves exactly as in FaaS-MADiG.
 - **New function** `sample_assignments(...)` replaces
   `define_assignments`. **New `run(...)`** is a copy of

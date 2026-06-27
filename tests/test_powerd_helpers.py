@@ -224,3 +224,19 @@ def test_sample_assignments_unit_bids_emits_one_unit_per_request():
   assert len(bids) == 3
   assert (bids["d"] == 1).all()
   assert (bids["j"] == 1).all()
+
+
+def test_sample_assignments_force_memory_bids_includes_capacity_seller():
+  data = _base_data(Nn=2, Nf=1)
+  omega = np.array([[1.0], [0.0]])
+  blackboard = np.array([[0.0], [1.0]])
+  rho = np.array([0.0, 2.0])
+  neighborhood = np.array([[0.0, 1.0], [1.0, 0.0]])
+
+  _, memory_bids, _ = sample_assignments(
+    omega, blackboard, data, neighborhood, rho, _opts(),
+    np.zeros((2, 2)), np.zeros((2, 1)), force_memory_bids=True,
+    rng=np.random.default_rng(0),
+  )
+
+  assert list(memory_bids[["i", "j", "f"]].iloc[0]) == [0, 1, 0]

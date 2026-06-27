@@ -34,13 +34,20 @@ def test_powerd_run_uses_fixed_replicas_without_mutating_options(tmp_path, monke
   )
   monkeypatch.setattr(decentralized_powerd, "LSP", lambda: "LSP")
   monkeypatch.setattr(decentralized_powerd, "LSP_fixedr", lambda: "LSP_fixedr", raising=False)
+  monkeypatch.setattr(
+    decentralized_powerd, "LSPr", lambda: seen.setdefault("spr", "LSPr")
+  )
+  monkeypatch.setattr(
+    decentralized_powerd, "LSPr_fixedr",
+    lambda: seen.setdefault("spr", "LSPr_fixedr"), raising=False,
+  )
 
   def _solve_subproblem(sp_data, agents, sp, *args):
     seen["sp"] = sp
     seen["r_bar"] = dict(sp_data[None].get("r_bar", {}))
     return (
       sp_data, np.zeros((1, 1)), None, None, np.zeros((1, 1)),
-      np.ones((1, 1)), np.zeros((1,)), np.zeros((1, 1)),
+      np.ones((1, 1)), np.array([5.0]), np.zeros((1, 1)),
       {"tot": 0.0}, {"tot": "ok"}, {"tot": 0.0},
     )
 
@@ -51,23 +58,31 @@ def test_powerd_run_uses_fixed_replicas_without_mutating_options(tmp_path, monke
     decentralized_powerd, "compute_residual_capacity",
     lambda *args: (np.zeros((1, 1)), np.zeros((1, 1)), np.zeros((1, 1))),
   )
-  monkeypatch.setattr(
-    decentralized_powerd, "sample_assignments",
-    lambda *args, **kwargs: (
+  def _sample_assignments(*args, **kwargs):
+    seen["coordination_rho"] = np.array(args[4], copy=True)
+    return (
       __import__("pandas").DataFrame({"i": [], "j": [], "f": [], "d": [], "utility": []}),
       __import__("pandas").DataFrame({"i": [], "j": [], "f": []}),
       0,
-    ),
-  )
+    )
+
+  monkeypatch.setattr(decentralized_powerd, "sample_assignments", _sample_assignments)
   monkeypatch.setattr(
     decentralized_powerd, "combine_solutions",
     lambda *args: {"sp": {"x": np.zeros((1, 1)), "y": np.zeros((1, 1, 1)), "z": np.zeros((1, 1)), "r": np.ones((1, 1)), "U": np.zeros((1, 1))}},
   )
-  monkeypatch.setattr(decentralized_powerd, "compute_centralized_objective", lambda *args: 1.0)
+  monkeypatch.setattr(decentralized_powerd, "compute_centralized_objective", lambda *args: -1.0)
   monkeypatch.setattr(decentralized_powerd, "check_feasibility", lambda *args: (True, "ok"))
+  decoded = []
+
+  def _decode(sp_data, solution, complete, arg):
+    decoded.append(solution)
+    assert solution is not None
+    return complete, None, 1.0
+
   monkeypatch.setattr(
     decentralized_powerd, "decode_solutions",
-    lambda sp_data, solution, complete, arg: (complete, None, 1.0),
+    _decode,
   )
   monkeypatch.setattr(
     decentralized_powerd, "join_complete_solution",
@@ -100,7 +115,10 @@ def test_powerd_run_uses_fixed_replicas_without_mutating_options(tmp_path, monke
   decentralized_powerd.run(config, parallelism=0, disable_plotting=True)
 
   assert seen["sp"] == "LSP_fixedr"
+  assert seen["spr"] == "LSPr_fixedr"
   assert seen["r_bar"] == {(1, 1): 3}
+  assert (seen["coordination_rho"] == 0).all()
+  assert len(decoded) == 2
   # run() applied its defaults to a COPY, not the input config
   assert "d" not in config["solver_options"]["powerd"]
   assert "unit_bids" not in config["solver_options"]["powerd"]

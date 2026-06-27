@@ -10,6 +10,7 @@ def _base_data(Nn=4, Nf=1):
     "Nf": {None: Nf},
     "beta": {},
     "gamma": {},
+    "memory_requirement": {f + 1: 2 for f in range(Nf)},
   }}
   for i in range(Nn):
     for f in range(Nf):
@@ -159,3 +160,55 @@ def test_sweep_emits_block_a_memory_bid_for_capacity_and_memory_seller():
   assert placed == 2.0
   assert len(mem) == 1
   assert list(mem[["i", "j", "f"]].iloc[0]) == [0, 1, 0]
+
+
+def test_sweep_revises_existing_buyer_allocation_as_coordinate_delta():
+  data = _base_data(Nn=3, Nf=1)
+  data[None]["beta"][(1, 2, 1)] = 1.0
+  data[None]["beta"][(1, 3, 1)] = 5.0
+  target_omega = np.zeros((3, 1)); target_omega[0, 0] = 2.0
+  residual = np.zeros((3, 1)); residual[2, 0] = 2.0
+  current_y = np.zeros((3, 3, 1)); current_y[0, 1, 0] = 2.0
+  neighborhood = np.zeros((3, 3)); neighborhood[0, 1:] = 1
+
+  delta_y, _, n_active, placed, _ = best_response_sweep(
+    target_omega, residual, data, neighborhood, np.zeros(3), _opts(),
+    np.zeros((3, 3)), np.zeros((3, 1)), force_memory_bids=False,
+    order="fixed", response="greedy", current_y=current_y,
+  )
+
+  assert n_active == 1
+  assert placed == 2.0
+  assert delta_y[0, 1, 0] == -2.0
+  assert delta_y[0, 2, 0] == 2.0
+  assert delta_y.sum() == 0.0
+
+
+def test_sweep_counts_buyer_that_cannot_place_as_active():
+  data = _base_data(Nn=2, Nf=1)
+  omega = np.zeros((2, 1)); omega[0, 0] = 1.0
+
+  _, _, n_active, placed, _ = best_response_sweep(
+    omega, np.zeros((2, 1)), data,
+    np.array([[0.0, 1.0], [1.0, 0.0]]), np.zeros(2), _opts(),
+    np.zeros((2, 2)), np.zeros((2, 1)), force_memory_bids=False,
+    order="fixed", response="greedy",
+  )
+
+  assert n_active == 1
+  assert placed == 0.0
+
+
+def test_sweep_force_memory_bids_includes_capacity_seller():
+  data = _base_data(Nn=2, Nf=1)
+  omega = np.zeros((2, 1)); omega[0, 0] = 1.0
+  residual = np.zeros((2, 1)); residual[1, 0] = 1.0
+  rho = np.zeros(2); rho[1] = 2.0
+
+  _, memory_bids, _, _, _ = best_response_sweep(
+    omega, residual, data, np.array([[0.0, 1.0], [1.0, 0.0]]),
+    rho, _opts(), np.zeros((2, 2)), np.zeros((2, 1)),
+    force_memory_bids=True, order="fixed", response="greedy",
+  )
+
+  assert list(memory_bids[["i", "j", "f"]].iloc[0]) == [0, 1, 0]

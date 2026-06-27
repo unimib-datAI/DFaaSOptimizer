@@ -106,7 +106,8 @@ def test_faasmadea_stopping_capacity_utility_and_bid_helpers():
     np.array([0.0, 10.0]),
   )
   assert additional[1, 0] == 3
-  assert rho[1] == 4.0
+  assert additional[1, 1] == 1
+  assert rho[1] == 1.0
 
 
 def test_decentralized_auction_bid_definition_and_helpers():
@@ -185,6 +186,20 @@ def test_decentralized_auction_bid_definition_and_helpers():
   )
   assert stop is True
   assert why == "all load assigned"
+
+
+def test_start_additional_replicas_redistributes_fractional_memory_remainder():
+  data = _auction_data()
+  data[None]["memory_requirement"] = {1: 4, 2: 4}
+
+  additional, rho = run_faasmadea.start_additional_replicas(
+    pd.DataFrame({"j": [1, 1], "f": [0, 1]}),
+    np.zeros((2, 2)), data, np.array([0.0, 5.0]),
+  )
+
+  assert additional[1].sum() == 1
+  assert additional[1, 0] == 1
+  assert rho[1] == 1.0
 
 
 def test_greedy_coordinator_solves_simple_offloading_instance():

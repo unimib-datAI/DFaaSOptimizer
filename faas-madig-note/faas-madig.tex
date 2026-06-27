@@ -126,8 +126,8 @@ left untouched.
 Algorithm~\ref{alg:madig-loop} summarizes the full control-period loop. Inside
 each diffusion iteration, two deterministic rules replace the auction's
 bid/clear cycle. On the buyer side (Algorithm~\ref{alg:madig-buyer}), node $i$
-sorts its candidate sellers by
-descending score~\eqref{eq:madig-score} and greedily claims advertised
+sorts its candidate sellers by descending score~\eqref{eq:madig-score}, breaking
+ties by lower seller id, and greedily claims advertised
 blackboard capacity until its demand $\omega_i^f(h)$ is met or the
 neighbourhood is saturated; any
 shortfall triggers \emph{price-free} replica-expansion requests to neighbours
@@ -180,14 +180,14 @@ $u\le U^f_{\max}$) and therefore needs no price.
          memory slacks $\rho_j(h)$ on the blackboard
 \For{each function $f$ with $\omega_i^f(h)>0$}
   \State $A_i^f(h)\gets\{\,j\in N_i: \bar C_j^f(h)\ge 1 \text{ and } s_{ij}^f(h)>-\gamma_i^f\,\}$
-  \State sort $A_i^f(h)$ by \textbf{descending} $s_{ij}^f(h)$
+  \State sort $A_i^f(h)$ by $(\textbf{descending }s_{ij}^f(h),\ \textbf{ascending }j)$
   \State $o\gets 0$ \Comment{load already placed}
   \For{$j\in A_i^f(h)$ \textbf{while} $o<\omega_i^f(h)$}
      \State $d\gets\min\!\big(\bar C_j^f(h),\,\omega_i^f(h)-o\big)$ \Comment{unit bids if enabled}
      \State emit assignment request $(i\!\to\! j,f,d)$;\quad $o\gets o+d$
   \EndFor
-  \If{$o<\omega_i^f(h)$} \Comment{capacity insufficient}
-     \For{$j\in N_i$ with $\rho_j(h)>0$ and $j$ not already a capacity seller}
+  \If{$o<\omega_i^f(h)$ or replica expansion is forced} \Comment{shortfall or stagnation}
+     \For{$j\in N_i$ with $\rho_j(h)\ge \mathrm{RAM}^f$}
         \State emit \emph{price-free} replica-expansion request $(i\!\to\! j,f)$
      \EndFor
   \EndIf
@@ -200,11 +200,11 @@ $u\le U^f_{\max}$) and therefore needs no price.
 \label{alg:madig-seller}
 \begin{algorithmic}[1]
 \Require requests received by $j$, residual capacity $C_j^f(h)$, memory slack $\rho_j(h)$
-\For{each function $f$ with $C_j^f(h)>0$ \textbf{or} pending expansion requests}
+\For{each function $f$ with $C_j^f(h)>0$, incumbent load, \textbf{or} pending expansion requests}
   \State sort received requests by $\big(\text{descending } s_{ij}^f(h),\ \text{ascending } i\big)$
   \State $c\gets C_j^f(h)$
   \While{requests remain \textbf{and} $c>0$}
-     \State $q\gets\min(c,\,d_{\text{req}})$;\quad $y_{ij}^f\mathrel{+}= q$;\quad $c\gets c-q$
+     \State $q\gets\min(c,\,d_{\text{remaining}})$;\quad $y_{ij}^f\mathrel{+}= q$;\quad $c\gets c-q$;\quad $d_{\text{remaining}}\gets d_{\text{remaining}}-q$
   \EndWhile
   \If{$c=0$ \textbf{and} expansion requests remain \textbf{and} $\rho_j(h)>0$}
      \State tentatively start replicas as in Alg.~4 \Comment{utilization test $\kappa_j^f\le1$; no price}

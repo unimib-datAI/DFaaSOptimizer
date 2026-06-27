@@ -25,6 +25,20 @@ import logging
 logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 
+METHOD_RESULT_MODELS = {
+  "centralized": ("LoadManagementModel", "LoadManagementModel"),
+  "faas-macro": ("LSP", "FaaS-MACrO"),
+  "faas-macro-v0": ("LSP", "FaaS-MACrO(v0)"),
+  "faas-madea": ("LSPc", "FaaS-MADeA"),
+  "hierarchical": ("LSPc", "HierarchicalAuction"),
+  "faas-diffuse": ("LSPc", "FaaS-MADiG"),
+  "faas-powd": ("LSPc", "FaaS-MAPoD"),
+  "faas-br-s": ("LSPc", "FaaS-MABR-S"),
+  "faas-br-r": ("LSPc", "FaaS-MABR-R"),
+  "faas-br-o": ("LSPc", "FaaS-MABR-O"),
+}
+
+
 def parse_arguments() -> argparse.Namespace:
   """
   Parse input arguments
@@ -79,8 +93,8 @@ def parse_arguments() -> argparse.Namespace:
   parser.add_argument(
     "--fix_r",
     help = "True to fix the number of replicas in FaaS-MACrO, FaaS-MADeA, "
-           "FaaS-MADiG, and FaaS-MAPoD according to the optimal centralized "
-           "solution",
+           "FaaS-MADiG, FaaS-MAPoD, and FaaS-MABR according to the optimal "
+           "centralized solution",
     default = False,
     action = "store_true"
   )
@@ -289,26 +303,7 @@ def results_postprocessing(
         )
         # -- load results
         # ---- local_count, fwd_count, rej_count, replicas, ping_pong
-        mkey = "LoadManagementModel" if method == "centralized" else (
-          "LSP" if method.startswith("faas-macro") else "LSPc"
-        )
-        mname = "LoadManagementModel" if method == "centralized" else (
-          "FaaS-MACrO" if method == "faas-macro" else (
-            "FaaS-MACrO(v0)" if method == "faas-macro-v0" else (
-              "FaaS-MADeA" if method == "faas-madea" else (
-                "FaaS-MADiG" if method == "faas-diffuse" else (
-                  "FaaS-MAPoD" if method == "faas-powd" else (
-                    "FaaS-MABR-S" if method == "faas-br-s" else (
-                      "FaaS-MABR-R" if method == "faas-br-r" else (
-                        "FaaS-MABR-O" if method == "faas-br-o" else "HierarchicalAuction"
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
+        mkey, mname = METHOD_RESULT_MODELS[method]
         results.append(load_models_results(abs_folders[-1], [mkey], [mname]))
         # -- check ping-pong problems
         if len(results[-1][-1][mname]) > 0:

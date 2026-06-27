@@ -81,6 +81,13 @@ def test_diffusion_run_uses_fixed_replicas_without_mutating_options(tmp_path, mo
   )
   monkeypatch.setattr(decentralized_diffusion, "LSP", lambda: "LSP")
   monkeypatch.setattr(decentralized_diffusion, "LSP_fixedr", lambda: "LSP_fixedr", raising=False)
+  monkeypatch.setattr(
+    decentralized_diffusion, "LSPr", lambda: seen.setdefault("spr", "LSPr")
+  )
+  monkeypatch.setattr(
+    decentralized_diffusion, "LSPr_fixedr",
+    lambda: seen.setdefault("spr", "LSPr_fixedr"), raising=False,
+  )
 
   def _solve_subproblem(sp_data, agents, sp, *args):
     seen["sp"] = sp
@@ -92,7 +99,7 @@ def test_diffusion_run_uses_fixed_replicas_without_mutating_options(tmp_path, mo
       None,
       np.zeros((1, 1)),
       np.ones((1, 1)),
-      np.zeros((1,)),
+      np.array([5.0]),
       np.zeros((1, 1)),
       {"tot": 0.0},
       {"tot": "ok"},
@@ -107,26 +114,33 @@ def test_diffusion_run_uses_fixed_replicas_without_mutating_options(tmp_path, mo
     "compute_residual_capacity",
     lambda *args: (np.zeros((1, 1)), np.zeros((1, 1)), np.zeros((1, 1))),
   )
-  monkeypatch.setattr(
-    decentralized_diffusion,
-    "define_assignments",
-    lambda *args, **kwargs: (
+  def _define_assignments(*args, **kwargs):
+    seen["coordination_rho"] = np.array(args[4], copy=True)
+    return (
       __import__("pandas").DataFrame({"i": [], "j": [], "f": [], "d": [], "utility": []}),
       __import__("pandas").DataFrame({"i": [], "j": [], "f": []}),
       0,
-    ),
-  )
+    )
+
+  monkeypatch.setattr(decentralized_diffusion, "define_assignments", _define_assignments)
   monkeypatch.setattr(
     decentralized_diffusion,
     "combine_solutions",
     lambda *args: {"sp": {"x": np.zeros((1, 1)), "y": np.zeros((1, 1, 1)), "z": np.zeros((1, 1)), "r": np.ones((1, 1)), "U": np.zeros((1, 1))}},
   )
-  monkeypatch.setattr(decentralized_diffusion, "compute_centralized_objective", lambda *args: 1.0)
+  monkeypatch.setattr(decentralized_diffusion, "compute_centralized_objective", lambda *args: -1.0)
   monkeypatch.setattr(decentralized_diffusion, "check_feasibility", lambda *args: (True, "ok"))
+  decoded = []
+
+  def _decode(sp_data, solution, complete, arg):
+    decoded.append(solution)
+    assert solution is not None
+    return complete, None, 1.0
+
   monkeypatch.setattr(
     decentralized_diffusion,
     "decode_solutions",
-    lambda sp_data, solution, complete, arg: (complete, None, 1.0),
+    _decode,
   )
   monkeypatch.setattr(
     decentralized_diffusion,
@@ -160,5 +174,8 @@ def test_diffusion_run_uses_fixed_replicas_without_mutating_options(tmp_path, mo
   decentralized_diffusion.run(config, parallelism=0, disable_plotting=True)
 
   assert seen["sp"] == "LSP_fixedr"
+  assert seen["spr"] == "LSPr_fixedr"
   assert seen["r_bar"] == {(1, 1): 3}
+  assert (seen["coordination_rho"] == 0).all()
+  assert len(decoded) == 2
   assert "unit_bids" not in config["solver_options"]["diffusion"]

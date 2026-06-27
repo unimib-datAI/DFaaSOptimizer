@@ -479,18 +479,34 @@ def start_additional_replicas(
   residual_capacity = deepcopy(rho)
   for j, bids_for_j in memory_bids.groupby("j"):
     if rho[j] > 0:
+      seller_capacity = float(rho[j])
       # count the fraction that each function requires
-      fractions = bids_for_j["f"].value_counts(normalize = True)
+      fractions = bids_for_j["f"].value_counts(normalize = True).sort_index()
+      allocated_memory = {}
       # assign new replicas proportionally to this fraction
       for f, frac in fractions.items():
         # -- check memory requirement
         ram_f = data[None]["memory_requirement"][f+1]
         # -- determine the maximum number of replicas that fit in the 
         # assignable fraction of the residual memory capacity
-        a = int((residual_capacity[j] * frac) // ram_f)
+        a = int((seller_capacity * frac) // ram_f)
         # -- update
         residual_capacity[j] -= int(ram_f * a)
         additional_replicas[j,f] = a
+        allocated_memory[f] = ram_f * a
+      while True:
+        candidates = []
+        for f, frac in fractions.items():
+          ram_f = data[None]["memory_requirement"][f+1]
+          deficit = seller_capacity * frac - allocated_memory[f]
+          if ram_f <= residual_capacity[j] and deficit > 0:
+            candidates.append((deficit, frac, -int(f), int(f), ram_f))
+        if not candidates:
+          break
+        _, _, _, f, ram_f = max(candidates)
+        additional_replicas[j, f] += 1
+        allocated_memory[f] += ram_f
+        residual_capacity[j] -= ram_f
   return additional_replicas, residual_capacity
 
 

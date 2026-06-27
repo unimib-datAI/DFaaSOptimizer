@@ -100,16 +100,17 @@ Coordination score & $s_{ij}^f$ & price-free preference of buyer $i$ for seller 
 
 At iteration $h$ the coordination is a single \emph{sweep} over the nodes. Let
 $\tilde C_j^f$ be the shared ledger, initialized to the true residual capacity
-$C_j^f(h)$ and decremented in place during the sweep. Visiting the nodes in the
+$C_j^f(h)$ and updated in place during the sweep. Before node $i$ responds, its
+current assignment row $y_{i\cdot}^f(h)$ is released back to the ledger. Visiting the nodes in the
 order $\sigma$ (a fixed index order or a per-sweep random permutation), each node
-$i$, for every $f$ with $\omega_i^f(h)>0$, admits the candidate sellers
+$i$, for every $f$ with target $\omega_i^f(h)>0$, admits the candidate sellers
 \begin{equation}
   A_i^f(h)=\{\,j\in N_i : \tilde C_j^f \ge 1 \ \text{and}\ s_{ij}^f(h)>-\gamma_i^f\,\},
   \qquad
   s_{ij}^f(h)=\beta_{ij}^f-w_{\mathrm{lat}}L_{ij}-w_{\mathrm{fair}}\phi_i^f(h),
   \label{eq:mabr-score}
 \end{equation}
-and claims their capacity greedily in descending score order (tie-break: lower
+and constructs a replacement row greedily in descending score order (tie-break: lower
 node id), decrementing $\tilde C_{j}^f$ as it claims, until $\omega_i^f(h)$ is met
 or $A_i^f(h)$ is exhausted. The immediate decrement is what distinguishes
 Gauss-Seidel from the Jacobi snapshot of \textsc{FaaS-MADiG}: in a fixed-order
@@ -120,7 +121,7 @@ replica-expansion requests to neighbours with memory slack $\rho_j(h)>0$ as in
 served by Algorithm~4 afterwards. The inter-sweep restricted re-solve makes the
 overall scheme a Gauss-Seidel relaxation: each sweep best-responds to the state
 left by the previous sweep's re-solve, and the loop stops at a fixed point (a
-sweep that places no new load and emits no expansion requests).
+sweep whose coordinate deltas are zero and that starts no replicas).
 
 \subsection{The three variants}
 \label{sec:mabr-variants}
@@ -133,7 +134,7 @@ node permutation each sweep from a per-run generator seeded once; statistical
 variance is obtained by repeating experiments, as for \textsc{FaaS-MAPoD}.
 
 \paragraph{Response type.} \textsc{FaaS-MABR-S}/\textsc{-R} use a \emph{sequential
-greedy} response: the node places its residual demand on the ledger as above.
+greedy} response: the node replaces its complete buyer row on the ledger as above.
 These are Gauss-Seidel greedy responses, not optimal best responses.
 \textsc{FaaS-MABR-O} uses a \emph{capped local best response}: before placing,
 node $i$ re-solves its local subproblem with the horizontal offloading capped at
@@ -150,20 +151,26 @@ $x/z/r$ are diagnostic, and the final feasible state is produced by the
 restricted re-solve with fixed $y$. (The fourth combination, randomized-order
 re-optimization, is not used.)
 
+When the experiment fixes the centralized replica plan, both the capped probe
+and the restricted re-solve enforce that plan and the coordination phase receives
+zero memory slack; replica expansion is therefore disabled throughout the run.
+
 \begin{algorithm}
 \caption{\textsc{FaaS-MABR} --- one sequential best-response sweep}
 \label{alg:mabr-sweep}
 \begin{algorithmic}[1]
-\Require ledger $\tilde C\gets C(h)$, residual demand $\omega(h)$, order $\sigma$, response $\in\{\text{greedy},\text{reopt}\}$
+\Require ledger $\tilde C\gets C(h)$, current assignment $y(h)$, offloading target $\omega(h)$, order $\sigma$, response $\in\{\text{greedy},\text{reopt}\}$
 \For{each node $i$ in order $\sigma$}
+  \State $\tilde C_j^f\gets\tilde C_j^f+y_{ij}^f(h)$ for all $j,f$; initialize replacement row $y'_{i\cdot}\gets0$
   \If{response $=$ reopt}
     \State $\omega^{\mathrm{ub}}_{i,f}\gets\sum_{j\in N_i}\tilde C_j^f$;\quad re-solve node $i$'s capped local problem; commit only $\omega_i$
   \EndIf
   \For{each $f$ with $\omega_i^f(h)>0$}
     \State $A_i^f(h)\gets\{\,j\in N_i:\tilde C_j^f\ge1,\ s_{ij}^f(h)>-\gamma_i^f\,\}$
-    \State place $\omega_i^f(h)$ greedily by descending $s_{ij}^f(h)$ (tie-break lower id), decrementing $\tilde C_j^f$ in place
-    \If{demand remains} emit price-free replica-expansion requests to neighbours with $\rho_j(h)>0$ \EndIf
+    \State place $\omega_i^f(h)$ into $y'_{i\cdot}$ greedily by descending $s_{ij}^f(h)$ (tie-break lower id), decrementing $\tilde C_j^f$ in place
+    \If{demand remains or expansion is forced} emit requests to neighbours with $\rho_j(h)\ge\mathrm{RAM}^f$ \EndIf
   \EndFor
+  \State commit coordinate delta $\Delta y_{i\cdot}\gets y'_{i\cdot}-y_{i\cdot}(h)$
 \EndFor
 \State after the sweep: start additional replicas (Alg.~4); re-solve the restricted problem with fixed $y$
 \end{algorithmic}

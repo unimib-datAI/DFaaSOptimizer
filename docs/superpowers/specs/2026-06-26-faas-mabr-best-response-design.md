@@ -92,11 +92,13 @@ cross-buyer conflicts to resolve).
 `decentralized_diffusion.run` (`for t: LSP → while not stop_searching: coordinate
 → re-solve LSPr → update omega → check stop → save`). Only the **coordinate**
 step changes: one call to `best_response_sweep` (one sequential sweep) replaces
-the `define_assignments`+`evaluate_assignments` pair. The inter-sweep `LSPr`
+the `define_assignments`+`evaluate_assignments` pair. Each visited buyer releases
+its current assignment row before computing and immediately committing a
+replacement row. The inter-sweep `LSPr`
 re-solve is what makes this the Gauss-Seidel analogue (each sweep responds to
 the state left by the previous sweep's re-solve). `_run` adds one explicit
-MABR-specific fixed-point guard: if a sweep places no new load and emits no
-memory bids, stop with `"no best-response progress"`. The existing
+MABR-specific fixed-point guard: if a sweep changes no assignment and starts no
+replica, stop with `"no best-response progress"`. The existing
 `check_stopping_criteria` is still used for no capacity, all load assigned,
 `max_iterations`, unavailable sellers, and time limit.
 
@@ -105,7 +107,7 @@ memory bids, stop with `"no best-response progress"`. The existing
 ```
 best_response_sweep(omega, residual_ledger, data, neighborhood, rho,
                     br_options, latency, fairness, force_memory_bids,
-                    *, order, response, rng=None,
+                    *, order, response, rng=None, current_y=None,
                     reopt_ctx=None) -> (y_increment, memory_bids, n_active,
                                         placed_total, reopt_runtime)
 ```
@@ -113,16 +115,22 @@ best_response_sweep(omega, residual_ledger, data, neighborhood, rho,
   (from `compute_residual_capacity`), `shape (Nn, Nf)`, decremented in place as
   nodes claim — this is the shared ledger that gives Gauss-Seidel its
   immediate-update behaviour.
-- Returns `y_increment` `(Nn, Nn, Nf)` (this sweep's placements), `memory_bids`
+- `current_y` is the assignment tensor at sweep entry. Before node `i` responds,
+  `current_y[i,:,:]` is released back to the ledger.
+- Returns `y_increment` `(Nn, Nn, Nf)` as the coordinate delta
+  `new_y[i,:,:] - current_y[i,:,:]`, `memory_bids`
   DataFrame `[i,j,f]` (price-free replica-expansion requests, identical to
   FaaS-MADiG), `n_active` (number of nodes that acted this sweep, for runtime
-  amortization), `placed_total = y_increment.sum()`, and `reopt_runtime`, the
+  amortization), `placed_total` equal to the gross load in the newly constructed
+  rows, and `reopt_runtime`, the
   full, non-amortized time spent in per-node `LSP_capped` solves.
 
 **Sweep body.** Determine node visiting order: `range(Nn)` if `order=="fixed"`,
-else `rng.permutation(Nn)`. For each node `i` in that order, for each `f` with
-`omega[i,f] > 0`:
-1. (**FaaS-MABR-O only**) re-optimize: cap `omega[i,f]` at the accessible
+else `rng.permutation(Nn)`. For each node `i` in that order with a positive
+offloading target or an existing assignment row:
+1. Release `current_y[i,:,:]` into the shared ledger and initialize an empty new
+   row for buyer `i`.
+2. (**FaaS-MABR-O only**) re-optimize: cap `omega[i,f]` at the accessible
    neighbour capacity `sum_{j in N_i} residual_ledger[j,f]` and re-solve node
    `i`'s local subproblem via `reopt_ctx` (§3.2). Only the re-optimized
    `omega_i` row is committed to the sweep state before placement; `x`, `z`,
@@ -130,16 +138,18 @@ else `rng.permutation(Nn)`. For each node `i` in that order, for each `f` with
    global solution. The final feasible `x/z/r/rho` state is still produced by
    the subsequent restricted `LSPr` solve with fixed `y`. `-S`/`-R` skip this
    step.
-2. Admit candidates `j in N_i` with `residual_ledger[j,f] >= 1` and
+3. Admit candidates `j in N_i` with `residual_ledger[j,f] >= 1` and
    `s_{ij}^f > −gamma_i^f`; sort by descending `s_{ij}^f` (tie-break lower `j`).
-3. Place greedily: for each candidate `j` in order, `q = min(residual_ledger[j,f],
-   omega[i,f] − placed)`; `y_increment[i,j,f] += q`; **`residual_ledger[j,f] −= q`**
+4. Place greedily into the new row: for each candidate `j` in order,
+   `q = min(residual_ledger[j,f], omega[i,f] − placed)`;
+   `new_y[i,j,f] += q`; **`residual_ledger[j,f] −= q`**
    (immediate decrement → later nodes see less); `placed += q`; stop when
    `omega[i,f]` met or candidates exhausted.
-4. If `placed < omega[i,f]` (or `force_memory_bids`), emit price-free
-   replica-expansion `memory_bids` to neighbours with `rho_j > 0` (both
+5. If `placed < omega[i,f]` (or `force_memory_bids`), emit price-free
+   replica-expansion `memory_bids` to neighbours with enough memory for one
+   replica, `rho_j >= memory_requirement[f]` (both
    still-serving capacity sellers and memory-only neighbours), **at parity with
-   FaaS-MADiG** (the two-block emission).
+   FaaS-MADiG** (the two-block emission), then return `new_y-current_y`.
 
 **Replica-expansion timing.** Memory bids are collected for the whole sweep and
 `start_additional_replicas` is called **after** the sweep, before assembling the
@@ -160,6 +170,9 @@ only at row `i`; `omega[i, :]` is replaced by the capped solve's `sp_omega[i, :]
 for the current sweep. The capped solve's `x/z/r/rho/U` values are diagnostic
 only and are not committed to the global state; after the sweep, `compute_social_welfare`
 with fixed `y` remains the single source of truth for the candidate solution.
+When `--fix_r` is active this final restricted solve uses `LSPr_fixedr`, and
+coordination receives zero memory slack so no replica expansion can alter the
+centralized replica plan.
 
 ## 4. Model additions: `LSP_capped` and `LSP_capped_fixedr` (additive, `models/sp.py`)
 
@@ -315,9 +328,11 @@ the sibling notes; reuse the shared verified set where it overlaps).
 - Re-optimization solves up to one `LSP_capped`/`LSP_capped_fixedr` per active
   node per sweep. Greedy sweep bookkeeping is amortized per active node as in
   the siblings; each capped MILP solve is charged in full through
-  `reopt_runtime`.
+  `reopt_runtime`. The solve time is subtracted from the measured sweep wall
+  time before bookkeeping is amortized, avoiding double counting.
 - The shared ledger is the **true** residual capacity (`compute_residual_capacity`)
   decremented in place, not the advertised blackboard; admission still uses the
   score/threshold.
 - Stopping reuses `check_stopping_criteria` for inherited guards, plus an
-  explicit MABR guard for sweeps with no placed load and no memory bids.
+  explicit MABR guard for sweeps with no assignment delta and no replicas
+  actually started.

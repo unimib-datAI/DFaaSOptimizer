@@ -26,7 +26,14 @@ from run_faasmadea import (
 from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
-from models.sp import LSP, LSP_fixedr, LSPr, LSP_capped, LSP_capped_fixedr
+from models.sp import (
+  LSP,
+  LSP_capped,
+  LSP_capped_fixedr,
+  LSP_fixedr,
+  LSPr,
+  LSPr_fixedr,
+)
 
 from networkx import adjacency_matrix
 from collections import deque
@@ -56,33 +63,47 @@ def best_response_sweep(
     response: str,
     rng: np.random.Generator = None,
     reopt_fn=None,
+    current_y: np.array = None,
   ) -> Tuple[np.array, pd.DataFrame, int, float, float]:
   """Sequential (Gauss-Seidel) best-response sweep.
 
   Nodes act in `order` ("fixed" = ascending index, "random" = rng permutation);
-  each places its residual demand greedily by descending score onto the shared
-  `ledger` (a copy of residual_capacity), decremented in place so later nodes
-  see what earlier nodes took. For response=="reopt", each node first caps its
-  omega row at the accessible neighbour capacity via reopt_fn before placing.
-  Replica-expansion memory bids use the FaaS-MADiG two-block emission.
+  Each node releases its current buyer row, computes a new response greedily by
+  descending score, and immediately commits it to the shared ledger. Later
+  nodes therefore observe earlier coordinate updates. For response=="reopt",
+  the target omega row is first recomputed through reopt_fn.
   """
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
   ledger = np.array(residual_capacity, dtype=float)
-  omega = np.array(omega, dtype=float)  # working copy; never mutate the caller's
+  omega = np.array(omega, dtype=float)
+  if current_y is None:
+    current_y = np.zeros((Nn, Nn, Nf))
+  else:
+    current_y = np.array(current_y, dtype=float)
   y_increment = np.zeros((Nn, Nn, Nf))
   memory_bids = {"i": [], "j": [], "f": []}
   reopt_runtime = 0.0
+  placed_total = 0.0
   active = set()
-  memory_seller_nodes = set(int(j) for j in np.nonzero(rho)[0])
   if order == "random":
+    if rng is None:
+      raise ValueError("rng is required when order='random'")
     node_order = [int(i) for i in rng.permutation(Nn)]
-  else:
+  elif order == "fixed":
     node_order = list(range(Nn))
+  else:
+    raise ValueError("order must be one of: fixed, random")
+  if response not in {"greedy", "reopt"}:
+    raise ValueError("response must be one of: greedy, reopt")
   for i in node_order:
     neighbours = set(int(j) for j in np.nonzero(neighborhood[i, :])[0])
-    # skip re-optimization for non-buyer nodes: with zero residual demand there
-    # is nothing to offload, and an upper-bound cap cannot raise an omega of 0.
+    previous_row = current_y[i, :, :]
+    if not np.any(omega[i, :] > 0) and not np.any(previous_row > 0):
+      continue
+    active.add(i)
+    ledger += previous_row
+    new_row = np.zeros((Nn, Nf))
     if response == "reopt" and reopt_fn is not None and np.any(omega[i, :] > 0):
       omega_ub_row = np.array(
         [sum(ledger[j, f] for j in neighbours) for f in range(Nf)]
@@ -90,20 +111,23 @@ def best_response_sweep(
       capped_row, rt = reopt_fn(i, omega_ub_row)
       reopt_runtime += rt
       omega[i, :] = capped_row
-    potential_memory = neighbours & memory_seller_nodes
     for f in range(Nf):
       if omega[i, f] <= 0:
         continue
+      memory_requirement = data[None]["memory_requirement"][f + 1]
+      potential_memory = {
+        j for j in neighbours if rho[j] >= memory_requirement
+      }
+      potential_capacity = {j for j in neighbours if ledger[j, f] >= 1}
       score = {}
-      for j in neighbours:
-        if ledger[j, f] >= 1:
-          s = (
-            data[None]["beta"][(i + 1, j + 1, f + 1)]
-            - br_options["latency_weight"] * latency[i, j]
-            - br_options["fairness_weight"] * fairness[i, f]
-          )
-          if s > - data[None]["gamma"][(i + 1, f + 1)]:
-            score[j] = s
+      for j in potential_capacity:
+        s = (
+          data[None]["beta"][(i + 1, j + 1, f + 1)]
+          - br_options["latency_weight"] * latency[i, j]
+          - br_options["fairness_weight"] * fairness[i, f]
+        )
+        if s > - data[None]["gamma"][(i + 1, f + 1)]:
+          score[j] = s
       placed = 0.0
       for j in sorted(score, key=lambda k: (-score[k], k)):
         if placed >= omega[i, f]:
@@ -111,25 +135,22 @@ def best_response_sweep(
         q = min(ledger[j, f], omega[i, f] - placed)
         if q <= 0:
           continue
-        y_increment[i, j, f] += q
+        new_row[j, f] += q
         ledger[j, f] -= q
         placed += q
-        active.add(i)
-      if placed < omega[i, f]:
+      placed_total += placed
+      if placed < omega[i, f] or force_memory_bids:
         for j in sorted(score, key=lambda k: (-score[k], k)):
           if j in potential_memory:
             memory_bids["i"].append(i)
             memory_bids["j"].append(j)
             memory_bids["f"].append(f)
       if placed < omega[i, f] or force_memory_bids:
-        potential_capacity = set(
-          j for j in neighbours if residual_capacity[j, f] >= 1
-        )
         for j in sorted(potential_memory - potential_capacity):
           memory_bids["i"].append(i)
           memory_bids["j"].append(j)
           memory_bids["f"].append(f)
-  placed_total = float(y_increment.sum())
+    y_increment[i, :, :] = new_row - previous_row
   return (
     y_increment, pd.DataFrame(memory_bids), len(active),
     placed_total, reopt_runtime,
@@ -165,6 +186,16 @@ def reoptimize_node(
   sp_omega = result[4]
   runtime = result[10]["tot"]
   return np.array(sp_omega[node, :], dtype=float), float(runtime)
+
+
+def compute_sweep_runtime(
+    elapsed: float, reopt_runtime: float, n_active: int
+  ) -> float:
+  bookkeeping_runtime = max(0.0, elapsed - reopt_runtime)
+  amortized_bookkeeping = (
+    bookkeeping_runtime / n_active if n_active else bookkeeping_runtime
+  )
+  return reopt_runtime + amortized_bookkeeping
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -272,7 +303,7 @@ def _run(
         for f in range(Nf):
           sp_data[None]["r_bar"][(n + 1, f + 1)] = int(opt_r[n, f])
     sp = LSP() if opt_solution is None else LSP_fixedr()
-    spr = LSPr()
+    spr = LSPr() if opt_solution is None else LSPr_fixedr()
     (
       sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
     ) = solve_subproblem(
@@ -285,7 +316,7 @@ def _run(
     best_centralized_solution = None
     best_cost_so_far = np.inf
     spr_obj = np.inf
-    best_centralized_cost = 0.0
+    best_centralized_cost = -np.inf
     best_it_so_far = -1
     best_centralized_it = -1
     y = np.zeros((Nn, Nn, Nf))
@@ -298,6 +329,9 @@ def _run(
         sp_x, y, sp_r, sp_data
       )
       blackboard = np.maximum(0.0, capacity - sp_x)
+      coordination_rho = (
+        sp_rho if opt_solution is None else np.zeros_like(sp_rho)
+      )
       total_runtime += (datetime.now() - s).total_seconds()
       reopt_fn = None
       if response == "reopt":
@@ -308,28 +342,27 @@ def _run(
             use_fixed_r=(opt_solution is not None),
           )
       s = datetime.now()
-      sweep_y, memory_bids, n_active, placed_total, reopt_runtime = best_response_sweep(
-        omega, residual_capacity, sp_data, neighborhood, sp_rho,
+      sweep_y, memory_bids, n_active, _, reopt_runtime = best_response_sweep(
+        sp_omega, residual_capacity, sp_data, neighborhood, coordination_rho,
         br_options, latency, fairness,
         force_memory_bids=(
-          (sp_rho > 0).any()
+          (coordination_rho > 0).any()
           and len(n_accepted_queue) >= n_accepted_queue.maxlen
           and all(x == n_accepted_queue[0] for x in n_accepted_queue)
         ),
         order=order, response=response, rng=rng, reopt_fn=reopt_fn,
+        current_y=y,
       )
       rt = (datetime.now() - s).total_seconds()
-      total_runtime += (rt / n_active) if n_active else rt
-      total_runtime += reopt_runtime
-      rmp_omega = np.zeros((Nn, Nf))
+      total_runtime += compute_sweep_runtime(rt, reopt_runtime, n_active)
+      allocation_changed = (np.abs(sweep_y) > tolerance).any()
+      rmp_omega = y.sum(axis=1)
       additional_replicas = np.zeros((Nn, Nf))
-      if placed_total > 0:
+      if allocation_changed:
         y += sweep_y
-        for n in range(Nn):
-          for f in range(Nf):
-            rmp_omega[n, f] = y[n, :, f].sum()
-            if rmp_omega[n, f] > 0:
-              fairness[n, f] += 1
+        y[np.abs(y) < tolerance] = 0.0
+        rmp_omega = y.sum(axis=1)
+        fairness += (rmp_omega > tolerance)
         n_accepted_queue.append(rmp_omega.sum())
         bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
         if bad_nodes:
@@ -340,11 +373,8 @@ def _run(
         )
         total_runtime += spr_runtime
         sp_x, _, _, _, sp_r, sp_rho = spr_sol
-        for i in range(Nn):
-          for f in range(Nf):
-            omega[i, f] = sp_omega[i, f] - rmp_omega[i, f]
-            if abs(omega[i, f]) < tolerance:
-              omega[i, f] = 0.0
+        omega = sp_omega - rmp_omega
+        omega[np.abs(omega) < tolerance] = 0.0
       if len(memory_bids) > 0 and not (additional_replicas > 0).any():
         s = datetime.now()
         additional_replicas, sp_rho = start_additional_replicas(
@@ -352,7 +382,9 @@ def _run(
         )
         sp_r += additional_replicas
         total_runtime += (datetime.now() - s).total_seconds()
-      mabr_no_progress = (placed_total == 0 and len(memory_bids) == 0)
+      mabr_no_progress = (
+        not allocation_changed and not (additional_replicas > tolerance).any()
+      )
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
         None, y, None, None, None, None
