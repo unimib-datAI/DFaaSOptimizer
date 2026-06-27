@@ -30,7 +30,10 @@
       "latency_weight": 0.0,
       "fairness_weight": 0.0,
       "unit_bids": false
-    }
+    },
+    "br_s": { "latency_weight": 0.0, "fairness_weight": 0.0 },
+    "br_r": { "latency_weight": 0.0, "fairness_weight": 0.0 },
+    "br_o": { "latency_weight": 0.0, "fairness_weight": 0.0 }
   },
   "max_iterations": 20,
   "patience": 5,

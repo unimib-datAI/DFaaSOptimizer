@@ -6,6 +6,11 @@ from run_faasmadea import run as run_auction
 from hierarchical_auction.runner import run as run_hierarchical
 from decentralized_diffusion import run as run_diffusion
 from decentralized_powerd import run as run_powerd
+from decentralized_bestresponse import (
+  run_br_s as run_br_s,
+  run_br_r as run_br_r,
+  run_br_o as run_br_o,
+)
 from postprocessing import load_models_results
 from utils.common import reconcile_paths
 
@@ -56,6 +61,9 @@ def parse_arguments() -> argparse.Namespace:
       "hierarchical",
       "faas-diffuse",
       "faas-powd",
+      "faas-br-s",
+      "faas-br-r",
+      "faas-br-o",
       "generate_only"
     ],
     required = True
@@ -269,7 +277,10 @@ def results_postprocessing(
       mcolors.TABLEAU_COLORS["tab:green"],
       mcolors.TABLEAU_COLORS["tab:pink"],
       mcolors.TABLEAU_COLORS["tab:purple"],
-      mcolors.TABLEAU_COLORS["tab:brown"]
+      mcolors.TABLEAU_COLORS["tab:brown"],
+      mcolors.TABLEAU_COLORS["tab:olive"],
+      mcolors.TABLEAU_COLORS["tab:cyan"],
+      mcolors.TABLEAU_COLORS["tab:gray"]
     ]
     for method in methods:
       method_folders = solution_folders.get(method, [])
@@ -290,7 +301,13 @@ def results_postprocessing(
             "FaaS-MACrO(v0)" if method == "faas-macro-v0" else (
               "FaaS-MADeA" if method == "faas-madea" else (
                 "FaaS-MADiG" if method == "faas-diffuse" else (
-                  "FaaS-MAPoD" if method == "faas-powd" else "HierarchicalAuction"
+                  "FaaS-MAPoD" if method == "faas-powd" else (
+                    "FaaS-MABR-S" if method == "faas-br-s" else (
+                      "FaaS-MABR-R" if method == "faas-br-r" else (
+                        "FaaS-MABR-O" if method == "faas-br-o" else "HierarchicalAuction"
+                      )
+                    )
+                  )
                 )
               )
             )
@@ -880,7 +897,10 @@ def run(
     "faas-madea": [],
     "hierarchical": [],
     "faas-diffuse": [],
-    "faas-powd": []
+    "faas-powd": [],
+    "faas-br-s": [],
+    "faas-br-r": [],
+    "faas-br-o": []
   }
   if os.path.exists(os.path.join(base_solution_folder, "experiments.json")):
     with open(
@@ -902,6 +922,9 @@ def run(
     run_h = False # -- hierarchical
     run_d = False # -- faas-diffuse (FaaS-MADiG)
     run_p = False # -- faas-powd (FaaS-MAPoD)
+    run_brs = False # -- faas-br-s (FaaS-MABR-S)
+    run_brr = False # -- faas-br-r (FaaS-MABR-R)
+    run_bro = False # -- faas-br-o (FaaS-MABR-O)
     experiment_idx = None
     try:
       experiment_idx = solution_folders["experiments_list"].index(
@@ -949,6 +972,24 @@ def run(
           solution_folders["faas-powd"][experiment_idx] is None
         )):
         run_p = True
+      if (not generate_only and "faas-br-s" in methods) and ((
+          len(solution_folders.get("faas-br-s", [])) <= experiment_idx
+        ) or (
+          solution_folders["faas-br-s"][experiment_idx] is None
+        )):
+        run_brs = True
+      if (not generate_only and "faas-br-r" in methods) and ((
+          len(solution_folders.get("faas-br-r", [])) <= experiment_idx
+        ) or (
+          solution_folders["faas-br-r"][experiment_idx] is None
+        )):
+        run_brr = True
+      if (not generate_only and "faas-br-o" in methods) and ((
+          len(solution_folders.get("faas-br-o", [])) <= experiment_idx
+        ) or (
+          solution_folders["faas-br-o"][experiment_idx] is None
+        )):
+        run_bro = True
     except ValueError:
       run_c = "centralized" in methods
       run_i = "faas-macro" in methods
@@ -957,8 +998,11 @@ def run(
       run_h = "hierarchical" in methods
       run_d = "faas-diffuse" in methods
       run_p = "faas-powd" in methods
+      run_brs = "faas-br-s" in methods
+      run_brr = "faas-br-r" in methods
+      run_bro = "faas-br-o" in methods
     # if the experiment is still to run...
-    if run_c or run_i or run_i_v0 or run_a or run_h or run_d or run_p or generate_only:
+    if run_c or run_i or run_i_v0 or run_a or run_h or run_d or run_p or run_brs or run_brr or run_bro or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       if loop_over in config["limits"]:
@@ -1080,6 +1124,33 @@ def run(
         )
         set_solution_folder(
           solution_folders, "faas-powd", experiment_idx, p_folder
+        )
+      # -- solve best-response sequential (FaaS-MABR-S)
+      if run_brs:
+        brs_folder = run_br_s(
+          config, sp_parallelism,
+          log_on_file = log_on_file, disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "faas-br-s", experiment_idx, brs_folder
+        )
+      # -- solve best-response randomized (FaaS-MABR-R)
+      if run_brr:
+        brr_folder = run_br_r(
+          config, sp_parallelism,
+          log_on_file = log_on_file, disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "faas-br-r", experiment_idx, brr_folder
+        )
+      # -- solve best-response re-optimization (FaaS-MABR-O)
+      if run_bro:
+        bro_folder = run_br_o(
+          config, sp_parallelism,
+          log_on_file = log_on_file, disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "faas-br-o", experiment_idx, bro_folder
         )
       # -- save info
       if experiment_idx is None:
