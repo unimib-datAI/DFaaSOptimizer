@@ -196,10 +196,15 @@ def evaluate_bids(
     p: np.array, 
     capacity: np.array, 
     u0: np.array, 
-    auction_options: dict
+    auction_options: dict,
+    current_y: np.array = None,
   ) -> np.array:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
+  if current_y is None:
+    current_y = np.zeros((Nn,Nn,Nf))
+  sending = current_y.sum(axis=1) > 1e-10
+  receiving = current_y.sum(axis=0) > 1e-10
   # loop over agents and functions
   potential_sellers, functions_to_share = np.nonzero(blackboard)
   y = np.zeros((Nn,Nn,Nf))
@@ -211,15 +216,23 @@ def evaluate_bids(
     remaining_capacity = blackboard[j,f]
     next_bid_idx = 0
     min_b = bids_for_j["b"].max()
+    accepted_any = False
     # loop over bids until there is remaining capacity
     while next_bid_idx < len(bids_for_j) and remaining_capacity > 0:
-      q = min(remaining_capacity, bids_for_j.iloc[next_bid_idx]["d"])
-      y[int(bids_for_j.iloc[next_bid_idx]["i"]),j,f] += q
-      remaining_capacity -= q
-      min_b = min(min_b, bids_for_j.iloc[next_bid_idx]["b"])
+      bid = bids_for_j.iloc[next_bid_idx]
+      i = int(bid["i"])
       next_bid_idx += 1
+      if receiving[i,f] or sending[j,f]:
+        continue
+      q = min(remaining_capacity, bid["d"])
+      y[i,j,f] += q
+      remaining_capacity -= q
+      min_b = min(min_b, bid["b"])
+      sending[i,f] = True
+      receiving[j,f] = True
+      accepted_any = True
     # compute utilization and update prices
-    if next_bid_idx > 0:
+    if accepted_any:
       u = (ell[j,f] + y[:,j,f].sum()) / capacity[j,f]
       p[j,f] = min_b + auction_options["eta"] * (u - u0[j,f])
     else:
@@ -411,7 +424,8 @@ def run(
       if len(bids) > 0:
         s = datetime.now()
         auction_y, p = evaluate_bids(
-          bids, blackboard, data, ell, p, capacity, u0, auction_options
+          bids, blackboard, data, ell, p, capacity, u0, auction_options,
+          current_y=y,
         )
         e = datetime.now()
         if verbose > 1:

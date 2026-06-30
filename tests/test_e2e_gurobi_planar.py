@@ -10,6 +10,7 @@ import pytest
 from generate_data import generate_neighborhood
 from run_centralized_model import run as run_centralized
 from hierarchical_auction.runner import run as run_hierarchical
+from run_faasmacro import run as run_faasmacro
 
 
 def _require_gurobi() -> None:
@@ -119,6 +120,11 @@ def test_centralized_distributed_and_hierarchical_run_on_planar_degree_three_gra
     {**config, "base_solution_folder": str(tmp_path / "centralized")},
     disable_plotting=True,
   )
+  faasmacro_folder = run_faasmacro(
+    {**config, "base_solution_folder": str(tmp_path / "faas_macro")},
+    parallelism=0,
+    disable_plotting=True,
+  )
   hierarchical_folder = run_hierarchical(
     {**config, "base_solution_folder": str(tmp_path / "hierarchical")},
     parallelism=0,
@@ -126,19 +132,40 @@ def test_centralized_distributed_and_hierarchical_run_on_planar_degree_three_gra
   )
 
   _assert_generated_graph_is_planar_degree_three(centralized_folder)
+  _assert_generated_graph_is_planar_degree_three(faasmacro_folder)
   _assert_generated_graph_is_planar_degree_three(hierarchical_folder)
 
   centralized_tc = pd.read_csv(Path(centralized_folder, "termination_condition.csv"))
+  faasmacro_tc = pd.read_csv(Path(faasmacro_folder, "termination_condition.csv"))
   hierarchical_tc = pd.read_csv(Path(hierarchical_folder, "termination_condition.csv"))
 
   _assert_finite_objectives(centralized_folder)
+  _assert_finite_objectives(faasmacro_folder)
   _assert_finite_objectives(hierarchical_folder)
   assert (
     _read_final_objective(hierarchical_folder, "HierarchicalAuction")
     <= _read_final_objective(centralized_folder, "LoadManagementModel") + 1e-6
   )
+  assert Path(faasmacro_folder, "LSPc_solution.csv").exists()
   assert Path(hierarchical_folder, "LSPc_solution.csv").exists()
 
   assert centralized_tc["LoadManagementModel"].tolist() == ["optimal"]
+  assert _flatten_text(faasmacro_tc)
   assert _flatten_text(hierarchical_tc)
   assert "Implicitly replacing the Component attribute OBJ" not in caplog.text
+
+
+def test_hierarchical_preserves_negative_best_objective(tmp_path):
+  _require_gurobi()
+  config = _planar_e2e_config(tmp_path)
+  config["limits"]["weights"]["alpha"] = {"min": 0.0, "max": 0.0}
+  config["limits"]["weights"]["beta_multiplier"] = {"min": 0.0, "max": 0.0}
+  config["limits"]["memory_capacity"] = {"values": [0] * 10}
+
+  folder = run_hierarchical(
+    {**config, "base_solution_folder": str(tmp_path / "hierarchical_negative")},
+    parallelism=0,
+    disable_plotting=True,
+  )
+
+  assert _read_final_objective(folder, "HierarchicalAuction") < 0.0

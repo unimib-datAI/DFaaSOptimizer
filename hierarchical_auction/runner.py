@@ -188,7 +188,7 @@ def run(
     omega = deepcopy(sp_omega)
     rmp_omega = np.zeros((Nn, Nf))
     best_centralized_solution: dict | None = None
-    best_centralized_cost = 0.0
+    best_centralized_cost = -np.inf
     best_centralized_it = -1
     engine = HierarchicalAuctionEngine(
       neighborhood=neighborhood,
@@ -221,7 +221,7 @@ def run(
       if len(bids) > 0:
         auction_y, p = evaluate_bids(
           bids, blackboard, sp_data, ell, p, capacity, u0,
-          level1_options,
+          level1_options, current_y=y,
         )
         y += auction_y
 

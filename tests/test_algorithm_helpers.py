@@ -188,6 +188,42 @@ def test_decentralized_auction_bid_definition_and_helpers():
   assert why == "all load assigned"
 
 
+def test_decentralized_auction_rejects_ping_pong_in_same_round():
+  data = _auction_data()
+  options = {
+    "latency_weight": 0.0,
+    "fairness_weight": 0.0,
+    "epsilon": 0.1,
+    "eta": 0.0,
+    "zeta": 0.1,
+  }
+  bids, _ = decentralized_auction.define_bids(
+    omega = np.ones((2, 2)),
+    blackboard = np.ones((2, 2)),
+    p = np.zeros((2, 2)),
+    data = data,
+    neighborhood = np.array([[0, 1], [1, 0]]),
+    rho = np.zeros(2),
+    auction_options = options,
+    latency = np.zeros((2, 2)),
+    fairness = np.zeros((2, 2)),
+    delta = np.zeros((2, 2)),
+  )
+
+  y, _ = decentralized_auction.evaluate_bids(
+    bids,
+    blackboard = np.ones((2, 2)),
+    data = data,
+    ell = np.zeros((2, 2)),
+    p = np.zeros((2, 2)),
+    capacity = np.ones((2, 2)),
+    u0 = np.zeros((2, 2)),
+    auction_options = options,
+  )
+
+  assert not ((y.sum(axis=1) > 0) & (y.sum(axis=0) > 0)).any()
+
+
 def test_start_additional_replicas_redistributes_fractional_memory_remainder():
   data = _auction_data()
   data[None]["memory_requirement"] = {1: 4, 2: 4}

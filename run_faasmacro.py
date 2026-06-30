@@ -921,9 +921,10 @@ def run(
         x_cost += x_cost_n
       odev_queue.append(odev)
       # merge solutions and compute the centralized objective value
+      spr_x, _, _, _, spr_r, spr_rho = spr_sol
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt, 
-        spr_sol[0], spr_sol[2], spr_sol[4],
+        spr_x, spr_r, spr_rho,
         rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
       )
       cobj = compute_centralized_objective(
