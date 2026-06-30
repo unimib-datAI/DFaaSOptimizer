@@ -23,7 +23,18 @@ Dispatch, SSH transport, provisioning, retries, and local download of
 partial results are all handled by `ray-dispatcher`
 (`miciav/ray-dispatcher`, local checkout at `~/Downloads/ray-dispatcher`)
 and are out of scope here — this project only produces `Job` objects for it
-and reads back `JobStatus`/`JobResult`.
+and polls `Dispatcher.status()`/`Dispatcher.running_hosts()`.
+
+**Dependency:** the live per-VM panel (below) needs to know which host a
+`RUNNING` job is on. The public `Dispatcher` API at the time this spec was
+written only exposed that after a job finished (via `JobResult.host`).
+`ray-dispatcher` was extended first — see its own
+`docs/superpowers/specs/2026-06-30-live-host-visibility-design.md` and
+`docs/superpowers/plans/2026-06-30-ray-dispatcher-phase-9-live-host-visibility.md`
+— to add `Dispatcher.running_hosts() -> dict[str, str]` (job_id → host, for
+every job currently holding a lease). This plan assumes that method exists.
+`Dispatcher` has no public `resolve()`; job duration is tracked locally
+(wall-clock from submit to terminal status), not read from `JobResult`.
 
 ## Package layout
 
@@ -162,11 +173,10 @@ kill, not just Ctrl-C.
   `average_duration_of_completed_jobs * remaining_jobs / total_slots` —
   a simple heuristic, not a predictive model.
 - **VM panel**: one row per `RemoteHost` from the `Inventory`, showing
-  slots busy/total, the job currently running there, and jobs completed on
-  that host so far. Busy/idle/lost state is derived by cross-referencing
-  live job status with `inventory.hosts` (slot totals are static
-  configuration; occupied slots are jobs currently `RUNNING` on that
-  host).
+  slots busy/total, the job(s) currently running there, and jobs completed
+  on that host so far. Slot totals are static configuration
+  (`inventory.hosts`); which jobs are currently running where comes from
+  `Dispatcher.running_hosts()`, polled once per tick alongside `status()`.
 - **Experiments table**: id, algorithm, seed, status, assigned host,
   duration/elapsed.
 
