@@ -1,9 +1,11 @@
 import json
 
 import pytest
+from ray_dispatcher import JobHandle, JobStatus
 
-from remote_experiments.batch import Batch
-from remote_experiments.cli import build_parser, cmd_define
+from remote_experiments.batch import Batch, Experiment
+from remote_experiments.cli import build_parser, cmd_define, cmd_run
+from remote_experiments.manifest import Manifest
 
 
 def test_define_accepts_registered_suite_name():
@@ -40,3 +42,59 @@ def test_run_subcommand_parses_required_arguments():
   assert args.batch_file == "batches/foo.json"
   assert args.inventory == "inv.yaml"
   assert args.results_dir == "./results"
+
+
+class _FakeDispatcher:
+  """Context-manager FakeDispatcher matching ray_dispatcher.Dispatcher's duck type.
+
+  Adapted from tests/test_remote_experiments_runner.py's FakeDispatcher — same
+  submit/status/cancel/running_hosts contract, plus __enter__/__exit__ since
+  cmd_run uses `with Dispatcher(...) as dispatcher:`.
+  """
+
+  def __init__(self, *_args, **_kwargs):
+    self._sequences = {"e1": [JobStatus.RUNNING, JobStatus.SUCCEEDED]}
+
+  def __enter__(self):
+    return self
+
+  def __exit__(self, *exc_info):
+    return False
+
+  def submit(self, jobs):
+    return [JobHandle(batch_id="b1", job_id=j.id, token=j.id) for j in jobs]
+
+  def status(self, handle):
+    seq = self._sequences[handle.job_id]
+    return seq.pop(0) if len(seq) > 1 else seq[0]
+
+  def cancel(self, handle):
+    pass
+
+  def running_hosts(self):
+    return {"e1": "10.0.0.10"}
+
+
+def test_cmd_run_wires_dispatcher_into_manifest(tmp_path, monkeypatch):
+  experiment = Experiment(
+    id="e1", suite="smoke", algorithm="centralized", seed=42,
+    graph_params={}, load_params={}, config={"seed": 42},
+  )
+  batch = Batch(suite="smoke", experiments=(experiment,))
+  batch_path = tmp_path / "b.json"
+  batch.save(batch_path)
+
+  inventory_path = tmp_path / "inventory.yaml"
+  inventory_path.write_text("hosts:\n  - host: 10.0.0.10\n    user: ubuntu\n    slots: 1\n")
+
+  monkeypatch.setattr("remote_experiments.cli.Dispatcher", _FakeDispatcher)
+  monkeypatch.setattr("builtins.input", lambda prompt: "all")
+
+  args = build_parser().parse_args([
+    "run", str(batch_path), "--inventory", str(inventory_path),
+  ])
+  cmd_run(args)
+
+  manifest = Manifest(batch_path.with_suffix(".manifest.json"))
+  assert manifest.status("e1") == "succeeded"
+  assert manifest.host("e1") == "10.0.0.10"
