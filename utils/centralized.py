@@ -2,6 +2,93 @@ from typing import Tuple
 import numpy as np
 
 
+def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
+  values = data[None]
+  Nn, Nf = values["Nn"][None], values["Nf"][None]
+  arrays = {
+    "x": np.asarray(x), "y": np.asarray(y),
+    "z": np.asarray(z), "r": np.asarray(r),
+  }
+  expected_shapes = {
+    "x": (Nn, Nf), "y": (Nn, Nn, Nf),
+    "z": (Nn, Nf), "r": (Nn, Nf),
+  }
+  for name, array in arrays.items():
+    if array.shape != expected_shapes[name]:
+      raise ValueError(
+        f"{name} shape: {array.shape} != {expected_shapes[name]}"
+      )
+
+  for name in ("x", "y", "z"):
+    invalid = ~np.isfinite(arrays[name]) | (arrays[name] < -tolerance)
+    if invalid.any():
+      index = tuple(np.argwhere(invalid)[0])
+      shown = ",".join(str(i + 1) for i in index)
+      raise ValueError(
+        f"{name} domain NonNegativeReals ({shown}): {arrays[name][index]}"
+      )
+  invalid = ~np.isfinite(arrays["r"]) | (arrays["r"] < -tolerance)
+  invalid |= np.abs(arrays["r"] - np.rint(arrays["r"])) > tolerance
+  if invalid.any():
+    index = tuple(np.argwhere(invalid)[0])
+    shown = ",".join(str(i + 1) for i in index)
+    raise ValueError(
+      f"r domain NonNegativeIntegers ({shown}): {arrays['r'][index]}"
+    )
+
+  x, y, z, r = (arrays[name] for name in ("x", "y", "z", "r"))
+  incoming_load = np.array([
+    [values["incoming_load"][(n + 1, f + 1)] for f in range(Nf)]
+    for n in range(Nn)
+  ])
+  neighborhood = np.array([
+    [values["neighborhood"][(n + 1, m + 1)] for m in range(Nn)]
+    for n in range(Nn)
+  ])
+  invalid = y - incoming_load[:, None, :] * neighborhood[:, :, None] > tolerance
+  if invalid.any():
+    n, m, f = np.argwhere(invalid)[0]
+    raise ValueError(f"offload_only_to_neighbors ({n + 1},{m + 1},{f + 1})")
+
+  invalid = (y.sum(axis = 1) > tolerance) & (y.sum(axis = 0) > tolerance)
+  if invalid.any():
+    n, f = np.argwhere(invalid)[0]
+    raise ValueError(f"no_ping_pong ({n + 1},{f + 1})")
+
+  invalid = np.abs(x + y.sum(axis = 1) + z - incoming_load) > tolerance
+  if invalid.any():
+    n, f = np.argwhere(invalid)[0]
+    raise ValueError(f"no_traffic_loss ({n + 1},{f + 1})")
+
+  demand = np.array([
+    [values["demand"][(n + 1, f + 1)] for f in range(Nf)]
+    for n in range(Nn)
+  ])
+  max_utilization = np.array([
+    values["max_utilization"][f + 1] for f in range(Nf)
+  ])
+  utilization = demand * (x + y.sum(axis = 0))
+  invalid = utilization - r * max_utilization > tolerance
+  if invalid.any():
+    n, f = np.argwhere(invalid)[0]
+    raise ValueError(f"utilization_equilibrium ({n + 1},{f + 1})")
+  invalid = (r - 1) * max_utilization - utilization > tolerance
+  if invalid.any():
+    n, f = np.argwhere(invalid)[0]
+    raise ValueError(f"utilization_equilibrium2 ({n + 1},{f + 1})")
+
+  memory_requirement = np.array([
+    values["memory_requirement"][f + 1] for f in range(Nf)
+  ])
+  memory_capacity = np.array([
+    values["memory_capacity"][n + 1] for n in range(Nn)
+  ])
+  invalid = r @ memory_requirement - memory_capacity > tolerance
+  if invalid.any():
+    n = np.argwhere(invalid)[0, 0]
+    raise ValueError(f"residual_capacity ({n + 1})")
+
+
 def check_feasibility(
       x: np.array, 
       omega: np.array, 
