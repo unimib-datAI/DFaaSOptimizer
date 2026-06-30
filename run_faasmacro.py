@@ -284,9 +284,27 @@ def combine_solutions(
     for n2 in range(Nn):
       for f in range(Nf):
         sp_xi[n2,n1,f] = sp_y[n1,n2,f]
+  # -- tighten replicas to the centralized replica equilibrium
+  # r = ceil(utilization / max_utilization) for the realized served load
+  # (local processing + received offload). A heuristic may greedily over-acquire
+  # replicas to be able to receive offload that neighbour/no-ping-pong
+  # restrictions then keep from arriving; r does not enter the welfare objective,
+  # so tightening it leaves the objective unchanged while making the solution
+  # centrally feasible (utilization_equilibrium / utilization_equilibrium2).
+  demand = np.array([
+    [sp_data[None]["demand"][(n + 1, f + 1)] for f in range(Nf)]
+    for n in range(Nn)
+  ])
+  max_utilization = np.array([
+    sp_data[None]["max_utilization"][f + 1] for f in range(Nf)
+  ])
+  served = sp_x + sp_y.sum(axis = 0)
+  with np.errstate(divide = "ignore", invalid = "ignore"):
+    spr_r = np.ceil(demand * served / max_utilization - 1e-9).astype(int)
+  spr_r = np.maximum(spr_r, 0)
   # -- compute utilization
   spr_U = compute_utilization(
-    sp_data, 
+    sp_data,
     {"x": sp_x, "xi": sp_xi, "r": spr_r, "obj": None}
   )
   # -- compute rejections

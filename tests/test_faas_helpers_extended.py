@@ -113,6 +113,28 @@ def test_combine_solutions_rejects_offload_to_non_neighbor():
   assert str(error.value) == "offload_only_to_neighbors (1,2,1)"
 
 
+def test_combine_solutions_tightens_over_allocated_replicas():
+  # Incoming load is 10 (node 1) and 5 (node 2); both process locally (3 and 4)
+  # and reject the rest. Node 1 serves utilization 3.0 (demand 1.0 * local 3.0),
+  # which needs only ceil(3.0 / 6.0) = 1 replica, but the heuristic over-allocated
+  # 5. Node 2 serves utilization 8.0 (demand 2.0 * local 4.0), needing
+  # ceil(8.0 / 6.0) = 2. combine_solutions must tighten r to the centralized
+  # replica equilibrium so the produced solution is centrally feasible (r does not
+  # affect the welfare objective). Without tightening it raises
+  # utilization_equilibrium2 (1,1).
+  sp_data = _sp_data()
+  result = combine_solutions(
+    2, 1, sp_data, {(1, 1): 10.0, (2, 1): 5.0},
+    np.array([[3.0], [4.0]]), np.array([[5], [2]]),
+    np.array([10.0, 20.0]), np.zeros((2, 1)), np.zeros((2, 2, 1)),
+    np.zeros((2, 1)), np.zeros((2, 1)), np.zeros((2, 2, 1)),
+    np.array([5.0, 8.0]),
+  )
+
+  assert result["sp"]["r"][0, 0] == 1
+  assert result["sp"]["r"][1, 0] == 2
+
+
 # --- run_faasmadea helper tests ---
 
 def test_data_dict_to_matrix_3d():
