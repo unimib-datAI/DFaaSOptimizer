@@ -22,6 +22,8 @@ dependencies = [
   "pyparsing==3.2.3",
   "python-dateutil==2.9.0.post0",
   "pyyaml>=6.0.2",
+  "ray-dispatcher",
+  "rich>=13,<15",
   "pytz==2025.2",
   "scipy==1.15.3",
   "six==1.17.0",
@@ -32,6 +34,9 @@ dependencies = [
 
 [tool.uv]
 package = false
+
+[tool.uv.sources]
+ray-dispatcher = { path = "../ray-dispatcher", editable = true }
 
 [dependency-groups]
 dev = [
