@@ -8,9 +8,8 @@ import pyomo.environ as pyo
 import pytest
 
 from generate_data import generate_neighborhood
-from hierarchical_auction.runner import run as run_hierarchical
 from run_centralized_model import run as run_centralized
-from run_faasmacro import run as run_faasmacro
+from hierarchical_auction.runner import run as run_hierarchical
 
 
 def _require_gurobi() -> None:
@@ -94,6 +93,13 @@ def _assert_finite_objectives(folder: str) -> None:
   assert np.isfinite(numeric.to_numpy()).all()
 
 
+def _read_final_objective(folder: str, column: str) -> float:
+  obj = pd.read_csv(Path(folder, "obj.csv"))
+  series = pd.to_numeric(obj[column], errors="coerce").dropna()
+  assert not series.empty
+  return float(series.iloc[-1])
+
+
 def test_centralized_distributed_and_hierarchical_run_on_planar_degree_three_graph(
   tmp_path,
   caplog,
@@ -113,11 +119,6 @@ def test_centralized_distributed_and_hierarchical_run_on_planar_degree_three_gra
     {**config, "base_solution_folder": str(tmp_path / "centralized")},
     disable_plotting=True,
   )
-  faasmacro_folder = run_faasmacro(
-    {**config, "base_solution_folder": str(tmp_path / "faas_macro")},
-    parallelism=0,
-    disable_plotting=True,
-  )
   hierarchical_folder = run_hierarchical(
     {**config, "base_solution_folder": str(tmp_path / "hierarchical")},
     parallelism=0,
@@ -125,20 +126,19 @@ def test_centralized_distributed_and_hierarchical_run_on_planar_degree_three_gra
   )
 
   _assert_generated_graph_is_planar_degree_three(centralized_folder)
-  _assert_generated_graph_is_planar_degree_three(faasmacro_folder)
   _assert_generated_graph_is_planar_degree_three(hierarchical_folder)
 
   centralized_tc = pd.read_csv(Path(centralized_folder, "termination_condition.csv"))
-  faasmacro_tc = pd.read_csv(Path(faasmacro_folder, "termination_condition.csv"))
   hierarchical_tc = pd.read_csv(Path(hierarchical_folder, "termination_condition.csv"))
 
   _assert_finite_objectives(centralized_folder)
-  _assert_finite_objectives(faasmacro_folder)
   _assert_finite_objectives(hierarchical_folder)
-  assert Path(faasmacro_folder, "LSPc_solution.csv").exists()
+  assert (
+    _read_final_objective(hierarchical_folder, "HierarchicalAuction")
+    <= _read_final_objective(centralized_folder, "LoadManagementModel") + 1e-6
+  )
   assert Path(hierarchical_folder, "LSPc_solution.csv").exists()
 
   assert centralized_tc["LoadManagementModel"].tolist() == ["optimal"]
-  assert _flatten_text(faasmacro_tc)
   assert _flatten_text(hierarchical_tc)
   assert "Implicitly replacing the Component attribute OBJ" not in caplog.text

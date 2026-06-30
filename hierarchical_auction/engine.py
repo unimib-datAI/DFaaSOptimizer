@@ -133,6 +133,7 @@ class HierarchicalAuctionEngine:
       requests = self._generate_level_requests(
         buyer_structures=next_structures,
         all_structures=next_structures,
+        current_y=current_y,
         node_prices=node_prices,
         token_manager=token_manager,
         latency=latency,
@@ -218,6 +219,7 @@ class HierarchicalAuctionEngine:
     self,
     buyer_structures: dict[int, Structure],
     all_structures: dict[int, Structure],
+    current_y: FloatArray,
     node_prices: FloatArray,
     token_manager: CapacityTokenManager,
     latency: FloatArray,
@@ -235,6 +237,8 @@ class HierarchicalAuctionEngine:
     adjacent structures, compute bid and effective bid, create requests.
     """
     requests: list[TokenRequest] = []
+    sending = current_y.sum(axis=1) > 1e-10
+    receiving = current_y.sum(axis=0) > 1e-10
 
     for root, buyer_s in buyer_structures.items():
       buyer_s.structure_price = compute_structure_price(
@@ -264,6 +268,10 @@ class HierarchicalAuctionEngine:
           candidates: list[tuple[float, int, int]] = []
           for seller_node in seller_nodes:
             if seller_node == buyer_node:
+              continue
+            if self._neighborhood[buyer_node, seller_node] <= 0:
+              continue
+            if receiving[buyer_node, f] or sending[seller_node, f]:
               continue
             available = token_manager.available_tokens(seller_node, f)
             if available <= 0:
@@ -310,6 +318,8 @@ class HierarchicalAuctionEngine:
             )
             requests.append(req)
             token_manager.request(req)
+            sending[buyer_node, f] = True
+            receiving[seller_node, f] = True
             want -= quantity
             demand_remaining -= quantity
 

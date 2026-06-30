@@ -923,7 +923,7 @@ def run(
       # merge solutions and compute the centralized objective value
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt, 
-        spr_sol[0], spr_sol[2], spr_sol[3],
+        spr_sol[0], spr_sol[2], spr_sol[4],
         rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
       )
       cobj = compute_centralized_objective(
