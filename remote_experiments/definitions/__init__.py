@@ -24,3 +24,6 @@ def get_suite(name: str) -> Callable[..., list[Experiment]]:
 
 def list_suites() -> list[str]:
   return sorted(_REGISTRY)
+
+
+from . import smoke  # imported for its @register_suite("smoke") side effect
