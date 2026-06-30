@@ -32,6 +32,11 @@ def _sp_data():
       "gamma": {(1, 1): 0.1, (2, 1): 0.2},
       "incoming_load": {(1, 1): 10.0, (2, 1): 5.0},
       "demand": {(1, 1): 1.0, (2, 1): 2.0},
+      "max_utilization": {1: 6.0},
+      "neighborhood": {
+        (1, 1): 0, (1, 2): 1,
+        (2, 1): 1, (2, 2): 0,
+      },
       "memory_capacity": {1: 100, 2: 100},
       "memory_requirement": {1: 2},
     }
@@ -88,6 +93,24 @@ def test_combine_solutions_builds_dict():
 
   assert "sp" in result
   assert result["sp"]["x"][0, 0] == 3.0
+
+
+def test_combine_solutions_rejects_offload_to_non_neighbor():
+  sp_data = _sp_data()
+  sp_data[None]["neighborhood"][(1, 2)] = 0
+  y = np.zeros((2, 2, 1))
+  y[0, 1, 0] = 2.0
+
+  with pytest.raises(ValueError) as error:
+    combine_solutions(
+      2, 1, sp_data, {(1, 1): 10.0, (2, 1): 5.0},
+      np.array([[3.0], [4.0]]), np.array([[1], [2]]),
+      np.array([10.0, 20.0]), np.zeros((2, 1)), y,
+      np.array([[0.0], [1.0]]), np.zeros((2, 1)),
+      np.zeros((2, 2, 1)), np.array([5.0, 8.0]),
+    )
+
+  assert str(error.value) == "offload_only_to_neighbors (1,2,1)"
 
 
 # --- run_faasmadea helper tests ---

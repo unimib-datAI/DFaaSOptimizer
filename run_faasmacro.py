@@ -10,7 +10,7 @@ from run_centralized_model import (
   save_solution,
   save_checkpoint
 )
-from utils.centralized import check_feasibility
+from utils.centralized import check_feasibility, validate_centralized_solution
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from generators.generate_data import update_data
@@ -295,7 +295,7 @@ def combine_solutions(
     sp_z[n-1,f-1] = (
       l - sp_x[n-1,f-1] - sp_y[n-1,:,f-1].sum()
     )
-  return {
+  solution = {
     "sp": {
       "x":    sp_x,
       "y":    rmp_y,
@@ -315,6 +315,11 @@ def combine_solutions(
       "U":    spr_U
     }
   }
+  validate_centralized_solution(
+    solution["sp"]["x"], solution["sp"]["y"], solution["sp"]["z"],
+    solution["sp"]["r"], sp_data,
+  )
+  return solution
 
 
 def decode_solutions(
