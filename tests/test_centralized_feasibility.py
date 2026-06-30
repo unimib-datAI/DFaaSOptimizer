@@ -16,13 +16,13 @@ def solution():
       "memory_requirement": {1: 2},
       "memory_capacity": {1: 4, 2: 4},
       "neighborhood": {
-        (1, 1): 0, (1, 2): 1, (2, 1): 1, (2, 2): 0,
+        (1, 1): 0, (1, 2): 0, (2, 1): 1, (2, 2): 0,
       },
     }
   }
-  x = np.array([[2.0], [4.0]])
+  x = np.array([[4.0], [2.0]])
   y = np.zeros((2, 2, 1))
-  y[0, 1, 0] = 2.0
+  y[1, 0, 0] = 2.0
   z = np.zeros((2, 1))
   r = np.ones((2, 1))
   return x, y, z, r, data
@@ -32,7 +32,7 @@ def test_accepts_valid_arrays(solution):
   validate_centralized_solution(*solution)
 
 
-@pytest.mark.parametrize("edge", [(0, 0, 0), (1, 1, 0)])
+@pytest.mark.parametrize("edge", [(0, 0, 0), (0, 1, 0), (1, 1, 0)])
 def test_rejects_non_neighbor_and_self_offload(solution, edge):
   x, y, z, r, data = solution
   y[:] = 0
@@ -45,6 +45,7 @@ def test_rejects_non_neighbor_and_self_offload(solution, edge):
 def test_rejects_ping_pong(solution):
   x, y, z, r, data = solution
   x[:] = 3
+  data[None]["neighborhood"][(1, 2)] = 1
   y[1, 0, 0] = 1
   y[0, 1, 0] = 1
   with pytest.raises(ValueError, match = r"no_ping_pong \(1,1\)"):
@@ -60,7 +61,7 @@ def test_rejects_traffic_loss(solution):
 
 def test_rejects_utilization_above_replica_capacity(solution):
   x, y, z, r, data = solution
-  data[None]["demand"][(2, 1)] = 0.2
+  data[None]["demand"][(2, 1)] = 0.5
   with pytest.raises(ValueError, match = r"utilization_equilibrium \(2,1\)"):
     validate_centralized_solution(x, y, z, r, data)
 
