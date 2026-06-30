@@ -161,7 +161,7 @@ def test_rejects_invalid_variable_values(solution, name, index, domain, value):
 
 @pytest.mark.parametrize(
   "value,dtype",
-  [("bad", object), (1 + 1j, complex)],
+  [("bad", object), ([1, 2], object), (1 + 1j, complex)],
 )
 def test_reports_actual_non_first_invalid_index(solution, value, dtype):
   x, y, z, r, data = solution

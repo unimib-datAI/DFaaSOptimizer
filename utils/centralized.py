@@ -35,8 +35,11 @@ def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
       converted = np.empty(array.shape)
       for index, value in np.ndenumerate(array):
         scalar = np.asarray(value)
-        invalid_scalar = scalar.shape or scalar.dtype.kind not in "buifc"
-        invalid_scalar |= scalar.dtype.kind == "c" and scalar.imag != 0
+        invalid_scalar = (
+          bool(scalar.shape)
+          or scalar.dtype.kind not in "buifc"
+          or (scalar.dtype.kind == "c" and scalar.imag != 0)
+        )
         if invalid_scalar:
           shown = ",".join(str(i + 1) for i in index)
           raise ValueError(f"{name} domain {domain} ({shown}): {value!r}")
