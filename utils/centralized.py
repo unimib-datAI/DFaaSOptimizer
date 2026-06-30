@@ -32,9 +32,16 @@ def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
   for name, array in arrays.items():
     domain = "NonNegativeIntegers" if name == "r" else "NonNegativeReals"
     if array.dtype.kind not in "buif":
-      index = (0,) * array.ndim
-      shown = ",".join("1" for _ in index)
-      raise ValueError(f"{name} domain {domain} ({shown}): {array[index]!r}")
+      converted = np.empty(array.shape)
+      for index, value in np.ndenumerate(array):
+        scalar = np.asarray(value)
+        invalid_scalar = scalar.shape or scalar.dtype.kind not in "buifc"
+        invalid_scalar |= scalar.dtype.kind == "c" and scalar.imag != 0
+        if invalid_scalar:
+          shown = ",".join(str(i + 1) for i in index)
+          raise ValueError(f"{name} domain {domain} ({shown}): {value!r}")
+        converted[index] = scalar.real
+      array = arrays[name] = converted
     invalid = ~np.isfinite(array) | (array < -tolerance)
     if invalid.any():
       index = tuple(np.argwhere(invalid)[0])
@@ -50,7 +57,9 @@ def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
       f"r domain NonNegativeIntegers ({shown}): {arrays['r'][index]}"
     )
 
-  x, y, z, r = (arrays[name] for name in ("x", "y", "z", "r"))
+  x, y, z, r = (
+    arrays[name].astype(float, copy = False) for name in ("x", "y", "z", "r")
+  )
   incoming_load = np.array([
     [values["incoming_load"][(n + 1, f + 1)] for f in range(Nf)]
     for n in range(Nn)

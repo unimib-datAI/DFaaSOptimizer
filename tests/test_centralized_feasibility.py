@@ -45,6 +45,17 @@ def test_accepts_values_within_tolerance(solution):
   validate_centralized_solution(x, y, z, r, data)
 
 
+def test_accepts_unsigned_zero_replicas_for_zero_load(solution):
+  x, y, z, _, data = solution
+  x[:] = 0
+  y[:] = 0
+  for index in data[None]["incoming_load"]:
+    data[None]["incoming_load"][index] = 0
+  validate_centralized_solution(
+    x, y, z, np.zeros((2, 1), dtype = np.uint64), data
+  )
+
+
 @pytest.mark.parametrize(
   "tolerance",
   [-1, np.nan, np.inf, -np.inf, "bad", "1e-6", None, 1 + 1j],
@@ -146,6 +157,18 @@ def test_rejects_invalid_variable_values(solution, name, index, domain, value):
     validate_centralized_solution(
       arrays["x"], arrays["y"], arrays["z"], arrays["r"], data
     )
+
+
+@pytest.mark.parametrize(
+  "value,dtype",
+  [("bad", object), (1 + 1j, complex)],
+)
+def test_reports_actual_non_first_invalid_index(solution, value, dtype):
+  x, y, z, r, data = solution
+  x = x.astype(dtype)
+  x[1, 0] = value
+  with pytest.raises(ValueError, match = r"x domain NonNegativeReals \(2,1\)"):
+    validate_centralized_solution(x, y, z, r, data)
 
 
 @pytest.mark.parametrize(
