@@ -74,6 +74,12 @@ def parse_arguments() -> argparse.Namespace:
     default = False,
     action = "store_true"
   )
+  parser.add_argument(
+    "--v0",
+    help = "Use the v0 (non-accelerated) FaaS-MACrO iteration variant",
+    default = False,
+    action = "store_true"
+  )
   # Parse the arguments
   args: argparse.Namespace = parser.parse_known_args()[0]
   return args
@@ -1148,8 +1154,9 @@ if __name__ == "__main__":
   config = load_configuration(config_file)
   # run
   run(
-    config, 
-    parallelism, 
-    log_on_file = False, 
-    disable_plotting = disable_plotting
+    config,
+    parallelism,
+    log_on_file = False,
+    disable_plotting = disable_plotting,
+    v0 = args.v0
   )
