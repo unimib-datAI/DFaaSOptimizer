@@ -1,0 +1,9 @@
+hosts:
+  - host: 10.0.0.10
+    user: ubuntu
+    slots: 2
+    identity_file: ~/.ssh/id_ed25519
+  - host: 10.0.0.11
+    user: ubuntu
+    slots: 2
+    identity_file: ~/.ssh/id_ed25519
