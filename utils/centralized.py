@@ -3,6 +3,16 @@ import numpy as np
 
 
 def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
+  try:
+    tolerance_value = np.asarray(tolerance)
+  except (TypeError, ValueError, OverflowError):
+    raise ValueError(f"tolerance domain NonNegativeReal: {tolerance!r}")
+  if tolerance_value.shape or tolerance_value.dtype.kind not in "buif":
+    raise ValueError(f"tolerance domain NonNegativeReal: {tolerance!r}")
+  tolerance = float(tolerance_value)
+  if not np.isfinite(tolerance) or tolerance < 0:
+    raise ValueError(f"tolerance domain NonNegativeReal: {tolerance!r}")
+
   values = data[None]
   Nn, Nf = values["Nn"][None], values["Nf"][None]
   arrays = {
@@ -19,16 +29,20 @@ def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
         f"{name} shape: {array.shape} != {expected_shapes[name]}"
       )
 
-  for name in ("x", "y", "z"):
-    invalid = ~np.isfinite(arrays[name]) | (arrays[name] < -tolerance)
+  for name, array in arrays.items():
+    domain = "NonNegativeIntegers" if name == "r" else "NonNegativeReals"
+    if array.dtype.kind not in "buif":
+      index = (0,) * array.ndim
+      shown = ",".join("1" for _ in index)
+      raise ValueError(f"{name} domain {domain} ({shown}): {array[index]!r}")
+    invalid = ~np.isfinite(array) | (array < -tolerance)
     if invalid.any():
       index = tuple(np.argwhere(invalid)[0])
       shown = ",".join(str(i + 1) for i in index)
       raise ValueError(
-        f"{name} domain NonNegativeReals ({shown}): {arrays[name][index]}"
+        f"{name} domain {domain} ({shown}): {array[index]}"
       )
-  invalid = ~np.isfinite(arrays["r"]) | (arrays["r"] < -tolerance)
-  invalid |= np.abs(arrays["r"] - np.rint(arrays["r"])) > tolerance
+  invalid = np.abs(arrays["r"] - np.rint(arrays["r"])) > tolerance
   if invalid.any():
     index = tuple(np.argwhere(invalid)[0])
     shown = ",".join(str(i + 1) for i in index)
@@ -41,10 +55,9 @@ def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
     [values["incoming_load"][(n + 1, f + 1)] for f in range(Nf)]
     for n in range(Nn)
   ])
-  neighborhood = np.array([
-    [values["neighborhood"][(n + 1, m + 1)] for m in range(Nn)]
-    for n in range(Nn)
-  ])
+  neighborhood = np.zeros((Nn, Nn))
+  for (n, m), is_neighbor in values["neighborhood"].items():
+    neighborhood[n - 1, m - 1] = is_neighbor
   invalid = y - incoming_load[:, None, :] * neighborhood[:, :, None] > tolerance
   if invalid.any():
     n, m, f = np.argwhere(invalid)[0]

@@ -32,6 +32,28 @@ def test_accepts_valid_arrays(solution):
   validate_centralized_solution(*solution)
 
 
+def test_accepts_sparse_neighborhood_with_zero_defaults(solution):
+  x, y, z, r, data = solution
+  data[None]["neighborhood"] = {(2, 1): 1}
+  validate_centralized_solution(x, y, z, r, data)
+
+
+def test_accepts_values_within_tolerance(solution):
+  x, y, z, r, data = solution
+  z[0, 0] = -0.5e-6
+  r[0, 0] = 1 + 0.5e-6
+  validate_centralized_solution(x, y, z, r, data)
+
+
+@pytest.mark.parametrize(
+  "tolerance",
+  [-1, np.nan, np.inf, -np.inf, "bad", "1e-6", None, 1 + 1j],
+)
+def test_rejects_invalid_tolerance(solution, tolerance):
+  with pytest.raises(ValueError, match = "tolerance"):
+    validate_centralized_solution(*solution, tolerance = tolerance)
+
+
 @pytest.mark.parametrize("edge", [(0, 0, 0), (0, 1, 0), (1, 1, 0)])
 def test_rejects_non_neighbor_and_self_offload(solution, edge):
   x, y, z, r, data = solution
@@ -96,6 +118,34 @@ def test_rejects_non_integer_replicas(solution):
   r[0, 0] = 1.5
   with pytest.raises(ValueError, match = r"r domain NonNegativeIntegers \(1,1\)"):
     validate_centralized_solution(x, y, z, r, data)
+
+
+@pytest.mark.parametrize(
+  "value",
+  [np.nan, np.inf, -np.inf, 1 + 1j, "bad", pytest.param(object(), id = "object")],
+)
+@pytest.mark.parametrize(
+  "name,index,domain",
+  [
+    ("x", (0, 0), "NonNegativeReals"),
+    ("y", (0, 0, 0), "NonNegativeReals"),
+    ("z", (0, 0), "NonNegativeReals"),
+    ("r", (0, 0), "NonNegativeIntegers"),
+  ],
+)
+def test_rejects_invalid_variable_values(solution, name, index, domain, value):
+  x, y, z, r, data = solution
+  arrays = {"x": x, "y": y, "z": z, "r": r}
+  dtype = complex if isinstance(value, complex) else object
+  if isinstance(value, float):
+    dtype = float
+  arrays[name] = arrays[name].astype(dtype)
+  arrays[name][index] = value
+  shown_index = ",".join(str(i + 1) for i in index)
+  with pytest.raises(ValueError, match = rf"{name} domain {domain} \({shown_index}\)"):
+    validate_centralized_solution(
+      arrays["x"], arrays["y"], arrays["z"], arrays["r"], data
+    )
 
 
 @pytest.mark.parametrize(
