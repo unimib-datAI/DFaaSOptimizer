@@ -669,6 +669,7 @@ def plot_by_key(
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
+    "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
     "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
     "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"],
     "FaaS-MABR-S": mcolors.CSS4_COLORS["mediumaquamarine"],
@@ -804,7 +805,7 @@ def dev_barplot_by_key(
         )
       # -- common properties
       plt.setp(axs2, title = None)
-      for idx in range(len(axs2)):
+      for idx in range(ncols):
         axs2[ridx,idx].set_xlabel(
           label,
           fontsize = fontsize
@@ -834,6 +835,7 @@ def violinplot_by_key(
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
+    "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
     "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
     "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"],
     "FaaS-MABR-S": mcolors.CSS4_COLORS["mediumaquamarine"],

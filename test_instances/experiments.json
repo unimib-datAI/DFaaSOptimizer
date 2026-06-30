@@ -1,0 +1,25 @@
+{
+  "experiments_list": [
+    [
+      20,
+      4850
+    ],
+    [
+      20,
+      7521
+    ],
+    [
+      20,
+      3865
+    ]
+  ],
+  "centralized": [],
+  "faas-macro": [],
+  "faas-macro-v0": [],
+  "faas-madea": [],
+  "hierarchical": [
+    "solutions/heterogeneousnodes_equalbeta-3classes-fixed_sum_auto_avg-Nf_3-k_3-planar-hierarchicalb/2026-06-30_15-07-20.999765",
+    "solutions/heterogeneousnodes_equalbeta-3classes-fixed_sum_auto_avg-Nf_3-k_3-planar-hierarchicalb/2026-06-30_15-11-12.143728",
+    "solutions/heterogeneousnodes_equalbeta-3classes-fixed_sum_auto_avg-Nf_3-k_3-planar-hierarchicalb/2026-06-30_15-15-13.347285"
+  ]
+}

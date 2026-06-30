@@ -572,6 +572,7 @@ def run(
   spc_complete_solution = init_complete_solution()
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
+  runtime_list = []
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
       print(f"t = {t}", file = log_stream, flush = True)
@@ -875,6 +876,7 @@ def run(
         file = log_stream, 
         flush = True
       )
+    runtime_list.append(total_runtime)
   # join
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
     sp_complete_solution
@@ -919,6 +921,10 @@ def run(
   # save models termination condition
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
+  )
+  # save runtime (avoids fragile log parsing in results_postprocessing)
+  pd.DataFrame({"tot": runtime_list}).to_csv(
+    os.path.join(solution_folder, "runtime.csv"), index = False
   )
   if verbose > 0:
     print(

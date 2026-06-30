@@ -221,3 +221,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 .gitnexus
+
+# Gurobi infeasibility diagnostics (models/model.py write_iis)
+infeas_*.ilp
+*.err

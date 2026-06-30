@@ -1,0 +1,50 @@
+{
+  "base_solution_folder": "solutions/heterogeneousnodes_equalbeta-3classes-fixed_sum_auto_avg-Nf_3-k_3-planar-hierarchicalb",
+  "verbose": 2,
+  "seed": 4850,
+  "max_steps": 100,
+  "min_run_time": 70,
+  "max_run_time": 80,
+  "solver_name": "gurobi",
+  "solver_options": {
+    "general": {
+      "TimeLimit": 120,
+      "MIPGap": 1e-05
+    },
+    "auction": {
+      "eta": 0.0,
+      "epsilon": 0.0001,
+      "zeta": 0.01,
+      "latency_weight": 0.0,
+      "fairness_weight": 0.0,
+      "unit_bids": true
+    },
+    "coordinator": {
+      "sorting_rule": "product"
+    },
+    "update_neighborhood": false,
+    "start_from_last_pi": false,
+    "use_detailed_pi": false
+  },
+  "checkpoint_interval": 10,
+  "max_iterations": 100,
+  "plot_interval": 100,
+  "patience": 10,
+  "sw_patience": 200,
+  "limits": {
+    "instance_type": "load_existing",
+    "Nn": {
+      "values": [
+        20
+      ]
+    },
+    "Nf": {
+      "min": 3,
+      "max": 3
+    },
+    "path": "solutions/heterogeneousnodes_equalbeta-3classes-fixed_sum_auto_avg-Nf_3-k_3-planar",
+    "load": {
+      "trace_type": "load_existing"
+    }
+  }
+}

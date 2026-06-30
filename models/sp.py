@@ -139,6 +139,13 @@ class LSP(LSP_v0):
     ###########################################################################
     # Constraints
     ###########################################################################
+    # The inherited LSP_v0 balance (x + omega == load) is an equality with no
+    # room for the cloud-rejection variable z: combined with the z-aware
+    # balance below it would force z == 0 (silently disabling cloud rejection
+    # and the gamma*z objective term, and making LSP_capped infeasible whenever
+    # the offload cap is below the overflow). Drop it; no_traffic_loss is the
+    # real flow-conservation constraint once z exists.
+    self.model.del_component(self.model.no_traffic_loss_v0)
     self.model.no_traffic_loss = pyo.Constraint(
       self.model.F, rule = self.no_traffic_loss
     )
@@ -146,7 +153,7 @@ class LSP(LSP_v0):
     # Objective function
     ###########################################################################
     self.set_objective(rule = self.minimize_processing_cost)
-  
+
   @staticmethod
   def no_traffic_loss(model, f):
     return (

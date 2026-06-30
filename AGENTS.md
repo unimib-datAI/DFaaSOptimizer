@@ -55,7 +55,7 @@ Do not commit large generated outputs from `solutions/` unless explicitly requir
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **DFaaSOptimizer** (973 symbols, 2818 relationships, 81 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **DFaaSOptimizer** (1610 symbols, 4345 relationships, 131 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
