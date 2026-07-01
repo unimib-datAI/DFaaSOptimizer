@@ -5,11 +5,9 @@ VMs via `ray-dispatcher` with a live TUI.
 
 ## Prerequisites
 
-- A sibling checkout of `ray-dispatcher` at `../ray-dispatcher` (relative to
-  this repo's root) — it's a `uv` path dependency in `pyproject.toml`'s
-  `[tool.uv.sources]`, so `uv sync` won't resolve without it.
 - VMs in the inventory need SSH reachability and Gurobi installed with a
   license (see `--gurobi-license`).
+- VMs need outbound network access while provisioning Python and dependencies.
 - `--project-path` defaults to `.` (this repo's root) — that's what gets
   rsynced to each VM, excluding `.venv/`, `.git/`, `solutions/`, `results/`,
   `batches/`.

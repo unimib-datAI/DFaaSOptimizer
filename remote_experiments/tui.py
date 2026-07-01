@@ -15,7 +15,7 @@ from rich.table import Table
 from ray_dispatcher import Inventory
 
 from .batch import Batch
-from .manifest import Manifest
+from .manifest import Manifest, SUCCEEDED
 from .stats import BatchStats, summarize
 
 
@@ -72,9 +72,13 @@ def live_view(
   ) -> Iterator[Callable[[dict[str, str]], None]]:
   console = Console()
   experiment_ids = [e.id for e in batch.experiments]
+  succeeded_at_start = sum(manifest.status(eid) == SUCCEEDED for eid in experiment_ids)
   with Live(console=console, refresh_per_second=4) as live:
     def on_tick(running_hosts: dict[str, str]) -> None:
       elapsed = time.monotonic() - start_time
-      stats = summarize(experiment_ids, manifest, inventory, running_hosts, elapsed)
+      stats = summarize(
+        experiment_ids, manifest, inventory, running_hosts, elapsed,
+        succeeded_at_start=succeeded_at_start,
+      )
       live.update(render(batch, manifest, stats))
     yield on_tick

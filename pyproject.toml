@@ -36,7 +36,7 @@ dependencies = [
 package = false
 
 [tool.uv.sources]
-ray-dispatcher = { path = "../ray-dispatcher", editable = true }
+ray-dispatcher = { git = "https://github.com/miciav/ray-dispatcher.git", rev = "30e91c81959eab30908675102e639a8953945049" }
 
 [dependency-groups]
 dev = [

@@ -49,6 +49,7 @@ def summarize(
     inventory: Inventory,
     running_hosts: dict[str, str],
     elapsed_s: float,
+    succeeded_at_start: int = 0,
   ) -> BatchStats:
   statuses = {eid: manifest.status(eid) for eid in experiment_ids}
   succeeded = sum(1 for s in statuses.values() if s == SUCCEEDED)
@@ -64,7 +65,8 @@ def summarize(
   total_slots = sum(h.slots for h in inventory.hosts)
   remaining = running + pending
   eta_s = estimate_eta(avg_duration, remaining, total_slots) if durations else None
-  throughput_per_min = (succeeded / elapsed_s * 60) if elapsed_s > 0 else 0.0
+  session_succeeded = max(succeeded - succeeded_at_start, 0)
+  throughput_per_min = (session_succeeded / elapsed_s * 60) if elapsed_s > 0 else 0.0
 
   host_stats = []
   for h in inventory.hosts:

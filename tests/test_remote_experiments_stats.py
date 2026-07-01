@@ -72,3 +72,14 @@ def test_summarize_throughput_per_minute(tmp_path):
   manifest.record("e1", status="succeeded", duration_s=5.0)
   stats = summarize(["e1"], manifest, _inventory(), {}, elapsed_s=30.0)
   assert stats.throughput_per_min == 2.0  # 1 succeeded in 30s -> 2/min
+
+
+def test_summarize_throughput_excludes_successes_from_before_session(tmp_path):
+  manifest = Manifest(tmp_path / "m.json")
+  manifest.record("old", status="succeeded", duration_s=5.0)
+  manifest.record("new", status="succeeded", duration_s=5.0)
+  stats = summarize(
+    ["old", "new"], manifest, _inventory(), {}, elapsed_s=30.0,
+    succeeded_at_start=1,
+  )
+  assert stats.throughput_per_min == 2.0

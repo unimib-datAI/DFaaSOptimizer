@@ -24,7 +24,7 @@ def test_all_ten_algorithms_are_mapped():
 def test_experiment_to_job_builds_expected_command_for_variant_algorithm(tmp_path):
   job = experiment_to_job(_experiment("faas-br-r"), tmp_path)
   assert job.command == (
-    "uv", "run", "decentralized_bestresponse.py", "-c", "config.json",
+    "python", "decentralized_bestresponse.py", "-c", "config.json",
     "--disable_plotting", "--variant", "r",
   )
 
@@ -32,7 +32,15 @@ def test_experiment_to_job_builds_expected_command_for_variant_algorithm(tmp_pat
 def test_experiment_to_job_builds_expected_command_for_plain_algorithm(tmp_path):
   job = experiment_to_job(_experiment("centralized"), tmp_path)
   assert job.command == (
-    "uv", "run", "run_centralized_model.py", "-c", "config.json", "--disable_plotting",
+    "python", "run_centralized_model.py", "-c", "config.json", "--disable_plotting",
+  )
+
+
+def test_experiment_to_job_runs_hierarchical_as_module(tmp_path):
+  job = experiment_to_job(_experiment("hierarchical"), tmp_path)
+  assert job.command == (
+    "python", "-m", "hierarchical_auction.runner", "-c", "config.json",
+    "--disable_plotting",
   )
 
 

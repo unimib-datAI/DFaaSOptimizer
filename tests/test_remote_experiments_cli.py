@@ -98,3 +98,29 @@ def test_cmd_run_wires_dispatcher_into_manifest(tmp_path, monkeypatch):
   manifest = Manifest(batch_path.with_suffix(".manifest.json"))
   assert manifest.status("e1") == "succeeded"
   assert manifest.host("e1") == "10.0.0.10"
+
+
+def test_cmd_run_reports_terminal_failures(tmp_path, monkeypatch, capsys):
+  class _FailedDispatcher(_FakeDispatcher):
+    def __init__(self, *_args, **_kwargs):
+      self._sequences = {"e1": [JobStatus.FAILED]}
+
+  experiment = Experiment(
+    id="e1", suite="smoke", algorithm="centralized", seed=42,
+    graph_params={}, load_params={}, config={"seed": 42},
+  )
+  batch_path = tmp_path / "b.json"
+  Batch(suite="smoke", experiments=(experiment,)).save(batch_path)
+  inventory_path = tmp_path / "inventory.yaml"
+  inventory_path.write_text("hosts:\n  - host: 10.0.0.10\n    user: ubuntu\n    slots: 1\n")
+
+  monkeypatch.setattr("remote_experiments.cli.Dispatcher", _FailedDispatcher)
+  monkeypatch.setattr("builtins.input", lambda prompt: "all")
+  args = build_parser().parse_args([
+    "run", str(batch_path), "--inventory", str(inventory_path),
+  ])
+  cmd_run(args)
+
+  output = capsys.readouterr().out
+  assert "batch finished with 1 unsuccessful experiment" in output
+  assert "batch complete" not in output

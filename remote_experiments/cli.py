@@ -12,7 +12,7 @@ from . import definitions  # imports register all suites as a side effect
 from .batch import Batch
 from .definitions import get_suite, list_suites
 from .jobs import experiment_to_job
-from .manifest import Manifest
+from .manifest import Manifest, SUCCEEDED
 from .runner import run_batch
 from .selection import default_selection, parse_selection
 from .tui import live_view
@@ -66,7 +66,15 @@ def cmd_run(args: argparse.Namespace) -> None:
     start = time.monotonic()
     with live_view(batch, manifest, inventory, start_time=start) as on_tick:
       completed = run_batch(dispatcher, jobs, manifest, on_tick)
-  print("batch complete" if completed else "stopped — rerun the same command to resume")
+  if not completed:
+    print("stopped — rerun the same command to resume")
+  else:
+    unsuccessful = sum(manifest.status(e.id) != SUCCEEDED for e in selected)
+    if unsuccessful:
+      label = "experiment" if unsuccessful == 1 else "experiments"
+      print(f"batch finished with {unsuccessful} unsuccessful {label}")
+    else:
+      print("batch complete")
 
 
 def build_parser() -> argparse.ArgumentParser:

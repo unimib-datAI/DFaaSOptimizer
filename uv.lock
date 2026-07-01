@@ -343,7 +343,7 @@ requires-dist = [
     { name = "python-dateutil", specifier = "==2.9.0.post0" },
     { name = "pytz", specifier = "==2025.2" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "ray-dispatcher", editable = "../ray-dispatcher" },
+    { name = "ray-dispatcher", git = "https://github.com/miciav/ray-dispatcher.git?rev=30e91c81959eab30908675102e639a8953945049" },
     { name = "rich", specifier = ">=13,<15" },
     { name = "scipy", specifier = "==1.15.3" },
     { name = "seaborn", specifier = ">=0.13.2" },
@@ -1023,31 +1023,12 @@ wheels = [
 [[package]]
 name = "ray-dispatcher"
 version = "0.1.0"
-source = { editable = "../ray-dispatcher" }
+source = { git = "https://github.com/miciav/ray-dispatcher.git?rev=30e91c81959eab30908675102e639a8953945049#30e91c81959eab30908675102e639a8953945049" }
 dependencies = [
     { name = "fabric" },
     { name = "pyyaml" },
     { name = "ray" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "fabric", specifier = ">=3.2,<4" },
-    { name = "pyyaml", specifier = ">=6.0,<7" },
-    { name = "ray", specifier = ">=2.40,<3" },
-    { name = "rich", marker = "extra == 'progress'", specifier = ">=13,<15" },
-]
-provides-extras = ["progress"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "mypy", specifier = ">=1.10" },
-    { name = "pytest", specifier = ">=8,<9" },
-    { name = "pytest-cov", specifier = ">=5" },
-    { name = "ruff", specifier = ">=0.5" },
-    { name = "types-pyyaml" },
-]
-e2e = [{ name = "multipass-sdk", marker = "python_full_version >= '3.11'", git = "https://github.com/miciav/multipass-sdk.git?rev=83b3704" }]
 
 [[package]]
 name = "referencing"
