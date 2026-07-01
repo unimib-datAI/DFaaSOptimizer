@@ -120,7 +120,7 @@ pilot shows nondeterministic output.
 ### 4.2 Default scenario
 
 Unless an experiment family states otherwise, the default scenario uses 50
-nodes, 4 functions, a planar graph with `k = 3`, sinusoidal load, heterogeneous
+nodes, 4 functions, a connected planar degree-3 graph, sinusoidal load, heterogeneous
 function demand, heterogeneous objective weights, hierarchy depth 3, and the
 auction parameters `eta = [0.5, 0.3, 0.15]`, `epsilon = 0.01`, and `zeta = 0.1`.
 Memory and utilization ranges will be calibrated in the pilot so that the base
@@ -206,7 +206,7 @@ as implementation validation in supplementary material.
 |---|---|
 | Nodes | 10, 20, 30 |
 | Functions | 2, 4 |
-| Topology | Planar, `k = 3` |
+| Topology | Connected planar degree-3 circular ladder |
 | Load | Medium sinusoidal |
 | Methods | All ten methods |
 | Seeds | 30 confirmatory seeds |
@@ -238,7 +238,7 @@ Timeouts will not be discarded.
 | Factor | Values |
 |---|---|
 | Nodes and functions | 50 nodes, 4 functions |
-| Planar topology | Planar triangulation with `k = 3` |
+| Planar topology | Connected planar degree-3 circular ladder |
 | Regular topology | Random regular degree 3, 5, or 7 |
 | Random topology | Edge probability 0.1, 0.2, or 0.3 |
 | Methods | Hierarchical, FaaS-MACrO, FaaS-MADeA, FaaS-MADiG, FaaS-MAPoD, best MABR variant from E1 |

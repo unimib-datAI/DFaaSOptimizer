@@ -34,7 +34,8 @@ E1 uses all ten repository methods. E2 uses all nine non-centralized methods at
 all sizes and adds centralized runs for 10 and 20 nodes. E3–E5 use the fixed,
 predeclared representative set `hierarchical`, `faas-macro`, `faas-madea`,
 `faas-diffuse`, `faas-powd`, and `faas-br-o`. E7 uses `hierarchical`,
-`faas-macro`, `faas-madea`, and `faas-diffuse`. Fixing these sets before results
+`faas-madea`, `faas-diffuse`, and `faas-powd`, the four methods whose runners
+consume latency and fairness weights. Fixing these sets before results
 exist avoids post-hoc comparator selection.
 
 ## Configuration construction
@@ -57,10 +58,10 @@ letters, digits, underscores, periods, and hyphens accepted by
 ## Experiment-specific factors
 
 E0 varies nodes `(10, 20, 50)` with two functions and four methods. E1 uses
-nodes `(10, 20, 30)`, functions `(2, 4)`, and planar `k=3`. E2 uses nodes
+nodes `(10, 20, 30)`, functions `(2, 4)`, and connected planar degree 3. E2 uses nodes
 `(10, 20, 50, 100, 200)`, functions `(2, 4, 8)`, and random-regular degree 3.
 
-E3 uses 50 nodes, four functions, and seven topology cells: planar `k=3`,
+E3 uses 50 nodes, four functions, and seven topology cells: connected planar degree 3,
 random-regular degree `(3, 5, 7)`, and Erdős–Rényi probability `(0.1, 0.2, 0.3)`.
 E4 uses the seven predefined conditions baseline, low/high load, scarce/ample
 memory, homogeneous nodes, and strongly heterogeneous nodes. E5 uses the three

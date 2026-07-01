@@ -196,11 +196,19 @@ def generate_neighborhood(
     graph = nx.circular_ladder_graph(Nn // 2)
     neighborhood = nx.adjacency_matrix(graph).toarray()
   elif "p" in limits["neighborhood"]:
-    for n1 in range(Nn):
-      for n2 in range(n1+1,Nn):
-        neighborhood[n1,n2] = rng.binomial(1, limits["neighborhood"]["p"])
-        neighborhood[n2,n1] = neighborhood[n1,n2]
-    graph = nx.from_numpy_array(neighborhood)
+    for _ in range(1000):
+      neighborhood = np.zeros((Nn, Nn))
+      for n1 in range(Nn):
+        for n2 in range(n1+1,Nn):
+          neighborhood[n1,n2] = rng.binomial(1, limits["neighborhood"]["p"])
+          neighborhood[n2,n1] = neighborhood[n1,n2]
+      graph = nx.from_numpy_array(neighborhood)
+      if nx.is_connected(graph):
+        break
+    else:
+      raise ValueError(
+        "could not generate a connected random neighborhood in 1000 attempts"
+      )
   elif "k" in limits["neighborhood"]:
     if limits["neighborhood"].get("shape", "") == "planar":
       g = sage.graphs.RandomTriangulation(

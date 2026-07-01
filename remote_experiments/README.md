@@ -41,3 +41,23 @@ command resumes — it defaults to selecting only what isn't `succeeded` yet.
 
 Add a file to `remote_experiments/definitions/` with a function decorated
 `@register_suite("name")` returning a `list[Experiment]` (see `smoke.py`).
+
+## Paper experiment batches
+
+Generate the journal-study batches independently so each research question has
+its own manifest and can be resumed separately:
+
+```bash
+for suite in \
+  paper-e0-pilot \
+  paper-e1-quality-runtime \
+  paper-e2-scalability \
+  paper-e3-topology \
+  paper-e4-robustness \
+  paper-e5-dynamics \
+  paper-e6-ablation \
+  paper-e7-tradeoffs
+do
+  uv run -m remote_experiments define "$suite" -o "batches/$suite.json"
+done
+```

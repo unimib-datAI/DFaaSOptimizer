@@ -70,6 +70,19 @@ def test_generate_neighborhood_with_k_regular():
   assert not np.allclose(neighborhood, np.zeros((6, 6)))
 
 
+def test_probability_neighborhood_is_connected():
+  limits = {"neighborhood": {"p": 1.0}}
+  matrix, graph = generate_neighborhood(4, limits, _rng(1))
+  assert nx.is_connected(graph)
+  assert matrix.shape == (4, 4)
+
+
+def test_probability_neighborhood_rejects_impossible_connectivity():
+  limits = {"neighborhood": {"p": 0.0}}
+  with pytest.raises(ValueError, match="connected random neighborhood"):
+    generate_neighborhood(4, limits, _rng(1))
+
+
 def test_generate_neighborhood_with_planar_degree_three_graph():
   rng = _rng()
   limits = {"neighborhood": {"type": "planar", "degree": 3}}
