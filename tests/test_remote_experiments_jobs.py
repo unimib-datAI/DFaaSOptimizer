@@ -15,9 +15,10 @@ def _experiment(algorithm="centralized"):
   )
 
 
-def test_all_ten_algorithms_are_mapped():
+def test_all_eleven_algorithms_are_mapped():
   expected = {
     "centralized", "faas-macro", "faas-macro-v0", "faas-madea", "hierarchical",
+    "hierarchical-madea",
     "faas-diffuse", "faas-powd", "faas-br-s", "faas-br-r", "faas-br-o",
   }
   assert set(SCRIPT_BY_ALGORITHM) == expected
@@ -42,6 +43,14 @@ def test_experiment_to_job_runs_hierarchical_as_module(tmp_path):
   job = experiment_to_job(_experiment("hierarchical"), tmp_path)
   assert job.command == (
     "python", "-m", "hierarchical_auction.runner", "-c", "config.json",
+    "--disable_plotting",
+  )
+
+
+def test_experiment_to_job_runs_hierarchical_madea_as_module(tmp_path):
+  job = experiment_to_job(_experiment("hierarchical-madea"), tmp_path)
+  assert job.command == (
+    "python", "-m", "hierarchical_auction.madea_runner", "-c", "config.json",
     "--disable_plotting",
   )
 

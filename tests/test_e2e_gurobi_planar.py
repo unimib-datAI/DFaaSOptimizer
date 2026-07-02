@@ -9,6 +9,7 @@ import pytest
 
 from generate_data import generate_neighborhood
 from run_centralized_model import run as run_centralized
+from hierarchical_auction.madea_runner import run as run_hierarchical_madea
 from hierarchical_auction.runner import run as run_hierarchical
 from run_faasmacro import run as run_faasmacro
 
@@ -173,3 +174,18 @@ def test_hierarchical_preserves_negative_best_objective(tmp_path):
   )
 
   assert _read_final_objective(folder, "HierarchicalAuction") < 0.0
+
+
+def test_hierarchical_madea_runs_on_planar_degree_three_graph(tmp_path):
+  _require_gurobi()
+  config = _planar_e2e_config(tmp_path)
+  folder = run_hierarchical_madea(
+    {**config, "base_solution_folder": str(tmp_path / "hierarchical_madea")},
+    parallelism=0,
+    disable_plotting=True,
+  )
+
+  _assert_generated_graph_is_planar_degree_three(folder)
+  _assert_finite_objectives(folder)
+  assert Path(folder, "LSPc_solution.csv").exists()
+  assert "HierarchicalMADeA" in pd.read_csv(Path(folder, "obj.csv")).columns

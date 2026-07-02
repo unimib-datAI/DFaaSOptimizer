@@ -26,6 +26,8 @@ def test_e1_default_count_and_unique_ids():
   experiments = build_e1()
   assert len(experiments) == 1800
   assert len({e.id for e in experiments}) == 1800
+  assert "hierarchical-madea" in {e.algorithm for e in experiments}
+  assert "hierarchical" not in {e.algorithm for e in experiments}
 
 
 def test_e1_expands_function_vectors_and_output_folder():
@@ -88,14 +90,14 @@ def test_e5_count_trace_coverage_and_steps():
 def test_e6_default_count_and_hierarchical_only():
   experiments = build_e6()
   assert len(experiments) == 1200
-  assert {e.algorithm for e in experiments} == {"hierarchical"}
+  assert {e.algorithm for e in experiments} == {"hierarchical-madea"}
 
 
 def test_e7_default_count_and_weight_pairs():
   experiments = build_e7()
   assert len(experiments) == 1680
   sections = {
-    "hierarchical": "auction", "faas-madea": "auction",
+    "hierarchical-madea": "auction", "faas-madea": "auction",
     "faas-diffuse": "diffusion", "faas-powd": "powerd",
   }
   assert {e.algorithm for e in experiments} == set(sections)
@@ -114,7 +116,7 @@ def test_e7_default_count_and_weight_pairs():
 def test_e8_default_count_and_spatial_latency_coverage():
   experiments = paper.build_e8()
   sections = {
-    "hierarchical": "auction", "faas-madea": "auction",
+    "hierarchical-madea": "auction", "faas-madea": "auction",
     "faas-diffuse": "diffusion", "faas-powd": "powerd",
   }
 

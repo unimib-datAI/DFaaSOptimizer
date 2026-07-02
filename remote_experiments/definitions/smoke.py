@@ -13,6 +13,7 @@ _BASE_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config_files" / "eval
 
 ALGORITHMS = (
   "centralized", "faas-macro", "faas-macro-v0", "faas-madea", "hierarchical",
+  "hierarchical-madea",
   "faas-diffuse", "faas-powd", "faas-br-s", "faas-br-r", "faas-br-o",
 )
 

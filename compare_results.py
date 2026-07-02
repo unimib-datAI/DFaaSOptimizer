@@ -52,7 +52,7 @@ def parse_arguments() -> argparse.Namespace:
     "--models",
     help = "List of model names",
     nargs = "*",
-    default = ["LoadManagementModel", "FaaS-MACrO", "FaaS-MADeA", "FaaS-MADiG", "FaaS-MAPoD", "FaaS-MABR-S", "FaaS-MABR-R", "FaaS-MABR-O"]
+    default = ["LoadManagementModel", "FaaS-MACrO", "FaaS-MADeA", "HierarchicalMADeA", "FaaS-MADiG", "FaaS-MAPoD", "FaaS-MABR-S", "FaaS-MABR-R", "FaaS-MABR-O"]
   )
   parser.add_argument(
   "--filter_by",
@@ -670,6 +670,7 @@ def plot_by_key(
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
     "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
+    "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
     "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
     "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"],
     "FaaS-MABR-S": mcolors.CSS4_COLORS["mediumaquamarine"],
@@ -836,6 +837,7 @@ def violinplot_by_key(
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
     "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
+    "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
     "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
     "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"],
     "FaaS-MABR-S": mcolors.CSS4_COLORS["mediumaquamarine"],

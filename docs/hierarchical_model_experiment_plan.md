@@ -26,7 +26,8 @@ The following methods form the comparison set available in the repository.
 | FaaS-MACrO | `faas-macro` | Primary decomposition-based comparator |
 | FaaS-MACrO-v0 | `faas-macro-v0` | Non-accelerated MACrO reference |
 | FaaS-MADeA | `faas-madea` | Distributed auction comparator |
-| Hierarchical | `hierarchical` | Proposed method |
+| Hierarchical MADeA | `hierarchical-madea` | Proposed method: production MADeA at level one plus higher-level coordination |
+| Hierarchical legacy | `hierarchical` | Historical softmax one-hop implementation, retained for diagnostic comparison only |
 | FaaS-MADiG | `faas-diffuse` | Diffusion-based comparator |
 | FaaS-MAPoD | `faas-powd` | Power-diffusion comparator |
 | FaaS-MABR-S | `faas-br-s` | Sequential best-response comparator |

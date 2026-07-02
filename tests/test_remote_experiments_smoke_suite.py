@@ -24,7 +24,8 @@ def test_build_sets_seed_in_config_and_base_solution_folder():
   assert e.config["base_solution_folder"] == f"solutions/{e.id}"
 
 
-def test_build_default_covers_all_ten_algorithms():
+def test_build_default_covers_all_eleven_algorithms():
   experiments = build()
   assert {e.algorithm for e in experiments} == set(ALGORITHMS)
-  assert len(ALGORITHMS) == 10
+  assert len(ALGORITHMS) == 11
+  assert {"hierarchical", "hierarchical-madea"} <= set(ALGORITHMS)

@@ -15,14 +15,16 @@ PILOT_SEEDS = tuple(range(1, 11))
 CONFIRMATORY_SEEDS = tuple(range(1001, 1031))
 
 ALL_ALGORITHMS = (
-  "centralized", "faas-macro", "faas-macro-v0", "faas-madea", "hierarchical",
+  "centralized", "faas-macro", "faas-macro-v0", "faas-madea", "hierarchical-madea",
   "faas-diffuse", "faas-powd", "faas-br-s", "faas-br-r", "faas-br-o",
 )
 NON_CENTRALIZED_ALGORITHMS = tuple(a for a in ALL_ALGORITHMS if a != "centralized")
 REPRESENTATIVE_ALGORITHMS = (
-  "hierarchical", "faas-macro", "faas-madea", "faas-diffuse", "faas-powd", "faas-br-o",
+  "hierarchical-madea", "faas-macro", "faas-madea", "faas-diffuse", "faas-powd", "faas-br-o",
 )
-TRADEOFF_ALGORITHMS = ("hierarchical", "faas-madea", "faas-diffuse", "faas-powd")
+TRADEOFF_ALGORITHMS = (
+  "hierarchical-madea", "faas-madea", "faas-diffuse", "faas-powd",
+)
 
 
 def _base_config() -> dict:
@@ -76,7 +78,7 @@ def _experiment(
 def build_e0(
     seeds: tuple[int, ...] = PILOT_SEEDS,
     algorithms: tuple[str, ...] = (
-      "centralized", "hierarchical", "faas-macro", "faas-madea",
+      "centralized", "hierarchical-madea", "faas-macro", "faas-madea",
     ),
   ) -> list[Experiment]:
   suite = "paper-e0-pilot"
@@ -247,7 +249,7 @@ def build_e6(
           _apply_ablation(config, variant)
           experiments.append(_experiment(
             suite, f"{variant}-n{nodes}-{topology_name}",
-            "hierarchical", seed, config,
+            "hierarchical-madea", seed, config,
           ))
   return experiments
 
@@ -274,7 +276,7 @@ def build_e7(
         for seed in seeds:
           config = _new_config(50, 4, topology)
           section = {
-            "hierarchical": "auction", "faas-madea": "auction",
+            "hierarchical-madea": "auction", "faas-madea": "auction",
             "faas-diffuse": "diffusion", "faas-powd": "powerd",
           }[algorithm]
           options = config["solver_options"][section]
@@ -305,7 +307,7 @@ def build_e8(
             "jitter": {"min": 0.0, "max": 0.1},
           }
           section = {
-            "hierarchical": "auction", "faas-madea": "auction",
+            "hierarchical-madea": "auction", "faas-madea": "auction",
             "faas-diffuse": "diffusion", "faas-powd": "powerd",
           }[algorithm]
           config["solver_options"][section]["latency_weight"] = 0.25

@@ -29,7 +29,7 @@ def test_cmd_define_writes_batch_file(tmp_path):
   cmd_define(args)
   loaded = Batch.load(out_path)
   assert loaded.suite == "smoke"
-  assert len(loaded.experiments) == 20  # smoke suite default: 2 seeds x 10 algorithms
+  assert len(loaded.experiments) == 22  # 2 seeds x 11 algorithms
 
 
 def test_cmd_define_output_is_valid_json(tmp_path):

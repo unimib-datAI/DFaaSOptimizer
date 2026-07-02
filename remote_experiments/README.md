@@ -21,6 +21,10 @@ uv run -m remote_experiments define smoke -o batches/smoke.json
 Builds every `Experiment` for the named suite (a registered function under
 `remote_experiments/definitions/`) and writes them to a static JSON file.
 
+The paper suites use `hierarchical-madea`, which extends the production
+FaaS-MADeA auction with higher-level coordination. The older `hierarchical`
+runner remains available in the smoke suite as a legacy diagnostic method.
+
 ## Materialize the instances
 
 ```bash

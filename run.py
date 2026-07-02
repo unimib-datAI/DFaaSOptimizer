@@ -4,6 +4,7 @@ from run_centralized_model import run as run_centralized
 from run_faasmacro import run as run_iterations
 from run_faasmadea import run as run_auction
 from hierarchical_auction.runner import run as run_hierarchical
+from hierarchical_auction.madea_runner import run as run_hierarchical_madea
 from decentralized_diffusion import run as run_diffusion
 from decentralized_powerd import run as run_powerd
 from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
@@ -31,6 +32,7 @@ METHOD_RESULT_MODELS = {
   "faas-macro-v0": ("LSP", "FaaS-MACrO(v0)"),
   "faas-madea": ("LSPc", "FaaS-MADeA"),
   "hierarchical": ("LSPc", "HierarchicalAuction"),
+  "hierarchical-madea": ("LSPc", "HierarchicalMADeA"),
   "faas-diffuse": ("LSPc", "FaaS-MADiG"),
   "faas-powd": ("LSPc", "FaaS-MAPoD"),
   "faas-br-s": ("LSPc", "FaaS-MABR-S"),
@@ -69,6 +71,7 @@ def parse_arguments() -> argparse.Namespace:
       "faas-macro", 
       "faas-madea",
       "hierarchical",
+      "hierarchical-madea",
       "faas-diffuse",
       "faas-powd",
       "faas-br-s",
@@ -887,6 +890,7 @@ def run(
     "faas-macro-v0": [],
     "faas-madea": [],
     "hierarchical": [],
+    "hierarchical-madea": [],
     "faas-diffuse": [],
     "faas-powd": [],
     "faas-br-s": [],
@@ -911,6 +915,7 @@ def run(
     run_i_v0 = False # -- faasmacro (v0)
     run_a = False # -- faasmadea
     run_h = False # -- hierarchical
+    run_hm = False # -- hierarchical MADeA
     run_d = False # -- faas-diffuse (FaaS-MADiG)
     run_p = False # -- faas-powd (FaaS-MAPoD)
     run_brs = False # -- faas-br-s (FaaS-MABR-S)
@@ -951,6 +956,12 @@ def run(
           solution_folders["hierarchical"][experiment_idx] is None
         )):
         run_h = True
+      if (not generate_only and "hierarchical-madea" in methods) and ((
+          len(solution_folders.get("hierarchical-madea", [])) <= experiment_idx
+        ) or (
+          solution_folders["hierarchical-madea"][experiment_idx] is None
+        )):
+        run_hm = True
       if (not generate_only and "faas-diffuse" in methods) and ((
           len(solution_folders.get("faas-diffuse", [])) <= experiment_idx
         ) or (
@@ -987,13 +998,14 @@ def run(
       run_i_v0 = "faas-macro-v0" in methods
       run_a = "faas-madea" in methods
       run_h = "hierarchical" in methods
+      run_hm = "hierarchical-madea" in methods
       run_d = "faas-diffuse" in methods
       run_p = "faas-powd" in methods
       run_brs = "faas-br-s" in methods
       run_brr = "faas-br-r" in methods
       run_bro = "faas-br-o" in methods
     # if the experiment is still to run...
-    if run_c or run_i or run_i_v0 or run_a or run_h or run_d or run_p or run_brs or run_brr or run_bro or generate_only:
+    if run_c or run_i or run_i_v0 or run_a or run_h or run_hm or run_d or run_p or run_brs or run_brr or run_bro or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       if loop_over in config["limits"]:
@@ -1093,6 +1105,17 @@ def run(
         )
         set_solution_folder(
           solution_folders, "hierarchical", experiment_idx, h_folder
+        )
+      # -- solve hierarchical extension of FaaS-MADeA
+      if run_hm:
+        hm_folder = run_hierarchical_madea(
+          config,
+          sp_parallelism,
+          log_on_file = log_on_file,
+          disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "hierarchical-madea", experiment_idx, hm_folder
         )
       # -- solve diffusion (FaaS-MADiG)
       if run_d:

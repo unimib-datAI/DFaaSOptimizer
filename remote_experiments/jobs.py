@@ -17,6 +17,7 @@ SCRIPT_BY_ALGORITHM: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
   "faas-macro-v0": (("run_faasmacro.py",), ("--v0",)),
   "faas-madea":    (("run_faasmadea.py",), ()),
   "hierarchical":  (("-m", "hierarchical_auction.runner"), ()),
+  "hierarchical-madea": (("-m", "hierarchical_auction.madea_runner"), ()),
   "faas-diffuse":  (("decentralized_diffusion.py",), ()),
   "faas-powd":     (("decentralized_powerd.py",), ()),
   "faas-br-s":     (("decentralized_bestresponse.py",), ("--variant", "s")),
