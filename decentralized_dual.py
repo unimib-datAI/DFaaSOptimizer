@@ -1,4 +1,3 @@
-from collections import deque
 from copy import deepcopy
 from datetime import datetime
 from typing import Tuple
@@ -50,10 +49,10 @@ def pair_scores(
   fairness: np.array,
   dual_options: dict,
 ) -> Tuple[np.array, np.array]:
-  """Return unpriced beta-minus-penalty scores and their eligibility mask.
+  """Return Cloud-relative advantages and their eligibility mask.
 
-  Only neighboring pairs whose score beats rejection (``score > -gamma``)
-  are eligible; all other score entries are ``-inf``.
+  Only neighboring pairs with strictly positive advantage are eligible; all
+  other entries are ``-inf``.
   """
   values = data[None]
   nn = values["Nn"][None]
@@ -68,8 +67,9 @@ def pair_scores(
           values["beta"][(i + 1, j + 1, f + 1)]
           - dual_options["latency_weight"] * latency[i, j]
           - dual_options["fairness_weight"] * fairness[i, f]
+          + values["gamma"][(i + 1, f + 1)]
         )
-        if neighborhood[i, j] and score > -values["gamma"][(i + 1, f + 1)]:
+        if neighborhood[i, j] and score > 0.0:
           scores[i, j, f] = score
           eligible[i, j, f] = True
 
@@ -86,8 +86,8 @@ def buyer_price_response(
   """Return uncapped best-seller demand and capacity-capped waterfill bids.
 
   Demand and the buyer dual term use the best strictly positive price-adjusted
-  score with lower seller indices breaking ties; bids rank all positive sellers
-  while exposing the unpriced utility.
+  advantage with lower seller indices breaking ties; bids rank positive sellers
+  sparsely while exposing the Cloud-relative utility.
   """
   nn, nf = omega.shape
   demand = np.zeros((nn, nf))
@@ -95,18 +95,23 @@ def buyer_price_response(
   rows = []
 
   for i, f in zip(*np.nonzero(omega > 0)):
-    adjusted = np.where(elig[i, :, f], s[i, :, f] - lam[:, f], -np.inf)
-    positive = np.flatnonzero(adjusted > 0)
-    if not len(positive):
+    ranked = sorted(
+      (
+        (j, s[i, j, f] - lam[j, f])
+        for j in np.flatnonzero(elig[i, :, f])
+        if s[i, j, f] - lam[j, f] > 0.0
+      ),
+      key=lambda item: (-item[1], item[0]),
+    )
+    if not ranked:
       continue
 
-    ranked = positive[np.argsort(-adjusted[positive], kind="stable")]
-    best = ranked[0]
+    best = ranked[0][0]
     demand[best, f] += omega[i, f]
-    dual_term += omega[i, f] * adjusted[best]
+    dual_term += omega[i, f] * ranked[0][1]
 
     remaining = omega[i, f]
-    for j in ranked:
+    for j, _ in ranked:
       quantity = min(remaining, capacity[j, f])
       if quantity > 0:
         rows.append({"i": i, "j": j, "f": f, "d": quantity, "utility": s[i, j, f]})
@@ -127,12 +132,30 @@ def dual_coordination_round(
   dual_options: dict,
   latency: np.array,
   fairness: np.array,
-  force_memory_bids: bool,
-  ell: np.array,
-  r: np.array,
-  ) -> Tuple[np.array, np.array, pd.DataFrame, dict, int]:
+  ) -> Tuple[np.array, pd.DataFrame, dict, int]:
   """Projected dual subgradient loop with primal recovery and certificate."""
-  if int(dual_options["max_inner_iterations"]) < 1:
+  max_inner_iterations = dual_options["max_inner_iterations"]
+  if isinstance(max_inner_iterations, bool) or not isinstance(
+    max_inner_iterations, (int, np.integer)
+  ):
+    raise ValueError("max_inner_iterations must be a positive integer")
+  numeric_options = {
+    "alpha0": dual_options["alpha0"],
+    "theta": dual_options["theta"],
+    "gap_tolerance": dual_options["gap_tolerance"],
+    "latency_weight": dual_options["latency_weight"],
+    "fairness_weight": dual_options["fairness_weight"],
+  }
+  for name, value in numeric_options.items():
+    if not np.isfinite(value):
+      raise ValueError(f"{name} must be finite")
+  if dual_options["step_rule"] == "sqrt" and dual_options["alpha0"] <= 0.0:
+    raise ValueError("alpha0 must be positive")
+  if dual_options["step_rule"] == "polyak" and dual_options["theta"] <= 0.0:
+    raise ValueError("theta must be positive")
+  if dual_options["gap_tolerance"] < 0.0:
+    raise ValueError("gap_tolerance must be nonnegative")
+  if max_inner_iterations < 1:
     raise ValueError("max_inner_iterations must be at least 1")
   if dual_options["step_rule"] not in {"sqrt", "polyak"}:
     raise ValueError("step_rule must be 'sqrt' or 'polyak'")
@@ -145,19 +168,23 @@ def dual_coordination_round(
   lam = np.zeros((nn, nf))
   score_values = np.where(eligible, scores, 0.0)
   best_lb, best_ub = 0.0, np.inf
-  best_bids = pd.DataFrame(
-    {"i": [], "j": [], "f": [], "d": [], "utility": []}
-  )
+  best_lam = lam.copy()
+  best_y = np.zeros((nn, nn, nf))
+  ell = np.zeros((nn, nf))
+  r = np.zeros((nn, nf))
   lb_history = []
   n_active = int((omega > 0).any(axis=1).sum())
   gap = 0.0
   k = 0
 
-  for k in range(1, int(dual_options["max_inner_iterations"]) + 1):
+  for k in range(1, max_inner_iterations + 1):
     bids, demand, buyer_term = buyer_price_response(
       omega, capacity, lam, scores, eligible
     )
-    best_ub = min(best_ub, float((lam * capacity).sum() + buyer_term))
+    ub = float((lam * capacity).sum() + buyer_term)
+    if ub < best_ub:
+      best_ub = ub
+      best_lam = lam.copy()
     if len(bids) > 0:
       candidate_y, _, _ = evaluate_assignments(
         bids, residual_capacity, data, ell, r, rho,
@@ -166,7 +193,8 @@ def dual_coordination_round(
       )
       candidate_lb = float((score_values * candidate_y).sum())
       if candidate_lb > best_lb:
-        best_lb, best_bids = candidate_lb, bids
+        best_lb = candidate_lb
+        best_y = candidate_y.copy()
     lb_history.append(best_lb)
     gap = (best_ub - best_lb) / max(1.0, abs(best_ub))
     if gap <= dual_options["gap_tolerance"]:
@@ -185,17 +213,10 @@ def dual_coordination_round(
     lam = np.maximum(0.0, lam + alpha * subgradient)
 
   memory_bids = {"i": [], "j": [], "f": []}
-  placed = (
-    np.zeros((nn, nf)) if len(best_bids) == 0
-    else evaluate_assignments(
-      best_bids, residual_capacity, data, ell, r, rho,
-      tentatively_start_replicas=False, last_y=None,
-      diffusion_options=dual_options, latency=latency, fairness=fairness,
-    )[0].sum(axis=1)
-  )
+  placed = best_y.sum(axis=1)
   for i, f in zip(*np.nonzero(omega > 0)):
     i, f = int(i), int(f)
-    if placed[i, f] < omega[i, f] or force_memory_bids:
+    if placed[i, f] + 1e-12 < omega[i, f]:
       memory_requirement = data[None]["memory_requirement"][f + 1]
       for j in np.nonzero(neighborhood[i, :])[0]:
         if rho[int(j)] >= memory_requirement:
@@ -204,19 +225,12 @@ def dual_coordination_round(
           memory_bids["f"].append(f)
   memory_bids = pd.DataFrame(memory_bids)
 
-  y_increment = np.zeros((nn, nn, nf))
-  additional_replicas = np.zeros((nn, nf))
-  if len(best_bids) > 0:
-    y_increment, additional_replicas, _ = evaluate_assignments(
-      best_bids, residual_capacity, data, ell, r, rho,
-      tentatively_start_replicas=(len(memory_bids) == 0), last_y=None,
-      diffusion_options=dual_options, latency=latency, fairness=fairness,
-    )
   gap_info = {
     "LB": best_lb, "UB": best_ub, "gap": gap,
-    "inner_iterations": k, "lam": lam, "lb_history": lb_history,
+    "inner_iterations": k, "lam": lam, "best_lam": best_lam,
+    "lb_history": lb_history,
   }
-  return y_increment, additional_replicas, memory_bids, gap_info, n_active
+  return best_y, memory_bids, gap_info, n_active
 
 def parse_arguments() -> argparse.Namespace:
   parser = argparse.ArgumentParser(
@@ -238,6 +252,16 @@ def parse_arguments() -> argparse.Namespace:
     default=False, action="store_true",
   )
   return parser.parse_known_args()[0]
+
+
+def _capacity_state(
+    sp_x: np.array, y: np.array, sp_r: np.array, sp_data: dict
+  ) -> Tuple[np.array, np.array, np.array, np.array]:
+  capacity, residual_capacity, ell = compute_residual_capacity(
+    sp_x, y, sp_r, sp_data
+  )
+  blackboard = np.maximum(0.0, capacity - sp_x)
+  return capacity, residual_capacity, ell, blackboard
 
 
 def run(
@@ -270,7 +294,6 @@ def run(
   max_run_time = config.get("max_run_time", max_steps)
   run_time_step = config.get("run_time_step", 1)
   checkpoint_interval = config["checkpoint_interval"]
-  patience = config["patience"]
   now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
   solution_folder = f"{base_solution_folder}/{now}"
   os.makedirs(solution_folder, exist_ok=True)
@@ -300,6 +323,7 @@ def run(
   spc_complete_solution = init_complete_solution()
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
+  certificate_rows = []
   runtime_list = []
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
@@ -337,30 +361,21 @@ def run(
     y = np.zeros((Nn, Nn, Nf))
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn, Nf))
-    n_accepted_queue = deque(maxlen=patience)
     while not stop_searching:
       s = datetime.now()
-      capacity, residual_capacity, ell = compute_residual_capacity(
+      capacity, residual_capacity, ell, blackboard = _capacity_state(
         sp_x, y, sp_r, sp_data
       )
-      blackboard = np.maximum(0.0, capacity - sp_x)
       coordination_rho = (
         sp_rho if opt_solution is None else np.zeros_like(sp_rho)
       )
       total_runtime += (datetime.now() - s).total_seconds()
       s = datetime.now()
-      y_inc, additional_replicas, memory_bids, gap_info, n_active = (
-        dual_coordination_round(
-          omega, residual_capacity, sp_data, neighborhood, coordination_rho,
-          dual_options, latency, fairness,
-          force_memory_bids=(
-            (coordination_rho > 0).any()
-            and len(n_accepted_queue) >= n_accepted_queue.maxlen
-            and all(x == n_accepted_queue[0] for x in n_accepted_queue)
-          ),
-          ell=ell, r=sp_r,
-        )
+      y_inc, memory_bids, gap_info, n_active = dual_coordination_round(
+        omega, residual_capacity, sp_data, neighborhood, coordination_rho,
+        dual_options, latency, fairness,
       )
+      additional_replicas = np.zeros((Nn, Nf))
       rt = (datetime.now() - s).total_seconds()
       total_runtime += (rt / n_active) if n_active else rt
       rmp_omega = y.sum(axis=1)
@@ -370,7 +385,6 @@ def run(
         y[np.abs(y) < tolerance] = 0.0
         rmp_omega = y.sum(axis=1)
         fairness += (rmp_omega > tolerance)
-        n_accepted_queue.append(rmp_omega.sum())
         bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
         if bad_nodes:
           raise RuntimeError(
@@ -384,12 +398,16 @@ def run(
         sp_x, _, _, _, sp_r, sp_rho = spr_sol
         omega = sp_omega - rmp_omega
         omega[np.abs(omega) < tolerance] = 0.0
-      if len(memory_bids) > 0 and not (additional_replicas > 0).any():
+      if len(memory_bids) > 0:
         s = datetime.now()
         additional_replicas, sp_rho = start_additional_replicas(
           memory_bids, sp_r, sp_data, sp_rho
         )
         sp_r += additional_replicas
+        if (additional_replicas > tolerance).any():
+          capacity, residual_capacity, ell, blackboard = _capacity_state(
+            sp_x, y, sp_r, sp_data
+          )
         total_runtime += (datetime.now() - s).total_seconds()
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
@@ -421,6 +439,17 @@ def run(
         ).any():
         stop_searching = True
         why_stop_searching = "no dual progress"
+      certificate_rows.append(
+        {
+          "timestep": t,
+          "outer_iteration": it,
+          "LB": gap_info["LB"],
+          "UB": gap_info["UB"],
+          "gap": gap_info["gap"],
+          "inner_iterations": gap_info["inner_iterations"],
+          "stop_reason": why_stop_searching if stop_searching else "",
+        }
+      )
       if not stop_searching:
         it += 1
       else:
@@ -433,8 +462,9 @@ def run(
         obj_dict["LSPr_final"].append(objf)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} "
-          f"(it: {it}; gap: {gap_info['gap']:.6f}; "
-          f"LB: {gap_info['LB']:.6f}; UB: {gap_info['UB']:.6f}; "
+          f"(it: {it}; fixed-C gap: {gap_info['gap']:.6f}; "
+          f"fixed-C LB: {gap_info['LB']:.6f}; "
+          f"fixed-C UB: {gap_info['UB']:.6f}; "
           f"inner: {gap_info['inner_iterations']}; "
           f"best it: {best_it_so_far}; "
           f"best centralized it: {best_centralized_it}; "
@@ -480,6 +510,21 @@ def run(
   )
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
+  )
+  pd.DataFrame(
+    certificate_rows,
+    columns=[
+      "timestep",
+      "outer_iteration",
+      "LB",
+      "UB",
+      "gap",
+      "inner_iterations",
+      "stop_reason",
+    ],
+  ).to_csv(
+    os.path.join(solution_folder, "coordination_certificate.csv"),
+    index=False,
   )
   pd.DataFrame({"tot": runtime_list}).to_csv(
     os.path.join(solution_folder, "runtime.csv"), index=False
