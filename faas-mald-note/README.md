@@ -1,8 +1,6 @@
 # FaaS-MALD technical note
 
-A focused, paper-ready LaTeX section describing **FaaS-MALD**, the
-Lagrangian-dual coordination method with a primal--dual optimality certificate,
-in the notation and style of `Decentralized_FaaS_coordination.pdf`.
+A focused, paper-ready LaTeX section describing FaaS-MALD and its fixed-residual-capacity transportation-LP certificate.
 
 ## Files
 
@@ -13,6 +11,13 @@ in the notation and style of `Decentralized_FaaS_coordination.pdf`.
 - `references.bib` — bibliography for the literature-positioning subsection.
 - `main.tex` — minimal standalone preview wrapper.
 - `.gitignore` — ignores LaTeX build artifacts and the preview PDF.
+
+## Runtime artifacts
+
+- `obj.csv` — objective trace written by the runner.
+- `termination_condition.csv` — outer-loop stopping summaries.
+- `coordination_certificate.csv` — one row per outer iteration with the fixed-capacity inner-LP certificate columns `timestep`, `outer_iteration`, `LB`, `UB`, `gap`, `inner_iterations`, and `stop_reason`.
+- `runtime.csv` — runtime totals per timestep.
 
 ## Compile the preview
 
