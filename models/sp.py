@@ -423,3 +423,87 @@ class LSP_capped_fixedr(LSP_fixedr):
   @staticmethod
   def cap_offloading(model, f):
     return model.omega[f] <= model.omega_ub[f]
+
+
+##############################################################################
+# POTENTIAL GAME (FaaS-MAPG node proposal model)
+##############################################################################
+
+class LSP_pg(LSP):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSP_pg"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # committed inbound offloading (other players' strategies, fixed)
+    self.model.y_bar = pyo.Param(
+      self.model.N, self.model.N, self.model.F,
+      within = PYO_PARAM_TYPE, default = 0.0
+    )
+    # per-function upper bound on horizontal offloading
+    self.model.omega_ub = pyo.Param(
+      self.model.F, within = pyo.NonNegativeReals, default = 1e9
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    # replicas must also cover committed inbound flows (LSPr-style)
+    self.model.del_component(self.model.utilization_equilibrium)
+    self.model.del_component(self.model.utilization_equilibrium2)
+    self.model.utilization_equilibrium = pyo.Constraint(
+      self.model.F, rule = self.utilization_equilibrium_pg
+    )
+    self.model.utilization_equilibrium2 = pyo.Constraint(
+      self.model.F, rule = self.utilization_equilibrium2_pg
+    )
+    self.model.cap_offloading = pyo.Constraint(
+      self.model.F, rule = self.cap_offloading
+    )
+
+  @staticmethod
+  def utilization_equilibrium_pg(model, f):
+    return (
+      model.demand[model.whoami,f] * (
+        model.x[f] + sum(model.y_bar[m,model.whoami,f] for m in model.N)
+      ) <= model.r[f] * model.max_utilization[f]
+    )
+
+  @staticmethod
+  def utilization_equilibrium2_pg(model, f):
+    return (
+      model.demand[model.whoami,f] * (
+        model.x[f] + sum(model.y_bar[m,model.whoami,f] for m in model.N)
+      ) >= (model.r[f] - 1) * model.max_utilization[f]
+    )
+
+  @staticmethod
+  def cap_offloading(model, f):
+    return model.omega[f] <= model.omega_ub[f]
+
+
+class LSP_pg_fixedr(LSP_pg):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSP_pg_fixedr"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # number of assigned replicas
+    self.model.r_bar = pyo.Param(
+      self.model.N, self.model.F,
+      within = pyo.NonNegativeIntegers, default = 0
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.fix_r = pyo.Constraint(
+      self.model.F, rule = self.fix_r
+    )
+    # with r pinned the replica lower bound may conflict with commitments
+    # (same reasoning as LSP_fixedr)
+    self.model.del_component(self.model.utilization_equilibrium2)
+
+  @staticmethod
+  def fix_r(model, f):
+    return model.r[f] == model.r_bar[model.whoami,f]
