@@ -1,0 +1,66 @@
+{
+  "base_solution_folder": "solutions/mald_smoke",
+  "verbose": 1,
+  "seed": 42,
+  "max_steps": 8,
+  "min_run_time": 1,
+  "max_run_time": 4,
+  "run_time_step": 1,
+  "solver_name": "gurobi",
+  "solver_options": {
+    "general": {
+      "TimeLimit": 120,
+      "OutputFlag": 0
+    },
+    "dual": {
+      "alpha0": 1.0,
+      "step_rule": "sqrt",
+      "max_inner_iterations": 50,
+      "gap_tolerance": 0.01,
+      "latency_weight": 0.0,
+      "fairness_weight": 0.0
+    }
+  },
+  "max_iterations": 20,
+  "patience": 5,
+  "checkpoint_interval": 1,
+  "tolerance": 1e-6,
+  "limits": {
+    "Nn": {
+      "min": 10,
+      "max": 10
+    },
+    "Nf": {
+      "min": 2,
+      "max": 2
+    },
+    "neighborhood": {
+      "p": 0.3
+    },
+    "demand": {
+      "values": [1.0, 1.2]
+    },
+    "memory_capacity": {
+      "min": 12,
+      "max": 12
+    },
+    "memory_requirement": {
+      "values": [2, 3]
+    },
+    "max_utilization": {
+      "min": 0.65,
+      "max": 0.75
+    },
+    "load": {
+      "trace_type": "sinusoidal",
+      "min": {"min": 1, "max": 2},
+      "max": {"min": 6, "max": 12}
+    },
+    "weights": {
+      "alpha": {"min": 1.0, "max": 1.5},
+      "beta_multiplier": {"min": 1.5, "max": 2.5},
+      "gamma": {"min": 0.05, "max": 0.15},
+      "delta_multiplier": {"min": 0.1, "max": 0.2}
+    }
+  }
+}
