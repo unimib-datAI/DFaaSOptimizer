@@ -163,6 +163,36 @@ termination-condition string: `gap: <rel_gap> (LB: …, UB: …)`.
 Benchmark (follow-up, not in scope here): add FaaS-MALD to the comparison
 experiments against MADiG/MABR/MADEA on the paper instances.
 
+## LaTeX technical note (deliverable)
+
+A `faas-mald-note/` directory following the exact pattern of
+`faas-madig-note/`:
+
+- `faas-mald.tex` — the deliverable: a self-contained `\section` in the
+  notation and style of `Decentralized_FaaS_coordination.pdf`, with a
+  fenced `BEGIN/END self-contained notation recap` subsection (relevant
+  rows of the paper's Tables 2–3 and capacity equations), the coordination
+  LP and its Lagrangian relaxation, the algorithm (buyer response, projected
+  subgradient price update, primal recovery, gap certificate), the
+  convergence and weak-duality statements, complexity/message analysis, and
+  a *Positioning with respect to the literature* subsection (dual
+  decomposition / subgradient methods, auction baseline, price-based
+  offloading).
+- `references.bib` — entries cited by the positioning subsection.
+- `main.tex` — minimal standalone wrapper to compile a preview PDF
+  (`latexmk -pdf main.tex`).
+- `README.md` — same structure as the sibling notes' READMEs.
+
+The note is written after the implementation is validated, so the pseudocode
+and the stated properties match the shipped code.
+
+## Implementation execution policy
+
+All implementation tasks from the plan (code, tests, LaTeX note) MUST be
+executed with **Sonnet 5 at most** (subagents launched with `model: sonnet`,
+or a lighter model where adequate). The plan document must carry this
+constraint explicitly on each task.
+
 ## Non-goals
 
 - No modification of any existing module, model, or config file.
