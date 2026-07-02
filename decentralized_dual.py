@@ -200,7 +200,10 @@ def dual_coordination_round(
     gap = (best_ub - best_lb) / max(1.0, abs(best_ub))
     if gap <= dual_options["gap_tolerance"]:
       break
-    if demand.sum() <= 0 and len(bids) == 0:
+    if len(bids) == 0 and (demand.sum() <= 0 or k == 1):
+      # at k == 1 prices are zero, so the bid-eligible seller set is maximal:
+      # no bids now (all positively-advantaged sellers lack capacity) means no
+      # bids at any later iteration either
       break
     subgradient = demand - capacity
     if dual_options["step_rule"] == "polyak":

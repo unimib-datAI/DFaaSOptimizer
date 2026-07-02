@@ -242,6 +242,29 @@ def test_no_demand_returns_zero_gap_and_empty_outputs():
   assert gap_info["LB"] == 0.0 and gap_info["UB"] == 0.0
 
 
+def test_zero_capacity_with_demand_exits_after_first_iteration():
+  data, neighborhood, omega, _ = dual_round_setup()
+  capacity = np.zeros_like(omega)
+  y_inc, _, gap_info, _ = run_round(data, neighborhood, omega, capacity)
+  assert y_inc.sum() == 0.0
+  assert gap_info["LB"] == 0.0
+  assert gap_info["inner_iterations"] == 1
+
+
+def test_single_inner_iteration_yields_valid_certificate():
+  data, neighborhood, omega, capacity = dual_round_setup(seed=5)
+  options = {**DUAL_ROUND_OPTIONS, "max_inner_iterations": 1}
+  y_inc, _, gap_info, _ = run_round(
+    data, neighborhood, omega, capacity, options
+  )
+  assert gap_info["inner_iterations"] == 1
+  assert np.isfinite(gap_info["UB"])
+  assert gap_info["UB"] + 1e-9 >= gap_info["LB"] >= 0.0
+  assert (y_inc >= -1e-9).all()
+  assert (y_inc.sum(axis=1) <= omega + 1e-6).all()
+  assert (y_inc.sum(axis=0) <= capacity + 1e-6).all()
+
+
 @pytest.mark.parametrize("value", [0, False, True, 1.5])
 def test_positive_demand_rejects_invalid_inner_iterations(value):
   data, neighborhood, omega, capacity = dual_round_setup()
