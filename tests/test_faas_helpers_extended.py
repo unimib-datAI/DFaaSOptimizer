@@ -95,6 +95,27 @@ def test_combine_solutions_builds_dict():
   assert result["sp"]["x"][0, 0] == 3.0
 
 
+def test_combine_solutions_snapshots_offloading_before_later_iterations():
+  y = np.zeros((2, 2, 1))
+  y[0, 1, 0] = 2.0
+  result = combine_solutions(
+    2, 1, _sp_data(), {(1, 1): 10.0, (2, 1): 5.0},
+    np.array([[3.0], [4.0]]), np.array([[1], [2]]),
+    np.array([10.0, 20.0]), np.zeros((2, 1)), y,
+    np.zeros((2, 1)), np.zeros((2, 1)), np.zeros((2, 2, 1)),
+    np.array([5.0, 8.0]),
+  )
+
+  y[0, 1, 0] += 0.014
+
+  managed_load = (
+    result["sp"]["x"][0, 0]
+    + result["sp"]["y"][0, :, 0].sum()
+    + result["sp"]["z"][0, 0]
+  )
+  assert managed_load == pytest.approx(10.0)
+
+
 def test_combine_solutions_rejects_offload_to_non_neighbor():
   sp_data = _sp_data()
   sp_data[None]["neighborhood"][(1, 2)] = 0

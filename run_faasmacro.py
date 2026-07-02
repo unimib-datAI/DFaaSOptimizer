@@ -277,7 +277,7 @@ def combine_solutions(
     rmp_x: np.array, rmp_y: np.array, rmp_z: np.array, 
     rmp_r: np.array, rmp_xi: np.array, rmp_rho: np.array
   ):
-  sp_y = rmp_y
+  sp_y = rmp_y.copy()
   # -- compute xi
   sp_xi = np.zeros((Nn,Nn,Nf))
   for n1 in range(Nn):
@@ -316,7 +316,7 @@ def combine_solutions(
   solution = {
     "sp": {
       "x":    sp_x,
-      "y":    rmp_y,
+      "y":    sp_y,
       "z":    sp_z,
       "r":    spr_r,
       "xi":   sp_xi,
@@ -325,7 +325,7 @@ def combine_solutions(
     },
     "rmp": {
       "x":    rmp_x,
-      "y":    rmp_y,
+      "y":    sp_y,
       "z":    rmp_z,
       "r":    rmp_r,
       "xi":   rmp_xi,
