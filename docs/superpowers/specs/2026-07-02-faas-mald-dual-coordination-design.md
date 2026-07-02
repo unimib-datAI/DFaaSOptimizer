@@ -189,9 +189,10 @@ and the stated properties match the shipped code.
 ## Implementation execution policy
 
 All implementation tasks from the plan (code, tests, LaTeX note) MUST be
-executed with **Sonnet 5 at most** (subagents launched with `model: sonnet`,
-or a lighter model where adequate). The plan document must carry this
-constraint explicitly on each task.
+executed with **Sonnet 5 as the most powerful model allowed** (subagents
+launched with `model: sonnet`); **Haiku** (`model: haiku`) may be used for
+simpler tasks. The plan document must carry this constraint explicitly on
+each task.
 
 ## Non-goals
 
