@@ -1,0 +1,20 @@
+% Standalone preview wrapper for faas-mald.tex.
+% This file exists ONLY to compile a self-contained PDF of the section.
+% When inserting into the paper, do NOT use this wrapper: just
+%   \input{faas-mald}
+% (or paste its content) into the paper, which already defines the notation.
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{algorithm}
+\usepackage[noend]{algpseudocode}
+\usepackage{booktabs}
+\usepackage[numbers]{natbib}
+\usepackage[hidelinks]{hyperref}
+
+\begin{document}
+\input{faas-mald}
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+\end{document}

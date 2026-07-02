@@ -1,0 +1,224 @@
+% FaaS-MALD section: input this file into the host paper.
+\section{FaaS-MALD: fixed-capacity LP coordination and certificate}
+\label{sec:mald}
+
+\textsc{FaaS-MALD} coordinates one-hop horizontal offloading by solving a
+capacity-constrained transportation problem through seller prices. Unlike an
+auction heuristic, each inner solve at fixed residual capacity maintains a
+feasible transportation-LP incumbent and a Lagrangian upper bound. The resulting
+certificate applies only to that inner LP, not to the end-to-end outer execution
+whose capacities can subsequently change.
+
+% =====================================================================
+% BEGIN self-contained notation recap.
+% Reproduces the relevant rows of the paper's Table 2 (FRALB) and Table 3
+% (auction) plus Eqs. (1),(2),(12),(13), so the note is readable on its own.
+% REMOVE this whole subsection when inserting into the paper, where the
+% notation and these equations are already defined.
+% =====================================================================
+\subsection{Notation and capacity model}
+\label{sec:mald-notation}
+
+Each control period $t$ runs coordination iterations $h=0,1,\dots,H_{\max}$ in
+parallel. Before coordination, every node $i$ solves a local problem~(P2)
+that, for each function $f\in\mathcal{F}_i$, splits the incoming workload
+$\lambda_i^f$ into locally processed load $x_i^f$, horizontally offloaded
+demand $\omega_i^f$, and Cloud-forwarded load $z_i^f$, and fixes the number of
+replicas $r_i^f$. Replicas obey the memory budget and provide capacity
+\begin{equation*}
+  \sum_{f\in\mathcal{F}_i} r_i^f\,\mathrm{RAM}^f \le \mathrm{RAM}_i,
+  \qquad
+  \mathrm{Cap}_i^f = \frac{r_i^f\,U^f_{\max}}{D_i^f}\ \text{[req/s]} ,
+  \tag*{(1,2)}
+\end{equation*}
+from which each node advertises, on a neighbour-accessible blackboard, its
+residual execution capacity and its memory slack:
+\begin{equation*}
+  C_i^f(h) = \max\!\big\{0,\ \mathrm{Cap}_i^f(h) - x_i^f(h)\big\},
+  \qquad
+  \rho_i(h) = \mathrm{RAM}_i - \sum_{f\in\mathcal{F}_i} r_i^f(h)\,\mathrm{RAM}^f \ge 0 .
+  \tag*{(12,13)}
+\end{equation*}
+Table~\ref{tab:mald-notation} collects the symbols used below.
+
+\begin{table}[t]
+\centering
+\caption{Notation used in this section (subset of the paper's Tables~2--3).}
+\label{tab:mald-notation}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}p{0.23\linewidth} p{0.18\linewidth} p{0.54\linewidth}@{}}
+\toprule
+\multicolumn{3}{@{}l}{\textit{Sets}}\\
+Nodes / neighbours & $\mathcal{N}$, $N_i$ & computing nodes; one-hop neighbours of $i$.\\
+Functions & $\mathcal{F}_i$ & functions deployable on $i$; $\mathcal{F}=\bigcup_i\mathcal{F}_i$.\\
+Candidate sellers & $A_i^f(h)$ & neighbours passing the inherited $s_{ij}^f>-\gamma_i^f$ prefilter, $A_i^f(h)\subseteq N_i$.\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Parameters and weights}}\\
+Input workload & $\lambda_i^f$ & incoming request rate for $f$ at $i$ [req/s].\\
+Memory cap / demand & $\mathrm{RAM}_i$, $\mathrm{RAM}^f$ & node memory; per-replica memory of $f$ [MB].\\
+Service demand & $D_i^f$ & average execution time of $f$ at $i$ [s].\\
+Max utilization & $U^f_{\max}$ & stability threshold, $U^f_{\max}\in[0,1)$.\\
+Local / offload / Cloud profit & $\alpha_i^f$, $\beta_{ij}^f$, $\gamma_i^f$ & profit of local exec.; profit of offloading $i\!\to\! j$; Cloud-offloading penalty (per req/s).\\
+Communication latency & $L_{ij}$ & horizontal-offloading latency between $i$ and $j$.\\
+Weights & $w_{\mathrm{lat}}$, $w_{\mathrm{fair}}$ & importance of latency and fairness.\\
+Max iterations & $H_{\max}$ & coordination iterations per control period.\\
+Price params \emph{(MADeA only)} & $\varepsilon$, $\zeta$ & min.\ bid increment; idle-seller price discount $\zeta\in(0,1)$.\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Variables and state at iteration $h$}}\\
+Replicas & $r_i^f$ & number of $f$ replicas on $i$, $r_i^f\in\mathbb{N}_0$.\\
+Local / forwarded / Cloud load & $x_i^f$, $y_{ij}^f$, $z_i^f$ & locally served; forwarded $i\!\to\! j$; Cloud-offloaded [req/s].\\
+Offloaded demand & $\omega_i^f$ & horizontal demand still to place [req/s].\\
+Effective load & $\ell_i^f$ & load to be served at $i$ for $f$ [req/s].\\
+Capacity / residual / slack & $\mathrm{Cap}_i^f$, $C_i^f$, $\rho_i$ & exec.\ capacity (Eq.~2); residual exec.\ capacity (Eq.~12); memory slack (Eq.~13).\\
+Congestion ratio & $\kappa_i^f$ & utilization ratio for $f$ on $i$, $\kappa_i^f\in[0,1]$.\\
+Fairness term & $\phi_i^f$ & penalty on nodes that offload excessively.\\
+Execution price \emph{(MADeA only)} & $p_i^f$ & shadow cost of residual capacity; replaced by multiplier $\lambda_i^f$ in \textsc{FaaS-MALD}.\\
+Coordination score & $s_{ij}^f$ & price-free preference of buyer $i$ for seller $j$ (defined below); participation also requires positive price-adjusted surplus.\\
+\bottomrule
+\end{tabular}
+\end{table}
+% ===================== END self-contained notation recap =====================
+
+\subsection{Coordination transportation LP}
+For fixed residual demands and capacities, define
+$s_{ij}^f=\beta_{ij}^f-w_{\mathrm{lat}}L_{ij}-w_{\mathrm{fair}}\phi_i^f$.
+The inherited candidate prefilter retains an edge when $j\in N_i$ and
+$s_{ij}^f>-\gamma_i^f$. This filter removes pairs dominated under the broader
+system's Cloud-rejection convention, but it does not by itself make a bid
+profitable. With pairs outside that candidate set omitted, the fixed-capacity
+coordination LP is
+\begin{align}
+ \max_{y\geq0}\quad&\sum_{i,j,f}s_{ij}^fy_{ij}^f,\\
+ \text{s.t.}\quad&\sum_jy_{ij}^f\leq\omega_i^f &&\forall i,f,\\
+ &\sum_iy_{ij}^f\leq C_j^f &&\forall j,f.
+\end{align}
+Its demand constraints are inequalities and its outside option has value zero.
+Consequently a nonpositive candidate edge is never needed by an optimum; at a
+dual iterate the implemented buyer response is stricter still and participates
+only when $s_{ij}^f-\lambda_j^f>0$. Negative edges admitted by the inherited
+$-\gamma_i^f$ prefilter are therefore inert in this LP. The displayed problem
+must not be interpreted as assigning the Cloud outside option value
+$-\gamma_i^f$.
+
+\subsection{Lagrangian relaxation and coordination algorithm}
+Relaxing seller capacities with multipliers $\lambda_j^f\geq0$ gives the exact
+dual function
+\begin{equation}
+ g(\lambda)=\sum_{j,f}\lambda_j^fC_j^f+
+ \sum_{i,f}\omega_i^f\max\!\left\{0,\max_{j\in A_i^f}
+ (s_{ij}^f-\lambda_j^f)\right\}.
+\end{equation}
+Each buyer therefore sends all uncapped demand to its strictly positive
+price-adjusted best seller, breaking ties by seller index. This uncapped
+response supplies demand $D_j^f$ and the dual bound; capacity-capped bids rank
+all positive sellers and feed the same greedy, score-ranked capacity fill used
+to evaluate \textsc{FaaS-MADiG}. Prices follow
+$\lambda_j^f\leftarrow[\lambda_j^f+\alpha_k(D_j^f-C_j^f)]^+$.
+The implementation supports $\alpha_k=\alpha_0/\sqrt{k}$ and a gap-based choice
+$\alpha_k=\theta[UB-LB]^+/\|D-C\|_2^2$, taking zero when the denominator is
+zero. It rejects fewer than one inner iteration and any step rule other than
+\texttt{sqrt} or \texttt{polyak}. The latter label is implementation
+terminology: because it substitutes the incumbent $UB-LB$ gap for a known
+optimal value, it is a practical Polyak-like heuristic rather than the
+classical Polyak step.
+
+\begin{algorithm}[H]
+\caption{One \textsc{FaaS-MALD} dual coordination round}
+\label{alg:mald}
+\begin{algorithmic}[1]
+\Require $\omega,C$, data, neighbourhood, $\rho$, options, latency, fairness,
+  \texttt{force\_memory\_bids}, $\ell$, $r$; iteration limit $K\geq1$
+\If{$\texttt{max\_inner\_iterations}<1$}
+  \State raise \texttt{ValueError}
+\EndIf
+\If{$\texttt{step\_rule}\notin\{\texttt{sqrt},\texttt{polyak}\}$}
+  \State raise \texttt{ValueError}
+\EndIf
+\State compute scores $s$, eligibility $A$; copy $C$; set
+  $\lambda\gets0$ and $s^{0}_{ij}{}^f\gets s_{ij}^f$ on eligible edges, $0$ otherwise
+\State $LB\gets0$, $UB\gets+\infty$, best bids $\gets\emptyset$,
+  $\mathrm{lb\_history}\gets[,]$, gap $\gets0$, $k\gets0$
+\State $n_{\mathrm{active}}\gets|\{i:\exists f,\omega_i^f>0\}|$
+\For{$k=1,\ldots,K$}
+  \State compute capacity-capped bids, uncapped seller demand $D$, and buyer dual term
+  \State $UB\gets\min\{UB,g(\lambda)\}$
+  \If{bids are nonempty}
+    \State evaluate bids with tentative replica starts disabled to recover feasible $y$
+    \State compute candidate $LB=\sum_{i,j,f}s^{0}_{ij}{}^fy_{ij}^f$;
+      if it improves $LB$, retain its value and bids
+  \EndIf
+  \State append incumbent $LB$ to $\mathrm{lb\_history}$ and set
+    gap $\gets(UB-LB)/\max\{1,|UB|\}$
+  \If{$(UB-LB)/\max\{1,|UB|\}$ is within tolerance} \State \textbf{break} \EndIf
+  \If{$\sum_{j,f}D_j^f\leq0$ and bids are empty} \State \textbf{break} \EndIf
+  \State set subgradient $q\gets D-C$; select the configured square-root or
+    Polyak step $\alpha_k$; update $\lambda\gets[\lambda+\alpha_kq]^+$
+\EndFor
+\State set $\mathrm{placed}\gets0$ if best bids are empty; otherwise re-evaluate
+  best bids with tentative replica starts disabled and sum recovered $y$ over sellers
+\State initialize an empty memory-bid table
+\For{every $(i,f)$ with $\omega_i^f>0$}
+  \If{$\mathrm{placed}_i^f<\omega_i^f$ or \texttt{force\_memory\_bids}}
+    \State emit a bid to every neighbour $j$ whose $\rho_j$ meets $f$'s memory requirement
+  \EndIf
+\EndFor
+\State initialize $y_{\mathrm{increment}}\gets0$ and
+  $r_{\mathrm{additional}}\gets0$
+\If{best bids are nonempty}
+  \State re-evaluate them to obtain $y_{\mathrm{increment}}$ and
+    $r_{\mathrm{additional}}$, enabling tentative replica starts exactly when
+    the memory-bid table is empty
+\EndIf
+\State $\mathrm{gap\_info}\gets\{LB,UB,\mathrm{gap},
+  \mathrm{inner\_iterations}:k,\lambda,\mathrm{lb\_history}\}$
+\State \Return $(y_{\mathrm{increment}},r_{\mathrm{additional}},
+  \mathrm{memory\_bids},\mathrm{gap\_info},n_{\mathrm{active}})$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Fixed-capacity certificate, convergence, and cost}
+For one inner transportation LP with $\omega$, $C$, scores, and eligibility
+held fixed, weak duality makes every dual value an upper bound, while the
+non-tentative greedy recovery is feasible for that same $C$ and supplies a
+lower bound. Its stored $LB/UB$ pair therefore remains a valid certificate for
+the retained feasible incumbent of that inner LP after a gap stop, an
+empty-response stop, or the iteration limit. It is not a certificate for the
+complete accepted end-to-end run, the outer loop as capacities change, or the
+final operational assignment. In particular, final recovery may enable
+tentative replica starts when the memory-bid table is empty; that returned $y$
+can use a changed capacity state, whereas the stored $LB$ was computed by
+non-tentative recovery against the original fixed $C$.
+
+For diminishing subgradient steps satisfying the standard hypotheses,
+including the required summability conditions and bounded subgradients,
+classical results apply to the fixed LP dual; LP strong duality makes its primal
+and dual optimal values coincide. Primal recovery or averaging is still needed
+for convergent feasible primal solutions \citep{nedic2009,bertsekas1989}. This
+qualified statement applies to suitable diminishing sequences, not
+automatically to both implemented rules. In particular, the implemented
+``polyak'' rule uses $\theta(UB-LB)/\lVert D-C\rVert_2^2$ with incumbent bounds,
+not the classical formula with a known optimum, and has no unconditional
+convergence guarantee here.
+
+Per inner iteration, evaluating all price-adjusted scores is
+$O(\sum_{i,f}|N_i|)$ arithmetic, but ranking eligible neighbours makes the
+buyer's worst-case cost $O(\sum_{i,f}|N_i|\log|N_i|)$; the linear bound applies
+only when rankings or an equivalent preordering are supplied. If $b_j^f$ is
+the number of bids incident on seller $j$ for function $f$, the shipped
+evaluator filters bids by seller and function and sorts each nonempty incident
+set, giving a transparent bound of
+$O(\sum_{j,f}(|B|+b_j^f\log b_j^f))$ for its repeated filtering and sorting,
+where $|B|$ is the round's total bid count. Messages occupy
+$O(|E||\mathcal F|)$ scalars, and all exchanges are one hop.
+
+\subsection{Positioning with respect to the literature}
+The multiplier exchange is classical dual decomposition with projected
+subgradient prices, and the qualified convergence and primal-recovery caveats
+follow distributed optimization theory \citep{bertsekas1989,nedic2009}.
+This differs from the $\varepsilon$-auction lineage underlying
+\textsc{FaaS-MADeA}, where prices arise from competitive bids for assignment
+objects \citep{bertsekas1988}. It also belongs to the broader family of
+decentralized, price- or market-mediated edge offloading schemes, while retaining
+the one-hop service-placement setting studied for edge-to-cloud load balancing
+\citep{nezami2021}.
