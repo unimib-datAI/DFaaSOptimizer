@@ -61,7 +61,8 @@ def pair_scores(
   eligible = np.zeros((nn, nn, nf), dtype=bool)
 
   for i in range(nn):
-    for j in range(nn):
+    for j in np.flatnonzero(neighborhood[i]):
+      j = int(j)
       for f in range(nf):
         score = (
           values["beta"][(i + 1, j + 1, f + 1)]
@@ -69,7 +70,7 @@ def pair_scores(
           - dual_options["fairness_weight"] * fairness[i, f]
           + values["gamma"][(i + 1, f + 1)]
         )
-        if neighborhood[i, j] and score > 0.0:
+        if score > 0.0:
           scores[i, j, f] = score
           eligible[i, j, f] = True
 
