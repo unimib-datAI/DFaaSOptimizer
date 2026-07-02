@@ -12,6 +12,7 @@ from . import definitions  # imports register all suites as a side effect
 from .batch import Batch
 from .definitions import get_suite, list_suites
 from .jobs import experiment_to_job
+from .instances import materialize_batch
 from .manifest import Manifest, SUCCEEDED
 from .runner import run_batch
 from .selection import default_selection, parse_selection
@@ -26,6 +27,12 @@ def cmd_define(args: argparse.Namespace) -> None:
   out_path.parent.mkdir(parents=True, exist_ok=True)
   batch.save(out_path)
   print(f"wrote {len(experiments)} experiments to {out_path}")
+
+
+def cmd_materialize(args: argparse.Namespace) -> None:
+  batch = Batch.load(args.batch_file)
+  suite_path = materialize_batch(batch, args.output)
+  print(f"materialized {batch.suite} instances in {suite_path}")
 
 
 def cmd_run(args: argparse.Namespace) -> None:
@@ -57,10 +64,15 @@ def cmd_run(args: argparse.Namespace) -> None:
     python=args.python_version,
     uv_version=args.uv_version,
     secrets=secrets,
-    exclude=(".venv/", ".git/", "solutions/", "results/", "batches/"),
+    exclude=(
+      ".venv/", ".git/", "solutions/", "results/", "batches/",
+      "remote_experiments/instances/",
+    ),
   )
   config_dir = manifest_path.parent / f"{manifest_path.stem}-configs"
-  jobs = [experiment_to_job(e, config_dir) for e in selected]
+  jobs = [
+    experiment_to_job(e, config_dir, Path(args.instances)) for e in selected
+  ]
 
   with Dispatcher(inventory, project, results_dir=args.results_dir) as dispatcher:
     start = time.monotonic()
@@ -86,11 +98,21 @@ def build_parser() -> argparse.ArgumentParser:
   define_p.add_argument("-o", "--output", required=True)
   define_p.set_defaults(func=cmd_define)
 
+  materialize_p = sub.add_parser(
+    "materialize", help="Generate and checksum every unique instance in a batch",
+  )
+  materialize_p.add_argument("batch_file")
+  materialize_p.add_argument(
+    "-o", "--output", default="remote_experiments/instances",
+  )
+  materialize_p.set_defaults(func=cmd_materialize)
+
   run_p = sub.add_parser("run", help="Run (or resume) a batch file through the TUI")
   run_p.add_argument("batch_file")
   run_p.add_argument("--inventory", required=True)
   run_p.add_argument("--project-path", default=".")
   run_p.add_argument("--results-dir", default="./results")
+  run_p.add_argument("--instances", default="remote_experiments/instances")
   run_p.add_argument("--gurobi-license", default=None)
   run_p.add_argument("--python-version", default="3.10.19")
   run_p.add_argument("--uv-version", default="0.11.25")

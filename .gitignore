@@ -3,6 +3,7 @@ config_files/*
 
 # Data and solution files
 solutions/*
+remote_experiments/instances/*/
 
 # Superpowers SDD session scratch (plans/briefs/reports/diffs)
 .superpowers/

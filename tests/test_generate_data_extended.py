@@ -83,17 +83,67 @@ def test_probability_neighborhood_rejects_impossible_connectivity():
     generate_neighborhood(4, limits, _rng(1))
 
 
-def test_generate_neighborhood_with_planar_degree_three_graph():
-  rng = _rng()
-  limits = {"neighborhood": {"type": "planar", "degree": 3}}
+def test_fixed_edge_neighborhood_is_connected_and_exact():
+  limits = {"neighborhood": {"m": 30}}
 
-  neighborhood, graph = generate_neighborhood(10, limits, rng)
+  _, graph = generate_neighborhood(20, limits, _rng(3))
 
-  assert neighborhood.shape == (10, 10)
-  assert graph.number_of_nodes() == 10
+  assert nx.is_connected(graph)
+  assert graph.number_of_edges() == 30
+
+
+def test_regular_neighborhood_is_connected():
+  limits = {"neighborhood": {"k": 3}}
+
+  _, graph = generate_neighborhood(20, limits, _rng(3))
+
+  assert nx.is_connected(graph)
+
+
+def test_generate_euclidean_planar_neighborhood_with_target_mean_degree():
+  limits = {
+    "neighborhood": {
+      "type": "euclidean_planar", "mean_degree": 3, "density": 0.5,
+    }
+  }
+
+  neighborhood, graph = generate_neighborhood(20, limits, _rng(7))
+  positions = nx.get_node_attributes(graph, "pos")
+
+  assert neighborhood.shape == (20, 20)
   assert nx.is_connected(graph)
   assert nx.check_planarity(graph)[0] is True
-  assert {degree for _, degree in graph.degree()} == {3}
+  assert graph.number_of_edges() == round(20 * 3 / 2)
+  assert len(positions) == 20
+  assert all(0 <= x <= np.sqrt(20 / 0.5) for x, _ in positions.values())
+  assert all(0 <= y <= np.sqrt(20 / 0.5) for _, y in positions.values())
+  assert all(data["edge_length"] > 0 for _, _, data in graph.edges(data=True))
+
+
+def test_euclidean_planar_neighborhood_changes_with_seed():
+  limits = {
+    "neighborhood": {
+      "type": "euclidean_planar", "mean_degree": 3, "density": 1.0,
+    }
+  }
+
+  _, first = generate_neighborhood(20, limits, _rng(1))
+  _, second = generate_neighborhood(20, limits, _rng(2))
+
+  assert nx.get_node_attributes(first, "pos") != nx.get_node_attributes(
+    second, "pos"
+  )
+
+
+def test_euclidean_planar_neighborhood_rejects_infeasible_edge_budget():
+  limits = {
+    "neighborhood": {
+      "type": "euclidean_planar", "mean_degree": 1, "density": 1.0,
+    }
+  }
+
+  with pytest.raises(ValueError, match="connected Euclidean planar"):
+    generate_neighborhood(20, limits, _rng(1))
 
 
 def test_generate_weights_with_initialization_time():
@@ -169,6 +219,56 @@ def test_add_network_latency_without_weights():
   limits = {}
   result = add_network_latency(graph, limits, rng)
   assert result.edges[0, 1]["network_latency"] == 1.0
+
+
+def test_add_network_latency_from_euclidean_length():
+  graph = Graph()
+  graph.add_edge(0, 1, edge_length=2.5)
+  limits = {
+    "weights": {
+      "edge_network_latency": {
+        "mode": "euclidean",
+        "base": 1.0,
+        "distance_factor": 2.0,
+        "jitter": {"min": 0.0, "max": 0.0},
+      }
+    }
+  }
+
+  result = add_network_latency(graph, limits, _rng(1))
+
+  assert result.edges[0, 1]["network_latency"] == 6.0
+
+
+def test_permuted_euclidean_latency_preserves_values():
+  graph = nx.path_graph(4)
+  for index, edge in enumerate(graph.edges(), start=1):
+    graph.edges[edge]["edge_length"] = float(index)
+  base = {
+    "base": 0.0,
+    "distance_factor": 1.0,
+    "jitter": {"min": 0.0, "max": 0.0},
+  }
+
+  direct = add_network_latency(
+    graph.copy(),
+    {"weights": {"edge_network_latency": {**base, "mode": "euclidean"}}},
+    _rng(2),
+  )
+  permuted = add_network_latency(
+    graph.copy(),
+    {
+      "weights": {
+        "edge_network_latency": {**base, "mode": "euclidean_permuted"}
+      }
+    },
+    _rng(2),
+  )
+  direct_values = nx.get_edge_attributes(direct, "network_latency")
+  permuted_values = nx.get_edge_attributes(permuted, "network_latency")
+
+  assert sorted(direct_values.values()) == sorted(permuted_values.values())
+  assert direct_values != permuted_values
 
 
 def test_random_instance_data_load_from_values():

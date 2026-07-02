@@ -2,30 +2,46 @@ from utils.common import generate_random_float, generate_random_int
 from utils.common import load_base_instance
 
 from copy import deepcopy
+from itertools import combinations
 from typing import Tuple
 import networkx as nx
 import numpy as np
-
-try:
-  import sage.all as sage
-except ImportError:
-  pass
+from scipy.spatial import Delaunay
 
 
 def add_network_latency(
     graph: nx.Graph, limits: dict, rng: np.random.Generator
   ) -> nx.Graph:
-  if "weights" in limits and "edge_network_latency" in limits["weights"]:
-    for (u, v) in graph.edges():
-      graph.edges[u,v]["network_latency"] = generate_random_float(
-        rng, limits["weights"]["edge_network_latency"]
-      )
-      graph.edges[u,v]["edge_bandwidth"] = generate_random_int(
-        rng, limits["weights"]["edge_bandwidth"]
+  weights = limits.get("weights", {})
+  latency_limits = weights.get("edge_network_latency")
+  edges = list(graph.edges())
+  if latency_limits and latency_limits.get("mode") in {
+      "euclidean", "euclidean_permuted"
+    }:
+    jitter_limits = latency_limits.get("jitter", {"min": 0.0, "max": 0.0})
+    latencies = [
+      latency_limits.get("base", 0.0)
+      + latency_limits.get("distance_factor", 1.0)
+      * graph.edges[edge]["edge_length"]
+      + generate_random_float(rng, jitter_limits)
+      for edge in edges
+    ]
+    if latency_limits["mode"] == "euclidean_permuted":
+      latencies = rng.permutation(latencies)
+    for edge, latency in zip(edges, latencies):
+      graph.edges[edge]["network_latency"] = float(latency)
+  elif latency_limits:
+    for edge in edges:
+      graph.edges[edge]["network_latency"] = generate_random_float(
+        rng, latency_limits
       )
   else:
-    for (u, v) in graph.edges():
-      graph.edges[u,v]["network_latency"] = 1.0
+    nx.set_edge_attributes(graph, 1.0, "network_latency")
+  if "edge_bandwidth" in weights:
+    for edge in edges:
+      graph.edges[edge]["edge_bandwidth"] = generate_random_int(
+        rng, weights["edge_bandwidth"]
+      )
   return graph
 
 
@@ -187,14 +203,42 @@ def generate_neighborhood(
   ) -> Tuple[np.array, nx.Graph]:
   neighborhood = np.zeros((Nn, Nn))
   graph = None
+  neighborhood_limits = limits["neighborhood"]
   if (
-      limits["neighborhood"].get("type") == "planar"
-      and limits["neighborhood"].get("degree") == 3
+      neighborhood_limits.get("type") in {"planar", "euclidean_planar"}
+      or neighborhood_limits.get("shape") == "planar"
     ):
-    if Nn < 6 or Nn % 2 != 0:
-      raise ValueError("planar degree-3 neighborhood requires an even Nn >= 6")
-    graph = nx.circular_ladder_graph(Nn // 2)
-    neighborhood = nx.adjacency_matrix(graph).toarray()
+    mean_degree = neighborhood_limits.get(
+      "mean_degree",
+      neighborhood_limits.get("degree", neighborhood_limits.get("k")),
+    )
+    density = neighborhood_limits.get("density", 1.0)
+    if Nn < 3 or density <= 0 or mean_degree is None:
+      raise ValueError("connected Euclidean planar neighborhood requires Nn >= 3, "
+                       "positive density, and mean_degree")
+    side = np.sqrt(Nn / density)
+    points = rng.uniform(0, side, size=(Nn, 2))
+    candidate = nx.Graph()
+    candidate.add_nodes_from(
+      (node, {"pos": tuple(point)}) for node, point in enumerate(points)
+    )
+    for simplex in Delaunay(points).simplices:
+      candidate.add_edges_from(combinations(map(int, simplex), 2))
+    for u, v in candidate.edges():
+      candidate.edges[u, v]["edge_length"] = float(
+        np.linalg.norm(points[u] - points[v])
+      )
+    target_edges = round(Nn * mean_degree / 2)
+    if not Nn - 1 <= target_edges <= candidate.number_of_edges():
+      raise ValueError(
+        "connected Euclidean planar neighborhood has an infeasible edge budget"
+      )
+    graph = nx.minimum_spanning_tree(candidate, weight="edge_length")
+    remaining = list(set(candidate.edges()) - set(graph.edges()))
+    for index in rng.permutation(len(remaining))[:target_edges - (Nn - 1)]:
+      u, v = remaining[index]
+      graph.add_edge(u, v, **candidate.edges[u, v])
+    neighborhood = nx.to_numpy_array(graph, dtype=int)
   elif "p" in limits["neighborhood"]:
     for _ in range(1000):
       neighborhood = np.zeros((Nn, Nn))
@@ -209,21 +253,32 @@ def generate_neighborhood(
       raise ValueError(
         "could not generate a connected random neighborhood in 1000 attempts"
       )
-  elif "k" in limits["neighborhood"]:
-    if limits["neighborhood"].get("shape", "") == "planar":
-      g = sage.graphs.RandomTriangulation(
-        n = Nn, 
-        k = limits["neighborhood"]["k"],
-        seed = int(rng.integers(low = 0, high = 4850 * 4850 * 4850))
+  elif "m" in limits["neighborhood"]:
+    for _ in range(1000):
+      graph = nx.gnm_random_graph(
+        Nn,
+        limits["neighborhood"]["m"],
+        seed=int(rng.integers(low=0, high=4850 * 4850 * 4850)),
       )
-      graph = nx.Graph()
-      graph.add_nodes_from(g.vertices())
-      graph.add_edges_from(g.edges(labels=False))
+      if nx.is_connected(graph):
+        break
     else:
+      raise ValueError(
+        "could not generate a connected fixed-edge neighborhood in 1000 attempts"
+      )
+    neighborhood = nx.adjacency_matrix(graph).toarray()
+  elif "k" in limits["neighborhood"]:
+    for _ in range(1000):
       graph = nx.random_regular_graph(
-        d = limits["neighborhood"]["k"],
-        n = Nn,
-        seed = int(rng.integers(low = 0, high = 4850 * 4850 * 4850))
+        d=limits["neighborhood"]["k"],
+        n=Nn,
+        seed=int(rng.integers(low=0, high=4850 * 4850 * 4850)),
+      )
+      if nx.is_connected(graph):
+        break
+    else:
+      raise ValueError(
+        "could not generate a connected regular neighborhood in 1000 attempts"
       )
     neighborhood = nx.adjacency_matrix(graph).toarray()
   # -- add network latency (if available)

@@ -6,6 +6,9 @@ import pandas as pd
 import pytest
 
 import run
+from remote_experiments.batch import Batch
+from remote_experiments.definitions.paper import build_e0
+from remote_experiments.instances import instance_id, materialize_batch
 from run import (
   generate_experiments_list,
   load_obj_value,
@@ -16,6 +19,7 @@ from run_centralized_model import (
   compute_residual_capacity,
   count_offloaded_processing,
   get_current_load,
+  init_problem,
   update_1d_variables,
   update_2d_variables,
   update_3d_variables,
@@ -147,6 +151,38 @@ def test_get_current_load_maps_agents_and_functions():
   assert out[(2, 1)] == 4.0
   assert out[(1, 2)] == 6.0
   assert out[(2, 2)] == 8.0
+
+
+def test_init_problem_loads_exact_materialized_instance(tmp_path: Path):
+  experiment = build_e0(seeds=(42,), algorithms=("centralized",))[0]
+  instances_root = tmp_path / "instances"
+  suite_path = materialize_batch(
+    Batch(suite=experiment.suite, experiments=(experiment,)), instances_root,
+  )
+  instance_path = suite_path / "data" / instance_id(experiment)
+  solution_path = tmp_path / "solution"
+  solution_path.mkdir()
+  limits = {
+    "instance_type": "materialized",
+    "path": str(instance_path),
+    "load": {"trace_type": "load_existing", "path": str(instance_path)},
+  }
+
+  base_data, traces, agents, graph = init_problem(
+    limits, "load_existing", experiment.config["max_steps"], 999, str(solution_path),
+  )
+
+  assert base_data[None]["Nn"][None] == 10
+  assert len(traces[0][0]) == experiment.config["max_steps"]
+  assert list(agents) == list(range(10))
+  stored_graph = json.loads((instance_path / "graph.json").read_text())
+  assert graph.number_of_edges() == len(stored_graph["edges"])
+  assert all("edge_length" in attrs for _, _, attrs in graph.edges(data=True))
+  for filename in (
+      "base_instance_data.json", "load_limits.json", "input_requests_traces.json",
+      "graph.json", "metadata.json",
+    ):
+    assert (solution_path / filename).read_bytes() == (instance_path / filename).read_bytes()
 
 
 def test_run_updates_existing_method_slot_when_resuming(tmp_path: Path, monkeypatch):

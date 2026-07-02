@@ -45,10 +45,19 @@ def _new_config(nodes: int, functions: int, topology: dict) -> dict:
   return config
 
 
+def _euclidean_planar(mean_degree: int = 3) -> dict:
+  return {
+    "type": "euclidean_planar",
+    "mean_degree": mean_degree,
+    "density": 1.0,
+  }
+
+
 def _experiment(
     suite: str, cell: str, algorithm: str, seed: int, config: dict,
   ) -> Experiment:
   experiment_id = f"{suite}-{cell}-{algorithm}-s{seed}"
+  config["instance_seed"] = seed
   config["seed"] = seed
   config["base_solution_folder"] = f"solutions/{experiment_id}"
   limits = config["limits"]
@@ -73,8 +82,8 @@ def build_e0(
   suite = "paper-e0-pilot"
   return [
     _experiment(
-      suite, f"n{nodes}-f2-er03", algorithm, seed,
-      _new_config(nodes, 2, {"p": 0.3}),
+      suite, f"n{nodes}-f2-planar3", algorithm, seed,
+      _new_config(nodes, 2, _euclidean_planar()),
     )
     for nodes in (10, 20, 50)
     for algorithm in algorithms
@@ -91,7 +100,7 @@ def build_e1(
   return [
     _experiment(
       suite, f"n{nodes}-f{functions}-planar3", algorithm, seed,
-      _new_config(nodes, functions, {"type": "planar", "degree": 3}),
+      _new_config(nodes, functions, _euclidean_planar()),
     )
     for nodes in (10, 20, 30)
     for functions in (2, 4)
@@ -127,9 +136,12 @@ def build_e3(
   ) -> list[Experiment]:
   suite = "paper-e3-topology"
   topologies = (
-    ("planar3", {"type": "planar", "degree": 3}),
-    ("reg3", {"k": 3}), ("reg5", {"k": 5}), ("reg7", {"k": 7}),
-    ("er01", {"p": 0.1}), ("er02", {"p": 0.2}), ("er03", {"p": 0.3}),
+    ("planar3", _euclidean_planar(3)),
+    ("planar5", _euclidean_planar(5)),
+    ("reg3", {"k": 3}),
+    ("reg5", {"k": 5}),
+    ("er3", {"m": 75}),
+    ("er5", {"m": 125}),
   )
   return [
     _experiment(
@@ -175,7 +187,7 @@ def build_e4(
   for condition in conditions:
     for algorithm in algorithms:
       for seed in seeds:
-        config = _new_config(50, 4, {"type": "planar", "degree": 3})
+        config = _new_config(50, 4, _euclidean_planar())
         _apply_robustness_condition(config, condition)
         experiments.append(_experiment(suite, condition, algorithm, seed, config))
   return experiments
@@ -191,7 +203,7 @@ def build_e5(
   for trace_type in ("sinusoidal", "clipped", "fixed_sum_minmax"):
     for algorithm in algorithms:
       for seed in seeds:
-        config = _new_config(50, 4, {"type": "planar", "degree": 3})
+        config = _new_config(50, 4, _euclidean_planar())
         config.update({
           "max_steps": 100, "min_run_time": 0,
           "max_run_time": 100, "run_time_step": 1,
@@ -223,7 +235,7 @@ def build_e6(
     "eta0", "eta01", "eta05", "eps0001", "eps01",
   )
   topologies = (
-    ("planar3", {"type": "planar", "degree": 3}),
+    ("planar3", _euclidean_planar()),
     ("reg3", {"k": 3}),
   )
   experiments = []
@@ -252,7 +264,7 @@ def build_e7(
     ("l025-f025", 0.25, 0.25), ("l1-f1", 1, 1),
   )
   topologies = (
-    ("planar3", {"type": "planar", "degree": 3}),
+    ("planar3", _euclidean_planar()),
     ("reg3", {"k": 3}),
   )
   experiments = []
@@ -270,5 +282,34 @@ def build_e7(
           options["fairness_weight"] = fairness_weight
           experiments.append(_experiment(
             suite, f"{weight_name}-{topology_name}", algorithm, seed, config,
+          ))
+  return experiments
+
+
+@register_suite("paper-e8-spatial-latency")
+def build_e8(
+    seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
+    algorithms: tuple[str, ...] = TRADEOFF_ALGORITHMS,
+  ) -> list[Experiment]:
+  suite = "paper-e8-spatial-latency"
+  experiments = []
+  for nodes in (20, 50, 100):
+    for mode in ("euclidean", "euclidean_permuted"):
+      for algorithm in algorithms:
+        for seed in seeds:
+          config = _new_config(nodes, 4, _euclidean_planar())
+          config["limits"]["weights"]["edge_network_latency"] = {
+            "mode": mode,
+            "base": 1.0,
+            "distance_factor": 1.0,
+            "jitter": {"min": 0.0, "max": 0.1},
+          }
+          section = {
+            "hierarchical": "auction", "faas-madea": "auction",
+            "faas-diffuse": "diffusion", "faas-powd": "powerd",
+          }[algorithm]
+          config["solver_options"][section]["latency_weight"] = 0.25
+          experiments.append(_experiment(
+            suite, f"n{nodes}-{mode.replace('_', '-')}", algorithm, seed, config,
           ))
   return experiments

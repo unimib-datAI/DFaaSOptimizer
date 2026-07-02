@@ -1,10 +1,13 @@
 import json
+from dataclasses import replace
 
 import pytest
 from ray_dispatcher import JobHandle, JobStatus
 
 from remote_experiments.batch import Batch, Experiment
-from remote_experiments.cli import build_parser, cmd_define, cmd_run
+from remote_experiments.cli import build_parser, cmd_define, cmd_materialize, cmd_run
+from remote_experiments.definitions.paper import build_e0
+from remote_experiments.instances import instance_id, materialize_batch
 from remote_experiments.manifest import Manifest
 
 
@@ -42,6 +45,32 @@ def test_run_subcommand_parses_required_arguments():
   assert args.batch_file == "batches/foo.json"
   assert args.inventory == "inv.yaml"
   assert args.results_dir == "./results"
+  assert args.instances == "remote_experiments/instances"
+
+
+def test_materialize_subcommand_parses_output_root():
+  args = build_parser().parse_args([
+    "materialize", "batches/foo.json", "-o", "/tmp/instances",
+  ])
+  assert args.batch_file == "batches/foo.json"
+  assert args.output == "/tmp/instances"
+
+
+def test_cmd_materialize_writes_suite_instances(tmp_path):
+  experiment = build_e0(seeds=(42,), algorithms=("centralized",))[0]
+  batch_path = tmp_path / "batch.json"
+  Batch(suite=experiment.suite, experiments=(experiment,)).save(batch_path)
+  output_root = tmp_path / "instances"
+
+  args = build_parser().parse_args([
+    "materialize", str(batch_path), "-o", str(output_root),
+  ])
+  cmd_materialize(args)
+
+  assert (
+    output_root / experiment.suite / "data" / instance_id(experiment)
+    / "metadata.json"
+  ).exists()
 
 
 class _FakeDispatcher:
@@ -76,13 +105,14 @@ class _FakeDispatcher:
 
 
 def test_cmd_run_wires_dispatcher_into_manifest(tmp_path, monkeypatch):
-  experiment = Experiment(
-    id="e1", suite="smoke", algorithm="centralized", seed=42,
-    graph_params={}, load_params={}, config={"seed": 42},
-  )
-  batch = Batch(suite="smoke", experiments=(experiment,))
+  source = build_e0(seeds=(42,), algorithms=("centralized",))[0]
+  config = dict(source.config, base_solution_folder="solutions/e1")
+  experiment = replace(source, id="e1", config=config)
+  batch = Batch(suite=source.suite, experiments=(experiment,))
   batch_path = tmp_path / "b.json"
   batch.save(batch_path)
+  instances_root = tmp_path / "instances"
+  materialize_batch(batch, instances_root)
 
   inventory_path = tmp_path / "inventory.yaml"
   inventory_path.write_text("hosts:\n  - host: 10.0.0.10\n    user: ubuntu\n    slots: 1\n")
@@ -92,6 +122,7 @@ def test_cmd_run_wires_dispatcher_into_manifest(tmp_path, monkeypatch):
 
   args = build_parser().parse_args([
     "run", str(batch_path), "--inventory", str(inventory_path),
+    "--instances", str(instances_root),
   ])
   cmd_run(args)
 
@@ -105,12 +136,14 @@ def test_cmd_run_reports_terminal_failures(tmp_path, monkeypatch, capsys):
     def __init__(self, *_args, **_kwargs):
       self._sequences = {"e1": [JobStatus.FAILED]}
 
-  experiment = Experiment(
-    id="e1", suite="smoke", algorithm="centralized", seed=42,
-    graph_params={}, load_params={}, config={"seed": 42},
-  )
+  source = build_e0(seeds=(42,), algorithms=("centralized",))[0]
+  config = dict(source.config, base_solution_folder="solutions/e1")
+  experiment = replace(source, id="e1", config=config)
   batch_path = tmp_path / "b.json"
-  Batch(suite="smoke", experiments=(experiment,)).save(batch_path)
+  batch = Batch(suite=source.suite, experiments=(experiment,))
+  batch.save(batch_path)
+  instances_root = tmp_path / "instances"
+  materialize_batch(batch, instances_root)
   inventory_path = tmp_path / "inventory.yaml"
   inventory_path.write_text("hosts:\n  - host: 10.0.0.10\n    user: ubuntu\n    slots: 1\n")
 
@@ -118,6 +151,7 @@ def test_cmd_run_reports_terminal_failures(tmp_path, monkeypatch, capsys):
   monkeypatch.setattr("builtins.input", lambda prompt: "all")
   args = build_parser().parse_args([
     "run", str(batch_path), "--inventory", str(inventory_path),
+    "--instances", str(instances_root),
   ])
   cmd_run(args)
 

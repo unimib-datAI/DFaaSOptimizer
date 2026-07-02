@@ -7,6 +7,10 @@ from utils.common import (
 from utils.centralized import get_current_load
 from generators.generate_data import generate_data, update_data
 from generators.generate_load import generate_load_traces
+from remote_experiments.instances import (
+  PAYLOAD_FILES,
+  load_materialized_instance,
+)
 from postprocessing import plot_history
 from models.model import (
   BaseLoadManagementModel, 
@@ -25,6 +29,7 @@ import pandas as pd
 import numpy as np
 import argparse
 import json
+import shutil
 import sys
 import os
 
@@ -303,6 +308,15 @@ def init_problem(
     seed: int, 
     solution_folder: str
   ) -> Tuple[dict, dict, list, Graph]:
+  if limits.get("instance_type") == "materialized":
+    instance_path = limits["path"]
+    problem = load_materialized_instance(instance_path)
+    for filename in (*PAYLOAD_FILES, "metadata.json"):
+      shutil.copy2(
+        os.path.join(instance_path, filename),
+        os.path.join(solution_folder, filename),
+      )
+    return problem
   # generate base instance data
   rng = np.random.default_rng(seed = seed)
   base_instance_data, load_limits, graph = generate_data(

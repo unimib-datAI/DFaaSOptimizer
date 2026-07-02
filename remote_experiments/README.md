@@ -1,7 +1,7 @@
 # remote_experiments
 
-Define batches of DFaaSOptimizer experiments, then run them on Gurobi-equipped
-VMs via `ray-dispatcher` with a live TUI.
+Define batches, materialize immutable inputs once, then run DFaaSOptimizer
+experiments on Gurobi-equipped VMs via `ray-dispatcher` with a live TUI.
 
 ## Prerequisites
 
@@ -10,7 +10,7 @@ VMs via `ray-dispatcher` with a live TUI.
 - VMs need outbound network access while provisioning Python and dependencies.
 - `--project-path` defaults to `.` (this repo's root) — that's what gets
   rsynced to each VM, excluding `.venv/`, `.git/`, `solutions/`, `results/`,
-  `batches/`.
+  `batches/`, and the materialized instance store.
 
 ## Define a batch
 
@@ -20,6 +20,23 @@ uv run -m remote_experiments define smoke -o batches/smoke.json
 
 Builds every `Experiment` for the named suite (a registered function under
 `remote_experiments/definitions/`) and writes them to a static JSON file.
+
+## Materialize the instances
+
+```bash
+uv run -m remote_experiments materialize batches/smoke.json
+```
+
+This creates `remote_experiments/instances/<suite>/`. Experiments whose input
+generation specification is identical share one instance directory. Each
+instance contains base optimization data, load limits, the complete temporal
+request traces, the exact graph with edge attributes, and SHA-256 metadata.
+Existing valid instances are reused; missing or modified files are rejected.
+
+The generation seed recorded in instance metadata reproduces topology, weights,
+capacities, and load traces. The experiment's runtime seed remains an algorithm
+configuration. They are separate concepts even when a study initially assigns
+them the same numeric value.
 
 ## Run (or resume) a batch
 
@@ -36,6 +53,8 @@ and shows a live progress view.
 
 Ctrl-C cancels in-flight jobs and stops cleanly. Re-running the same `run`
 command resumes — it defaults to selecting only what isn't `succeeded` yet.
+Every selected job transfers only its own materialized instance. Use
+`--instances <root>` when the store is not under `remote_experiments/instances`.
 
 ## Adding a suite
 
@@ -56,8 +75,21 @@ for suite in \
   paper-e4-robustness \
   paper-e5-dynamics \
   paper-e6-ablation \
-  paper-e7-tradeoffs
+  paper-e7-tradeoffs \
+  paper-e8-spatial-latency
 do
   uv run -m remote_experiments define "$suite" -o "batches/$suite.json"
 done
 ```
+
+Materialize each batch before running it:
+
+```bash
+for batch in batches/paper-*.json; do
+  uv run -m remote_experiments materialize "$batch"
+done
+```
+
+Generated suite directories are ignored by Git. For archival, create a ZIP only
+after materialization and retain its external SHA-256 checksum; ZIP files are
+not used directly by the runners.

@@ -2,6 +2,7 @@ import numpy as np
 
 from generators.generate_data import generate_data
 from remote_experiments.batch import Batch
+from remote_experiments.definitions import paper
 from remote_experiments.definitions import list_suites
 from remote_experiments.definitions.paper import (
   build_e0, build_e1, build_e2, build_e3, build_e4, build_e5, build_e6, build_e7,
@@ -12,7 +13,7 @@ def test_paper_suites_are_registered():
   expected = {
     "paper-e0-pilot", "paper-e1-quality-runtime", "paper-e2-scalability",
     "paper-e3-topology", "paper-e4-robustness", "paper-e5-dynamics",
-    "paper-e6-ablation", "paper-e7-tradeoffs",
+    "paper-e6-ablation", "paper-e7-tradeoffs", "paper-e8-spatial-latency",
   }
   assert expected <= set(list_suites())
 
@@ -49,16 +50,16 @@ def test_e2_count_and_centralized_size_limit():
 
 
 def test_e3_count_and_topology_coverage():
-  assert len(build_e3()) == 1260
+  assert len(build_e3()) == 1080
   experiments = build_e3(seeds=(1001,))
   topologies = {
     tuple(sorted(e.config["limits"]["neighborhood"].items()))
     for e in experiments
   }
   assert topologies == {
-    (("degree", 3), ("type", "planar")),
-    (("k", 3),), (("k", 5),), (("k", 7),),
-    (("p", 0.1),), (("p", 0.2),), (("p", 0.3),),
+    (("density", 1.0), ("mean_degree", 3), ("type", "euclidean_planar")),
+    (("density", 1.0), ("mean_degree", 5), ("type", "euclidean_planar")),
+    (("k", 3),), (("k", 5),), (("m", 75),), (("m", 125),),
   }
 
 
@@ -108,6 +109,25 @@ def test_e7_default_count_and_weight_pairs():
     (0, 0), (0.25, 0), (1, 0), (0, 0.25),
     (0, 1), (0.25, 0.25), (1, 1),
   }
+
+
+def test_e8_default_count_and_spatial_latency_coverage():
+  experiments = paper.build_e8()
+  sections = {
+    "hierarchical": "auction", "faas-madea": "auction",
+    "faas-diffuse": "diffusion", "faas-powd": "powerd",
+  }
+
+  assert len(experiments) == 720
+  assert {e.config["limits"]["Nn"]["min"] for e in experiments} == {20, 50, 100}
+  assert {
+    e.config["limits"]["weights"]["edge_network_latency"]["mode"]
+    for e in experiments
+  } == {"euclidean", "euclidean_permuted"}
+  assert {
+    e.config["solver_options"][sections[e.algorithm]]["latency_weight"]
+    for e in experiments
+  } == {0.25}
 
 
 def test_paper_experiments_round_trip_as_batch(tmp_path):

@@ -26,7 +26,9 @@ def _planar_e2e_config(base_solution_folder: Path) -> dict:
     "limits": {
       "Nn": {"min": 10, "max": 10},
       "Nf": {"min": 1, "max": 1},
-      "neighborhood": {"type": "planar", "degree": 3},
+      "neighborhood": {
+        "type": "euclidean_planar", "mean_degree": 3, "density": 1.0,
+      },
       "weights": {
         "alpha": {"min": 1.0, "max": 1.0},
         "beta_multiplier": {"min": 1.5, "max": 2.0},
@@ -78,8 +80,9 @@ def _assert_generated_graph_is_planar_degree_three(folder: str) -> None:
   graph = nx.from_numpy_array(neighborhood)
 
   assert n_nodes >= 10
+  assert nx.is_connected(graph)
   assert nx.check_planarity(graph)[0] is True
-  assert {degree for _, degree in graph.degree()} == {3}
+  assert graph.number_of_edges() == round(n_nodes * 3 / 2)
 
 
 def _flatten_text(df: pd.DataFrame) -> str:
@@ -113,8 +116,9 @@ def test_centralized_distributed_and_hierarchical_run_on_planar_degree_three_gra
     np.random.default_rng(config["seed"]),
   )
   assert neighborhood.shape == (10, 10)
+  assert nx.is_connected(graph)
   assert nx.check_planarity(graph)[0] is True
-  assert {degree for _, degree in graph.degree()} == {3}
+  assert graph.number_of_edges() == round(10 * 3 / 2)
 
   centralized_folder = run_centralized(
     {**config, "base_solution_folder": str(tmp_path / "centralized")},
