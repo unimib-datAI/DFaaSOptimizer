@@ -249,6 +249,8 @@ def test_zero_capacity_with_demand_exits_after_first_iteration():
   assert y_inc.sum() == 0.0
   assert gap_info["LB"] == 0.0
   assert gap_info["inner_iterations"] == 1
+  # the zero assignment is certified optimal: no eligible seller has capacity
+  assert gap_info["UB"] == 0.0 and gap_info["gap"] == 0.0
 
 
 def test_single_inner_iteration_yields_valid_certificate():

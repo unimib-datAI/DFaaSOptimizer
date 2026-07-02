@@ -200,10 +200,16 @@ def dual_coordination_round(
     gap = (best_ub - best_lb) / max(1.0, abs(best_ub))
     if gap <= dual_options["gap_tolerance"]:
       break
-    if len(bids) == 0 and (demand.sum() <= 0 or k == 1):
+    if len(bids) == 0 and k == 1:
       # at k == 1 prices are zero, so the bid-eligible seller set is maximal:
-      # no bids now (all positively-advantaged sellers lack capacity) means no
-      # bids at any later iteration either
+      # no bids now (every positively-advantaged seller lacks capacity, or no
+      # pair is eligible at all) means no bids at any later iteration either,
+      # and the LP optimum is exactly 0, so the zero incumbent is certified
+      # optimal
+      best_ub = 0.0
+      gap = 0.0
+      break
+    if len(bids) == 0 and demand.sum() <= 0:
       break
     subgradient = demand - capacity
     if dual_options["step_rule"] == "polyak":
