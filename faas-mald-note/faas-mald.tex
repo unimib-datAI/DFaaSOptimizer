@@ -131,24 +131,11 @@ classical Polyak step.
 \label{alg:mald}
 \begin{algorithmic}[1]
 \Require $\omega,C$, data, neighbourhood, $\rho$, options, latency, fairness
-\If{$\texttt{max\_inner\_iterations}$ is not a positive integer}
-  \State raise \texttt{ValueError}
-\EndIf
-\If{$\texttt{step\_rule}\notin\{\texttt{sqrt},\texttt{polyak}\}$}
-  \State raise \texttt{ValueError}
-\EndIf
-\For{each numeric option in $\{\alpha_0,\theta,\texttt{gap\_tolerance},w_{\mathrm{lat}},w_{\mathrm{fair}}\}$}
-  \If{the value is not finite} \State raise \texttt{ValueError} \EndIf
-\EndFor
-\If{$\texttt{step\_rule}=\texttt{sqrt}$ and $\alpha_0\le 0$}
-  \State raise \texttt{ValueError}
-\EndIf
-\If{$\texttt{step\_rule}=\texttt{polyak}$ and $\theta\le 0$}
-  \State raise \texttt{ValueError}
-\EndIf
-\If{$\texttt{gap\_tolerance}<0$}
-  \State raise \texttt{ValueError}
-\EndIf
+\State validate options, raising \texttt{ValueError} unless: $K$ is a positive
+  integer; $\texttt{step\_rule}\in\{\texttt{sqrt},\texttt{polyak}\}$; the numeric
+  options $\{\alpha_0,\theta,\texttt{gap\_tolerance},w_{\mathrm{lat}},w_{\mathrm{fair}}\}$
+  are finite; $\alpha_0>0$ (\texttt{sqrt}) or $\theta>0$ (\texttt{polyak});
+  and $\texttt{gap\_tolerance}\ge 0$
 \State compute Cloud-relative advantages $a$ and eligibility mask $A$; copy $C$; set
   $\lambda\gets0$, $\textit{best\_lam}\gets\lambda$, and $a^{0}_{ij}{}^f\gets a_{ij}^f$ on eligible edges, $0$ otherwise
 \State $\textit{best\_y}\gets0$, $LB\gets0$, $UB\gets+\infty$,
