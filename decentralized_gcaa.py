@@ -39,7 +39,9 @@ import os
 
 
 def resolve_gcaa_round(
-    bids: pd.DataFrame, residual_capacity: np.array
+    bids: pd.DataFrame,
+    residual_capacity: np.array,
+    current_y: np.array = None,
   ) -> np.array:
   """One GCAA consensus round (Braquet & Bakolas, 2021 - Algorithms 1+3):
   each buyer agent (i, f) proposes only its highest-utility task (j, f);
@@ -51,13 +53,23 @@ def resolve_gcaa_round(
   y_round = np.zeros((Nn, Nn, Nf))
   if len(bids) == 0:
     return y_round
+  if current_y is None:
+    current_y = y_round
+  sending = current_y.sum(axis=1) > 1e-10
+  receiving = current_y.sum(axis=0) > 1e-10
   best_per_agent = bids.loc[bids.groupby(["i", "f"])["utility"].idxmax()]
   for (j, f), group in best_per_agent.groupby(["j", "f"]):
     j, f = int(j), int(f)
-    winner = group.loc[group["utility"].idxmax()]
-    if residual_capacity[j, f] < winner["d"]:
+    if sending[j, f]:
       continue
-    y_round[int(winner["i"]), j, f] += winner["d"]
+    for _, winner in group.sort_values("utility", ascending=False).iterrows():
+      i = int(winner["i"])
+      if receiving[i, f] or residual_capacity[j, f] < winner["d"]:
+        continue
+      y_round[i, j, f] += winner["d"]
+      sending[i, f] = True
+      receiving[j, f] = True
+      break
   return y_round
 
 
@@ -199,7 +211,7 @@ def run(
         print(bids, file = log_stream, flush = True)
       rmp_omega = np.zeros((Nn, Nf))
       if len(bids) > 0:
-        auction_y = resolve_gcaa_round(bids, residual_capacity)
+        auction_y = resolve_gcaa_round(bids, residual_capacity, y)
         y += auction_y
         for n in range(Nn):
           for f in range(Nf):

@@ -58,3 +58,23 @@ def test_bid_larger_than_residual_capacity_is_skipped():
   residual_capacity = np.array([[5.0], [0.4]])
   y_round = resolve_gcaa_round(bids, residual_capacity)
   assert y_round.sum() == 0.0
+
+
+def test_receiving_agent_cannot_offload_same_function():
+  bids = _bids([
+    {"i": 1, "j": 2, "f": 0, "d": 1, "b": 0.5, "utility": 1.0},
+  ])
+  current_y = np.zeros((3, 3, 1))
+  current_y[0, 1, 0] = 1.0
+  y_round = resolve_gcaa_round(bids, np.ones((3, 1)), current_y)
+  assert y_round.sum() == 0.0
+
+
+def test_round_does_not_create_ping_pong_chain():
+  bids = _bids([
+    {"i": 0, "j": 1, "f": 0, "d": 1, "b": 0.8, "utility": 2.0},
+    {"i": 1, "j": 2, "f": 0, "d": 1, "b": 0.5, "utility": 1.0},
+  ])
+  y_round = resolve_gcaa_round(bids, np.ones((3, 1)), np.zeros((3, 3, 1)))
+  assert y_round[0, 1, 0] == 1.0
+  assert y_round[1, 2, 0] == 0.0
