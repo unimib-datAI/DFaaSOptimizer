@@ -134,6 +134,22 @@ def propose_node_move(
   return x_row, r_row, omega_row, runtime
 
 
+def compute_rho(r: np.array, sp_data: dict) -> np.array:
+  """Memory slack per node for the CURRENT committed replicas. Must be
+  recomputed whenever r changes (accepted moves re-decide r via the MILP),
+  or the memory market would allocate replicas against stale slack."""
+  Nn = sp_data[None]["Nn"][None]
+  Nf = sp_data[None]["Nf"][None]
+  rho = np.array([
+    sp_data[None]["memory_capacity"][j + 1] - sum(
+      r[j, f] * sp_data[None]["memory_requirement"][f + 1] for f in range(Nf)
+    )
+    for j in range(Nn)
+  ], dtype=float)
+  assert (rho > -1e-6).all(), f"memory budget violated: rho={rho}"
+  return np.maximum(rho, 0.0)
+
+
 def node_move(
     i: int,
     x: np.array,
@@ -195,10 +211,18 @@ def node_move(
     x[i, :] = x_row
     y[i, :, :] = new_row
     r[i, :] = r_row
-  # unplaced appetite signals a capacity shortage: bid on neighbour memory
+  # unplaced appetite signals a capacity shortage: bid on neighbour memory.
+  # The proposal's omega is capped by the current ledger, so scarcity must
+  # also be read from the Cloud-forwarded residue z (load the node would
+  # rather offload than reject, since delta > 0 > -gamma): without the
+  # z-signal, a saturated neighbourhood never grows and coordination stalls
+  # at the initial residual capacity.
   placed = new_row.sum(axis=0)
   for f in range(Nf):
-    if omega_row[f] - placed[f] <= tolerance:
+    if inbound_row[f] > tolerance:
+      continue  # no-ping-pong: this node can never offload f
+    unmet = max(omega_row[f] - placed[f], z_new[i, f])
+    if unmet <= tolerance:
       continue
     gamma_if = sp_data[None]["gamma"][(i + 1, f + 1)]
     memory_requirement = sp_data[None]["memory_requirement"][f + 1]
@@ -396,6 +420,8 @@ def _run(
       sp_data, x, y, compute_z(x, y, sp_data)
     )
     while not stop_searching:
+      if opt_solution is None:
+        rho = compute_rho(r, sp_data)
       s = datetime.now()
       n_accepted, delta_phi, memory_bids, proposal_runtime = (
         potential_game_sweep(
@@ -409,12 +435,16 @@ def _run(
         bookkeeping / n_accepted if n_accepted else bookkeeping
       )
       additional_replicas = np.zeros((Nn, Nf))
-      if len(memory_bids) > 0 and (rho > 0).any():
+      if len(memory_bids) > 0 and opt_solution is None:
         s = datetime.now()
-        additional_replicas, rho = start_additional_replicas(
-          memory_bids, r, sp_data, rho
-        )
-        r += additional_replicas
+        # accepted moves in the sweep re-decide r and consume memory slack:
+        # recompute rho before the market or it would allocate stale slack
+        rho = compute_rho(r, sp_data)
+        if (rho > 0).any():
+          additional_replicas, rho = start_additional_replicas(
+            memory_bids, r, sp_data, rho
+          )
+          r += additional_replicas
         total_runtime += (datetime.now() - s).total_seconds()
       phi = compute_centralized_objective(
         sp_data, x, y, compute_z(x, y, sp_data)

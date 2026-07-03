@@ -247,7 +247,7 @@ proposal's own objective value.
   \If{$u_i^{\mathrm{new}}-u_i^{\mathrm{old}}>\varepsilon$}
     \State commit $x_i\gets x_i'$, $y_{i\cdot}\gets y_{i\cdot}'$, $r_i\gets r_i'$;\quad $n_{\mathrm{accepted}}{+}{+}$;\quad $\Delta\Phi\mathrel{+}=u_i^{\mathrm{new}}-u_i^{\mathrm{old}}$
   \EndIf
-  \State for every $f$ with unplaced appetite $\omega_i'^f-\sum_j y_{ij}'^f>\text{tol}$, emit memory bids to neighbours $j$ with $\rho_j\ge\mathrm{RAM}^f$ and $\beta_{ij}^f>-\gamma_i^f$
+  \State for every $f$ with $\max\{\omega_i'^f-\sum_j y_{ij}'^f,\ z_i'^f\}>\text{tol}$ and no inbound commitment, emit memory bids to neighbours $j$ with $\rho_j\ge\mathrm{RAM}^f$ and $\beta_{ij}^f>-\gamma_i^f$
 \EndFor
 \State \Return $n_{\mathrm{accepted}}$, $\Delta\Phi$, memory bids
 \end{algorithmic}
@@ -334,8 +334,16 @@ no equilibrium certificate for that timestep.
 \label{sec:mapg-memory}
 
 Unplaced appetite after the fractional-knapsack split triggers the same
-memory-bid mechanism as \textsc{FaaS-MADeA}: node $i$ bids to every neighbour
-$j$ with unused memory slack $\rho_j\ge\mathrm{RAM}^f$ and
+memory-bid mechanism as \textsc{FaaS-MADeA}. Because the proposal MILP is
+capped at the currently advertised residual capacity, unmet demand is read
+from \emph{both} scarcity signals: the unplaced split residue
+$\omega_i'^f-\sum_j y_{ij}'^f$ and the Cloud-forwarded residue $z_i^f$ of the
+candidate state (load the node would rather offload than reject, since
+$\delta_i^f>0>-\gamma_i^f$) — without the $z$-signal a saturated
+neighbourhood would never grow and coordination would stall at the initial
+residual capacity. For every such $f$ (excluding functions held as inbound
+commitments, which the mover can never offload), node $i$ bids to every
+neighbour $j$ with unused memory slack $\rho_j\ge\mathrm{RAM}^f$ and
 $\beta_{ij}^f>-\gamma_i^f$; \texttt{start\_additional\_replicas} allocates new
 replicas at bid-receiving sellers proportionally to demand fraction, subject
 to $\rho_j$. Two properties transfer unchanged from \textsc{FaaS-MADeA} and

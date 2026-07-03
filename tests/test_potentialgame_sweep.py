@@ -183,3 +183,34 @@ def test_node_move_excludes_sellers_that_offload_same_function():
   assert np.isclose(y[0, 1, 0], 0.0)
   # combined y must satisfy the centralized no-ping-pong invariant
   assert not ((y.sum(axis=1) > 1e-9) & (y.sum(axis=0) > 1e-9)).any()
+
+
+def test_node_move_bids_on_memory_when_cloud_residue_remains():
+  # ledger is empty (neighbour saturated), so the capped proposal asks for
+  # omega=0 and places 0; the z>0 residue must still trigger memory bids
+  # towards neighbours with memory slack
+  data = _data_2n_1f()
+  x = np.array([[3.0], [4.0]])  # node 0: 1.0 unserved -> z; node 1 full
+  y = np.zeros((2, 2, 1))
+  r = np.array([[3.75], [5.0]])  # node 1: cap 4.0 == x -> residual 0
+  neighborhood = np.array([[0, 1], [1, 0]])
+  rho = np.array([0.0, 10.0])  # node 1 has memory slack
+
+  def capped_proposal(i, omega_ub_row):
+    return np.array([3.0]), np.array([3.75]), omega_ub_row.copy(), 0.0
+
+  _, _, bids, _ = node_move(
+    0, x, y, r, data, neighborhood, rho, 1e-6, capped_proposal, 1e-9
+  )
+  assert bids["j"] == [1] and bids["f"] == [0]
+
+
+def test_compute_rho_tracks_committed_replicas():
+  from decentralized_potentialgame import compute_rho
+  data = _data_2n_1f()  # memory_capacity 100, memory_requirement 2
+  r = np.array([[5.0], [10.0]])
+  rho = compute_rho(r, data)
+  assert np.allclose(rho, [90.0, 80.0])
+  # replicas grown by a move: slack must shrink accordingly
+  r[0, 0] = 50.0
+  assert np.allclose(compute_rho(r, data), [0.0, 80.0])
