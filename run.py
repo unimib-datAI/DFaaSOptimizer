@@ -8,6 +8,7 @@ from hierarchical_auction.madea_runner import run as run_hierarchical_madea
 from decentralized_diffusion import run as run_diffusion
 from decentralized_powerd import run as run_powerd
 from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
+from decentralized_potentialgame import run_pg_s, run_pg_r
 from postprocessing import load_models_results
 from utils.common import reconcile_paths
 
@@ -38,6 +39,8 @@ METHOD_RESULT_MODELS = {
   "faas-br-s": ("LSPc", "FaaS-MABR-S"),
   "faas-br-r": ("LSPc", "FaaS-MABR-R"),
   "faas-br-o": ("LSPc", "FaaS-MABR-O"),
+  "faas-pg-s": ("LSPc", "FaaS-MAPG-S"),
+  "faas-pg-r": ("LSPc", "FaaS-MAPG-R"),
 }
 
 
@@ -77,6 +80,8 @@ def parse_arguments() -> argparse.Namespace:
       "faas-br-s",
       "faas-br-r",
       "faas-br-o",
+      "faas-pg-s",
+      "faas-pg-r",
       "generate_only"
     ],
     required = True
@@ -921,6 +926,8 @@ def run(
     run_brs = False # -- faas-br-s (FaaS-MABR-S)
     run_brr = False # -- faas-br-r (FaaS-MABR-R)
     run_bro = False # -- faas-br-o (FaaS-MABR-O)
+    run_pgs = False # -- faas-pg-s (FaaS-MAPG-S)
+    run_pgr = False # -- faas-pg-r (FaaS-MAPG-R)
     experiment_idx = None
     try:
       experiment_idx = solution_folders["experiments_list"].index(
@@ -992,6 +999,18 @@ def run(
           solution_folders["faas-br-o"][experiment_idx] is None
         )):
         run_bro = True
+      if (not generate_only and "faas-pg-s" in methods) and ((
+          len(solution_folders.get("faas-pg-s", [])) <= experiment_idx
+        ) or (
+          solution_folders["faas-pg-s"][experiment_idx] is None
+        )):
+        run_pgs = True
+      if (not generate_only and "faas-pg-r" in methods) and ((
+          len(solution_folders.get("faas-pg-r", [])) <= experiment_idx
+        ) or (
+          solution_folders["faas-pg-r"][experiment_idx] is None
+        )):
+        run_pgr = True
     except ValueError:
       run_c = "centralized" in methods
       run_i = "faas-macro" in methods
@@ -1004,8 +1023,10 @@ def run(
       run_brs = "faas-br-s" in methods
       run_brr = "faas-br-r" in methods
       run_bro = "faas-br-o" in methods
+      run_pgs = "faas-pg-s" in methods
+      run_pgr = "faas-pg-r" in methods
     # if the experiment is still to run...
-    if run_c or run_i or run_i_v0 or run_a or run_h or run_hm or run_d or run_p or run_brs or run_brr or run_bro or generate_only:
+    if run_c or run_i or run_i_v0 or run_a or run_h or run_hm or run_d or run_p or run_brs or run_brr or run_bro or run_pgs or run_pgr or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       if loop_over in config["limits"]:
@@ -1165,6 +1186,24 @@ def run(
         )
         set_solution_folder(
           solution_folders, "faas-br-o", experiment_idx, bro_folder
+        )
+      # -- solve potential game sequential (FaaS-MAPG-S)
+      if run_pgs:
+        pgs_folder = run_pg_s(
+          config, sp_parallelism,
+          log_on_file = log_on_file, disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "faas-pg-s", experiment_idx, pgs_folder
+        )
+      # -- solve potential game randomized (FaaS-MAPG-R)
+      if run_pgr:
+        pgr_folder = run_pg_r(
+          config, sp_parallelism,
+          log_on_file = log_on_file, disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "faas-pg-r", experiment_idx, pgr_folder
         )
       # -- save info
       if experiment_idx is None:

@@ -1,5 +1,5 @@
 {
-  "base_solution_folder": "solutions/planar_comparison",
+  "base_solution_folder": "solutions/eval_tuned_smoke",
   "verbose": 1,
   "seed": 42,
   "max_steps": 8,
@@ -14,10 +14,11 @@
     },
     "auction": {
       "epsilon": 0.01,
-      "eta": [0.5, 0.3, 0.15],
+      "eta": 0.3,
       "zeta": 0.1,
       "latency_weight": 0.0,
-      "fairness_weight": 0.0
+      "fairness_weight": 0.0,
+      "unit_bids": false
     },
     "diffusion": {
       "latency_weight": 0.0,
@@ -45,22 +46,20 @@
   "tolerance": 1e-6,
   "limits": {
     "Nn": {
-      "values": [10, 20, 30, 40, 50]
+      "values": [20]
     },
     "Nf": {
       "min": 2,
       "max": 2
     },
     "neighborhood": {
-      "k": 3,
-      "shape": "planar"
+      "p": 0.3
     },
     "demand": {
       "values": [1.0, 1.2]
     },
     "memory_capacity": {
-      "min": 12,
-      "max": 12
+      "repeated_values": [[0.25, 200], [0.75, 32]]
     },
     "memory_requirement": {
       "values": [2, 3]
@@ -71,8 +70,8 @@
     },
     "load": {
       "trace_type": "sinusoidal",
-      "min": {"min": 5, "max": 10},
-      "max": {"min": 50, "max": 100}
+      "min": {"min": 3, "max": 6},
+      "max": {"min": 18, "max": 24}
     },
     "weights": {
       "alpha": {"min": 1.0, "max": 1.5},

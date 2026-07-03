@@ -1,5 +1,5 @@
 {
-  "base_solution_folder": "solutions/planar_comparison",
+  "base_solution_folder": "solutions/eval_smoke",
   "verbose": 1,
   "seed": 42,
   "max_steps": 8,
@@ -45,15 +45,14 @@
   "tolerance": 1e-6,
   "limits": {
     "Nn": {
-      "values": [10, 20, 30, 40, 50]
+      "values": [10]
     },
     "Nf": {
       "min": 2,
       "max": 2
     },
     "neighborhood": {
-      "k": 3,
-      "shape": "planar"
+      "p": 0.3
     },
     "demand": {
       "values": [1.0, 1.2]
