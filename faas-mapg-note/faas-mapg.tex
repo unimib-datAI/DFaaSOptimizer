@@ -1,0 +1,411 @@
+% =====================================================================
+% FaaS-MAPG: sequential better-response dynamics of an exact potential
+% game, with an epsilon-Nash certificate.
+% Meant to be \input{} (or pasted) into the paper. Assumes the paper's
+% notation (N, F, C_i^f, rho_i, omega_i^f, beta_{ij}^f, gamma_i^f, ...).
+% Cross-references are plain text; convert to \ref{} in the host paper.
+% =====================================================================
+
+\section{FaaS-MAPG: multi-agent potential-game better response}
+\label{sec:mapg}
+
+\textsc{FaaS-MAPG} (Multi-Agent Potential Game) revisits the same
+Gauss-Seidel sweep skeleton as \textsc{FaaS-MABR}, but replaces the
+score-greedy, commit-always response with a response rule chosen so that the
+sum of node utilities is an \emph{exact potential function}: every accepted
+unilateral move raises the sum by exactly the mover's utility gain. This is
+qualitatively different from the two other coordination families in this
+paper. \textsc{FaaS-MADeA} and \textsc{FaaS-MALD} coordinate through prices
+(an $\varepsilon$-auction and a Lagrangian dual, respectively) and their
+certificates bound a fixed-capacity inner problem, not the joint outer game.
+\textsc{FaaS-MABR} is a greedy heuristic: nothing prevents a sweep from
+lowering the objective, and it offers no equilibrium notion. \textsc{FaaS-MAPG}
+instead accepts a move only when it strictly improves the mover's own utility
+by more than a tolerance $\varepsilon>0$, which (Proposition~\ref{prop:mapg-potential})
+makes the welfare function $\Phi=\sum_i u_i$ increase by exactly the same
+amount, is monotonically non-decreasing, and yields a finite-time certificate
+(Theorem~\ref{thm:mapg-termination}) that the terminal state is an
+$\varepsilon$-Nash equilibrium with respect to the implemented move class.
+
+% =====================================================================
+% BEGIN self-contained notation recap.
+% Reproduces the relevant rows of the paper's Table 2 (FRALB) and Table 3
+% (auction) plus Eqs. (1),(2),(12),(13), so the note is readable on its own.
+% REMOVE this whole subsection when inserting into the paper, where the
+% notation and these equations are already defined.
+% =====================================================================
+\subsection{Notation and capacity model}
+\label{sec:mapg-notation}
+
+Each control period $t$ runs coordination iterations (\emph{sweeps})
+$h=0,1,\dots,H_{\max}$. Before coordination, every node $i$ solves a local
+problem~(P2) that, for each function $f\in\mathcal{F}_i$, splits the incoming
+workload $\lambda_i^f$ into locally processed load $x_i^f$, horizontally
+offloaded demand $\omega_i^f$, and Cloud-forwarded load $z_i^f$, and fixes the
+number of replicas $r_i^f$. Replicas obey the memory budget and provide
+capacity
+\begin{equation}
+  \sum_{f\in\mathcal{F}_i} r_i^f\,\mathrm{RAM}^f \le \mathrm{RAM}_i,
+  \qquad
+  \mathrm{Cap}_i^f = \frac{r_i^f\,U^f_{\max}}{D_i^f}\ \text{[req/s]} ,
+  \tag{1,2}
+\end{equation}
+from which each node advertises, on a neighbour-accessible blackboard, its
+residual execution capacity and its memory slack:
+\begin{equation}
+  C_i^f(h) = \max\!\big\{0,\ \mathrm{Cap}_i^f(h) - x_i^f(h)\big\},
+  \qquad
+  \rho_i(h) = \mathrm{RAM}_i - \sum_{f\in\mathcal{F}_i} r_i^f(h)\,\mathrm{RAM}^f \ge 0 .
+  \tag{12,13}
+\end{equation}
+Table~\ref{tab:mapg-notation} collects the symbols used below.
+
+\begin{table}[t]
+\centering
+\caption{Notation used in this section (subset of the paper's Tables~2--3).}
+\label{tab:mapg-notation}
+\small
+\begin{tabular}{@{}l l p{0.6\linewidth}@{}}
+\toprule
+\multicolumn{3}{@{}l}{\textit{Sets and players}}\\
+Nodes / neighbours & $\mathcal{N}$, $N_i$ & computing nodes, treated as players; one-hop neighbours of $i$.\\
+Functions & $\mathcal{F}_i$ & functions deployable on $i$; $\mathcal{F}=\bigcup_i \mathcal{F}_i$.\\
+Move order & $\sigma$ & the sweep's visiting order over $\mathcal{N}$ (fixed or a per-sweep random permutation).\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Parameters and weights}}\\
+Input workload & $\lambda_i^f$ & incoming request rate for $f$ at $i$ [req/s]; also the utility normalizer.\\
+Memory cap / demand & $\mathrm{RAM}_i$, $\mathrm{RAM}^f$ & node memory; per-replica memory of $f$ [MB].\\
+Service demand & $D_i^f$ & average execution time of $f$ at $i$ [s].\\
+Max utilization & $U^f_{\max}$ & stability threshold, $U^f_{\max}\in[0,1)$.\\
+Local / offload / Cloud profit & $\alpha_i^f$, $\beta_{ij}^f$, $\gamma_i^f$ & profit of local exec.; profit of offloading $i\!\to\! j$; Cloud-offloading penalty (per req/s).\\
+Acceptance tolerance & $\varepsilon>0$ & minimum utility gain required to commit a move.\\
+Max iterations / time limit & $H_{\max}$, $T_{\max}$ & sweep and wall-clock stop guards.\\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Strategy and state at sweep $h$}}\\
+Node strategy & $s_i=(r_i,x_i,\omega_i,y_{i\cdot})$ & replicas, local load, offloading target, and outbound routing row.\\
+Replicas & $r_i^f$ & number of $f$ replicas on $i$, $r_i^f\in\mathbb{N}_0$.\\
+Local / forwarded / Cloud load & $x_i^f$, $y_{ij}^f$, $z_i^f$ & locally served; forwarded $i\!\to\! j$; Cloud-offloaded [req/s].\\
+Committed inbound & $\bar y_{mi}^f$ & the current $y_{mi}^f$ of every node $m\ne i$, frozen while $i$ moves.\\
+Accessible capacity cap & $\omega_i^{\mathrm{ub},f}$ & the residual capacity $i$ may claim from its neighbours in this move.\\
+Capacity / residual / slack & $\mathrm{Cap}_i^f$, $C_i^f$, $\rho_i$ & exec.\ capacity (Eq.~2); residual exec.\ capacity (Eq.~12); memory slack (Eq.~13).\\
+Node utility & $u_i$ & node $i$'s share of the centralized FRALB objective (Eq.~\eqref{eq:mapg-utility}).\\
+Potential / welfare & $\Phi$ & $\Phi=\sum_i u_i$, the centralized objective; the exact potential (Prop.~\ref{prop:mapg-potential}).\\
+\bottomrule
+\end{tabular}
+\end{table}
+% ===================== END self-contained notation recap =====================
+
+\subsection{Game formulation}
+\label{sec:mapg-game}
+
+Players are the nodes $\mathcal{N}$. Node $i$'s strategy is
+$s_i=(r_i,x_i,\omega_i,y_{i\cdot})$: its replica counts, locally served load,
+offloading target, and the row $y_{i\cdot}^f=(y_{ij}^f)_{j\in N_i}$ of load it
+routes to neighbours (Cloud-forwarded load $z_i^f$ is not a free coordinate;
+it is the flow-conservation residual $z_i^f=\max\{0,\ell_i^f-x_i^f-\sum_j y_{ij}^f\}$
+of $i$'s own served load $\ell_i^f$). Node $i$'s utility is its share of the
+centralized FRALB objective, i.e. the terms of the objective that depend on
+$i$'s own coordinates:
+\begin{equation}
+  u_i(s) = \sum_{f\in\mathcal{F}_i}
+    \frac{\alpha_i^f x_i^f + \sum_{j\in N_i}\beta_{ij}^f y_{ij}^f - \gamma_i^f z_i^f}
+         {\lambda_i^f}.
+  \label{eq:mapg-utility}
+\end{equation}
+Summing $u_i$ over all nodes recovers exactly the centralized objective
+$\Phi(s)=\sum_i u_i(s)$: each $(\alpha,\beta,\gamma)$-weighted term is counted
+once, against the node that owns the corresponding row of $x$, $y$, or $z$.
+
+\paragraph{Unilateral-move rules.} A move by node $i$ changes only $i$'s
+strategy $s_i$; every other node's strategy $s_{-i}$, including its outbound
+row $y_{m\cdot}$ for $m\ne i$, is held fixed. Two rules make this well
+defined and keep $\Phi$ an exact potential:
+\begin{enumerate}
+\item \textbf{Inbound commitments are kept.} Load already routed to $i$ by
+  other nodes, $\bar y_{mi}^f$ for $m\ne i$, must still be served by $i$ after
+  the move; $i$'s local problem enforces $D_i^f\big(x_i^f+\sum_m \bar y_{mi}^f\big)\le r_i^f U_{\max}^f$
+  (utilization constraints \texttt{utilization\_equilibrium\_pg} /
+  \texttt{\_2\_pg} of \texttt{LSP\_pg} in \texttt{models/sp.py}), so a move
+  can never strand another node's already-placed load.
+\item \textbf{Only advertised residual capacity is claimable, and $i$'s own
+  row is released first.} Before computing $i$'s move, $i$'s current outbound
+  row $y_{i\cdot}$ is zeroed out of the residual-capacity ledger (so $i$ does
+  not compete with the capacity it is about to give up), and $i$ is capped to
+  the resulting residual capacity of eligible neighbours,
+  $\omega_i^{\mathrm{ub},f}=\sum_{j\in N_i:\ \beta_{ij}^f>-\gamma_i^f}\tilde C_j^f$,
+  enforced by the \texttt{cap\_offloading} constraint $\omega_i^f\le\omega_i^{\mathrm{ub},f}$.
+\end{enumerate}
+Because $i$'s move only ever reallocates $i$'s own row $y_{i\cdot}$ within
+capacity every other node has already advertised as unused, and every other
+node's coordinates $s_{-i}$ (including $\bar y_{mi}$, which $i$ must
+continue to serve) are literally unchanged by the move, no other node's
+utility term changes: $u_m(s_i',s_{-i})=u_m(s_i,s_{-i})$ for all $m\ne i$.
+
+\subsection{Exact potential}
+\label{sec:mapg-potential}
+
+\begin{proposition}[FaaS-MAPG is an exact potential game]
+\label{prop:mapg-potential}
+Under the unilateral-move rules of \S\ref{sec:mapg-game}, the welfare function
+$\Phi(s)=\sum_{k\in\mathcal{N}} u_k(s)$ is an exact potential for the game:
+for every node $i$, every strategy profile $s$, and every unilateral
+deviation $s_i'$,
+\[
+  \Phi(s_i',s_{-i}) - \Phi(s_i,s_{-i}) = u_i(s_i',s_{-i}) - u_i(s_i,s_{-i}).
+\]
+\end{proposition}
+\begin{proof}
+Write $\Phi(s_i,s_{-i})=u_i(s_i,s_{-i})+\sum_{m\ne i}u_m(s_i,s_{-i})$ and
+likewise for $\Phi(s_i',s_{-i})$. Subtracting,
+\[
+  \Phi(s_i',s_{-i})-\Phi(s_i,s_{-i})
+  = \big[u_i(s_i',s_{-i})-u_i(s_i,s_{-i})\big]
+  + \sum_{m\ne i}\big[u_m(s_i',s_{-i})-u_m(s_i,s_{-i})\big].
+\]
+Each $u_m$, $m\ne i$, is a function of $m$'s own coordinates
+$(x_m,y_{m\cdot},z_m)$ only (Eq.~\eqref{eq:mapg-utility}). A unilateral move
+by $i$ leaves $s_{-i}$ untouched by construction, and rule~1 guarantees that
+$m$'s served load $\bar y_{mi}^f$ from $i$'s row, hence $m$'s own $x_m$,
+$y_{m\cdot}$, $z_m$, do not have to and do not change to remain feasible
+(the move only reduces or reallocates what $i$ sends, which $m$ does not
+own). Consequently $u_m(s_i',s_{-i})=u_m(s_i,s_{-i})$ for every $m\ne i$, the
+sum of differences vanishes, and
+$\Phi(s_i',s_{-i})-\Phi(s_i,s_{-i})=u_i(s_i',s_{-i})-u_i(s_i,s_{-i})$.
+\end{proof}
+
+This is the FaaS instance of the standard construction of an exact potential
+game from an additively separable global objective in which each player's
+payoff is exactly its own contribution to that objective
+\citep{monderershapley1996}; the resulting $\Phi$ coincides with the FRALB
+welfare, and the game is, structurally, a congestion-style game over shared
+capacity resources in the sense of \citet{rosenthal1973}, restricted here to
+the implemented move class rather than unrestricted resource choice.
+
+\subsection{Move rule: proposal MILP, exact split, and $\varepsilon$-acceptance}
+\label{sec:mapg-move}
+
+A single node move (function \texttt{node\_move} in
+\texttt{decentralized\_potentialgame.py}) has three stages.
+
+\paragraph{1. Proposal MILP.} Node $i$ re-solves its local problem
+(\texttt{LSP\_pg}, or \texttt{LSP\_pg\_fixedr} when replicas are pinned to a
+reference plan) with committed inbound flows $\bar y_{mi}^f$ fixed as a
+parameter and the offloading target capped at $\omega_i^{\mathrm{ub},f}$
+(\S\ref{sec:mapg-game}). This MILP is \emph{P2 with committed inbound and a
+capacity cap}: it prices the aggregate offload $\omega_i^f$ using the same
+weighted objective as~(P2), i.e.\ it treats every unit of $\omega_i^f$ as
+interchangeable rather than pricing each destination pair $\beta_{ij}^f$
+individually. Its output is a proposed $x_i$, $r_i$, and offload amount
+$\omega_i$; it does \emph{not} decide the destination split.
+
+\paragraph{2. Fractional-knapsack split by descending $\beta$.} The proposed
+$\omega_i^f$ is placed into a routing row by \texttt{split\_omega}: eligible
+neighbours $j$ (those with $\beta_{ij}^f>-\gamma_i^f$ and unused ledger
+capacity) are ranked by descending true pair-specific profit $\beta_{ij}^f$,
+ties broken by ascending node index $j$, and filled greedily up to each
+neighbour's remaining ledger capacity until $\omega_i^f$ is exhausted or
+sellers run out; any residual is left to the Cloud ($z_i^f$). Because the
+per-unit payoff $\beta_{ij}^f$ is fixed and the feasible region is a simple
+capacity knapsack (a matroid / linear-program vertex problem), this greedy
+split is the exact utility-maximizing response to the proposed aggregate
+$\omega_i^f$: no other split of the same total achieves a strictly higher
+$\sum_j\beta_{ij}^fy_{ij}^f$ term of $u_i$.
+
+\paragraph{3. $\varepsilon$-acceptance on the true
+utility.} Only after the split is constructed is the candidate utility $u_i$
+recomputed (\texttt{compute\_node\_utility}, using the true per-pair
+$\beta_{ij}^f$, unlike the proposal MILP's aggregate pricing) and compared to
+the utility of $i$'s current strategy. The move is committed to $(x,y,r)$
+iff $\Delta u_i = u_i^{\mathrm{new}}-u_i^{\mathrm{old}} > \varepsilon$;
+otherwise $i$'s strategy is left unchanged for this sweep. This is why the
+proposal MILP's aggregate pricing does not compromise Proposition~\ref{prop:mapg-potential}:
+acceptance is gated on the true, exactly-decomposed $u_i$, not on the
+proposal's own objective value.
+
+\begin{algorithm}[H]
+\caption{\textsc{FaaS-MAPG} --- one better-response sweep}
+\label{alg:mapg-sweep}
+\begin{algorithmic}[1]
+\Require state $(x,y,r)$, ledger seed $C(h)$, order $\sigma$, tolerance $\varepsilon$
+\State $n_{\mathrm{accepted}}\gets 0$, $\Delta\Phi\gets 0$, memory bids $\gets\emptyset$
+\For{each node $i$ in order $\sigma$}
+  \State $u_i^{\mathrm{old}}\gets u_i(x,y,z(x,y))$
+  \State release $i$'s own row: $y_{i\cdot}\gets0$ in a working copy; rebuild ledger $\tilde C$ from that copy
+  \State $\omega_i^{\mathrm{ub},f}\gets\sum_{j\in N_i:\beta_{ij}^f>-\gamma_i^f}\tilde C_j^f$ for all $f$
+  \State solve proposal MILP (\texttt{LSP\_pg}) with $\bar y_{\cdot i}$ fixed and cap $\omega_i^{\mathrm{ub}}$; obtain $x_i',r_i',\omega_i'$
+  \State $y_{i\cdot}'\gets\textsc{SplitOmega}(\omega_i',\tilde C)$: descending $\beta_{ij}^f$, ties by ascending $j$
+  \State $u_i^{\mathrm{new}}\gets u_i(x',y',z(x',y'))$ with $x_i\gets x_i',\,y_{i\cdot}\gets y_{i\cdot}'$
+  \If{$u_i^{\mathrm{new}}-u_i^{\mathrm{old}}>\varepsilon$}
+    \State commit $x_i\gets x_i'$, $y_{i\cdot}\gets y_{i\cdot}'$, $r_i\gets r_i'$;\quad $n_{\mathrm{accepted}}{+}{+}$;\quad $\Delta\Phi\mathrel{+}=u_i^{\mathrm{new}}-u_i^{\mathrm{old}}$
+  \EndIf
+  \State for every $f$ with unplaced appetite $\omega_i'^f-\sum_j y_{ij}'^f>\text{tol}$, emit memory bids to neighbours $j$ with $\rho_j\ge\mathrm{RAM}^f$ and $\beta_{ij}^f>-\gamma_i^f$
+\EndFor
+\State \Return $n_{\mathrm{accepted}}$, $\Delta\Phi$, memory bids
+\end{algorithmic}
+\end{algorithm}
+
+The outer loop (\texttt{potential\_game\_sweep} inside the per-timestep loop
+of \texttt{decentralized\_potentialgame.py}) repeats the sweep, starts
+replicas from any collected memory bids (\S\ref{sec:mapg-memory}), and checks
+the stopping condition (\texttt{check\_pg\_stopping}) after each sweep.
+
+\subsection{Finite termination and $\varepsilon$-Nash certificate}
+\label{sec:mapg-termination}
+
+\begin{theorem}[Finite termination at an $\varepsilon$-Nash equilibrium]
+\label{thm:mapg-termination}
+Let $\Phi_0$ be the potential of the initial state and let
+$\Phi_{\max}<\infty$ be any finite upper bound on $\Phi$ over the run's
+feasible region (finite since $x,y,z,r$ are bounded by finite loads,
+capacities, and memory). Under the move rules of \S\ref{sec:mapg-game} and
+the acceptance rule of \S\ref{sec:mapg-move}:
+\begin{enumerate}
+\item the number of \emph{accepted} moves over the whole run is at most
+  $(\Phi_{\max}-\Phi_0)/\varepsilon$;
+\item the number of replica-expansion events (\S\ref{sec:mapg-memory}) is
+  finite, bounded by $\sum_i\lfloor \mathrm{RAM}_i/\min_f\mathrm{RAM}^f\rfloor$
+  total replicas system-wide;
+\item hence, absent the max-iterations or time-limit guards, the algorithm
+  terminates after finitely many sweeps at a sweep with zero accepted moves
+  and zero new replicas, and the terminal state $s^\star$ is an
+  $\varepsilon$-Nash equilibrium with respect to the implemented move class:
+  for every node $i$, the move that \emph{stage 1--2 of \S\ref{sec:mapg-move}
+  would propose} from $s^\star$ satisfies $u_i(s_i',s_{-i}^\star)-u_i(s^\star)\le\varepsilon$.
+\end{enumerate}
+\end{theorem}
+\begin{proof}
+(1) By Proposition~\ref{prop:mapg-potential}, an accepted move by $i$
+satisfies $\Phi(s')-\Phi(s)=u_i(s')-u_i(s)>\varepsilon$, so $\Phi$ strictly
+increases by more than $\varepsilon$ at every accepted move and is
+non-decreasing at every rejected move (rejected moves leave the state, hence
+$\Phi$, unchanged). Since $\Phi$ starts at $\Phi_0$ and is bounded above by
+$\Phi_{\max}$, at most $(\Phi_{\max}-\Phi_0)/\varepsilon$ accepted moves can
+occur before $\Phi$ would have to exceed $\Phi_{\max}$; the count is hence
+finite and bounded by that quantity.
+(2) Each replica-expansion event (\texttt{start\_additional\_replicas},
+reused unchanged from \textsc{FaaS-MADeA}) consumes strictly positive memory
+slack $\rho_j$ at some node $j$ and never removes a replica, so the total
+number of replicas placed system-wide is monotonically non-decreasing and
+bounded above by the total memory divided by the smallest per-function
+memory footprint; expansion events are therefore finite in number. Because
+$\Phi$ is the centralized objective and replicas only ever relax capacity
+constraints for subsequent moves (they do not change $x,y,z$ of the sweep
+that placed them), an expansion event does not decrease $\Phi$.
+(3) Both accepted moves and replica expansions are finite in number and each
+sweep with neither is a fixed point of \texttt{check\_pg\_stopping}
+(condition \texttt{n\_accepted == 0 and n\_new\_replicas == 0}), so, absent
+the two runtime guards, some finite sweep reaches this fixed point (each
+non-fixed-point sweep strictly advances one of the two finite counters). At
+that terminal state $s^\star$, sweep~\S\ref{sec:mapg-move} was run for every
+node and rejected the proposed move, i.e.\ $u_i(s_i',s_{-i}^\star)-u_i(s^\star)\le\varepsilon$
+for the specific $s_i'$ that stages 1--2 constructed from $s^\star$ for every
+$i$; this is the definition of an $\varepsilon$-Nash equilibrium restricted
+to deviations reachable by that move class.
+\end{proof}
+
+\paragraph{Scope of the certificate.} The certificate in part~3 is honest
+about what it does \emph{not} claim: it is not an $\varepsilon$-Nash
+equilibrium of the unrestricted game (arbitrary $s_i'$), only with respect to
+the specific move class implemented --- the MILP proposal of stage~1 (which
+prices aggregate offloading, not per-pair $\beta$) composed with the greedy
+split of stage~2. A node might in principle find a strategy outside this
+move class (e.g. a split that is not the descending-$\beta$ knapsack applied
+to the MILP's own $\omega_i$, or a jointly different $(x_i,\omega_i)$ pair
+that the aggregate-priced MILP does not surface) with a strictly larger
+utility gain. The greedy split (stage~2) is exact given the proposed
+$\omega_i$, so the residual freedom is entirely in whether the proposal MILP
+explores the same $(x_i,\omega_i)$ vertex a per-pair-$\beta$-aware
+formulation would; this is the same aggregation gap discussed for the
+\textsc{FaaS-MADiG}/\textsc{FaaS-MABR} local problem~(P2) elsewhere in the
+paper. In practice, when the max-iterations or time-limit guard fires first,
+\texttt{check\_pg\_stopping} reports that reason instead and the run carries
+no equilibrium certificate for that timestep.
+
+\subsection{Memory market}
+\label{sec:mapg-memory}
+
+Unplaced appetite after the fractional-knapsack split triggers the same
+memory-bid mechanism as \textsc{FaaS-MADeA}: node $i$ bids to every neighbour
+$j$ with unused memory slack $\rho_j\ge\mathrm{RAM}^f$ and
+$\beta_{ij}^f>-\gamma_i^f$; \texttt{start\_additional\_replicas} allocates new
+replicas at bid-receiving sellers proportionally to demand fraction, subject
+to $\rho_j$. Two properties transfer unchanged from \textsc{FaaS-MADeA} and
+matter for Theorem~\ref{thm:mapg-termination}: (i) the market is
+\emph{memory-bounded} — replicas are only ever added within $\rho_j\ge0$, so
+the process cannot run indefinitely; and (ii) the market is
+\emph{$\Phi$-invariant} in the sense of never decreasing $\Phi$ — a seller
+who opens a new replica does so purely to relax a capacity constraint seen by
+some other node's future proposal MILP, and the transaction has no direct
+$\beta$-weighted utility term for the seller itself, so a selfish seller has
+no incentive to open a replica on its own account and no disincentive
+against doing so when bid (the reward, if any, accrues to the buyer's
+$\beta_{ij}^f y_{ij}^f$ term in a later sweep, not to the seller's utility
+directly). The mechanism is therefore reused as an exogenous capacity-relief
+step layered on top of the potential-game dynamics, not itself a move subject
+to $\varepsilon$-acceptance.
+
+\subsection{The two variants}
+\label{sec:mapg-variants}
+
+\textsc{FaaS-MAPG-S} sweeps nodes in a fixed ascending order (deterministic,
+reproducible). \textsc{FaaS-MAPG-R} draws a fresh random node permutation
+each sweep from a per-run generator seeded once. Both variants share the same
+move rule, acceptance test, and termination guarantee: the order only affects
+\emph{which} sequence of moves is realized and hence the specific
+$\varepsilon$-Nash equilibrium reached (potential games can have multiple
+equilibria), not whether termination and the certificate hold.
+
+\subsection{Stopping conditions}
+\label{sec:mapg-stopping}
+
+\texttt{check\_pg\_stopping} reports exactly one of three reasons per
+timestep, checked in order: (i) \texttt{"max iterations reached"} if the
+sweep count reaches the configured cap; (ii) \texttt{"reached time limit"} if
+accumulated wall-clock/solver runtime exceeds the configured limit; (iii)
+\texttt{"epsilon-Nash equilibrium certified"} if a sweep accepts zero moves
+and starts zero new replicas — the fixed point of
+Theorem~\ref{thm:mapg-termination}. Only reason (iii) carries the equilibrium
+certificate of \S\ref{sec:mapg-termination}; (i) and (ii) are runtime guards
+that may fire before the certificate is reached, in which case the run's
+terminal state carries no such guarantee.
+
+\subsection{Positioning with respect to the literature and the paper's other coordination families}
+\label{sec:mapg-related}
+
+\textsc{FaaS-MAPG} shares the Gauss-Seidel sequential-sweep skeleton with
+\textsc{FaaS-MABR}: both visit nodes in order $\sigma$, re-solve a capped
+local MILP, and place offload greedily by descending $\beta_{ij}^f$. The
+difference is entirely in the acceptance rule: \textsc{FaaS-MABR} commits the
+proposed move unconditionally (score-greedy, commit-always), which offers no
+monotonicity guarantee on the objective; \textsc{FaaS-MAPG} gates commitment
+on a strict, true-utility improvement, which (Proposition~\ref{prop:mapg-potential},
+Theorem~\ref{thm:mapg-termination}) makes $\Phi$ monotone non-decreasing and
+yields a finite-time, certified stopping condition that \textsc{FaaS-MABR}
+does not have.
+
+Against \textsc{FaaS-MALD}, the certificates answer different questions.
+\textsc{FaaS-MALD}'s $LB$/$UB$ pair (see the companion \texttt{faas-mald-note},
+\S\S~``Coordination transportation LP''--``Positioning with respect to the
+literature'') certifies optimality of one fixed-capacity inner
+transportation LP, re-derived every outer iteration as capacities change; it
+says nothing about the joint replica-and-routing strategy across the outer
+loop. \textsc{FaaS-MAPG}'s certificate is a game-theoretic equilibrium
+statement on exactly that joint strategy $(r_i,x_i,\omega_i,y_{i\cdot})_i$,
+persisting across sweeps rather than being re-certified per inner solve, at
+the cost of being restricted to the implemented move class rather than to
+all deviations.
+
+The exact-potential-game construction is standard once payoffs are chosen as
+each player's contribution to a shared, additively separable objective
+\citep{monderershapley1996}, and the underlying resource-sharing structure
+(nodes competing for shared, capacitated neighbour capacity) is the setting
+of congestion games \citep{rosenthal1973}, of which potential games are a
+generalization admitting best/better-response convergence and the
+finite-improvement property exploited by Theorem~\ref{thm:mapg-termination}.
+The auction-based literature underlying \textsc{FaaS-MADeA}
+\citep{bertsekas1988} and the dual-decomposition literature underlying
+\textsc{FaaS-MALD} \citep{bertsekas1989,nedic2009} both target a different
+certificate (price-based optimality of an inner allocation problem) rather
+than a Nash-equilibrium notion on the full decentralized game; \textsc{FaaS-MAPG}
+is, to our knowledge, the only family in this paper whose stopping condition
+is an explicit game-theoretic equilibrium certificate.
