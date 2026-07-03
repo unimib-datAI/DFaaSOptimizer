@@ -54,9 +54,9 @@ def resolve_gcaa_round(
   best_per_agent = bids.loc[bids.groupby(["i", "f"])["utility"].idxmax()]
   for (j, f), group in best_per_agent.groupby(["j", "f"]):
     j, f = int(j), int(f)
-    if residual_capacity[j, f] <= 0:
-      continue
     winner = group.loc[group["utility"].idxmax()]
+    if residual_capacity[j, f] < winner["d"]:
+      continue
     y_round[int(winner["i"]), j, f] += winner["d"]
   return y_round
 
@@ -106,6 +106,8 @@ def run(
   solver_options = config["solver_options"]
   general_solver_options = solver_options.get("general", {})
   gcaa_options = solver_options["gcaa"]
+  if gcaa_options.get("unit_bids") is not True:
+    raise ValueError("solver_options.gcaa.unit_bids must be true")
   time_limit = general_solver_options.get("TimeLimit", np.inf)
   tolerance = config.get("tolerance", 1e-6)
   max_iterations = config["max_iterations"]
@@ -175,7 +177,7 @@ def run(
     best_centralized_solution = None
     best_cost_so_far = np.inf
     spr_obj = np.inf
-    best_centralized_cost = 0.0
+    best_centralized_cost = -np.inf
     best_it_so_far = -1
     best_centralized_it = -1
     y = np.zeros((Nn, Nn, Nf))

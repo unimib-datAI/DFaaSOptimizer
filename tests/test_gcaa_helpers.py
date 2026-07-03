@@ -49,3 +49,12 @@ def test_seller_with_no_residual_capacity_is_skipped():
   residual_capacity = np.array([[5.0], [0.0]])
   y_round = resolve_gcaa_round(bids, residual_capacity)
   assert y_round.sum() == 0.0
+
+
+def test_bid_larger_than_residual_capacity_is_skipped():
+  bids = _bids([
+    {"i": 0, "j": 1, "f": 0, "d": 1, "b": 0.5, "utility": 1.0},
+  ])
+  residual_capacity = np.array([[5.0], [0.4]])
+  y_round = resolve_gcaa_round(bids, residual_capacity)
+  assert y_round.sum() == 0.0

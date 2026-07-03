@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import networkx as nx
 import pandas as pd
+import pytest
 
 import decentralized_gcaa
 import run
@@ -38,6 +39,21 @@ def test_set_solution_folder_tolerates_missing_method_key():
   solution_folders = {"experiments_list": []}
   run.set_solution_folder(solution_folders, "faas-gcaa", 0, "/some/folder")
   assert solution_folders["faas-gcaa"][0] == "/some/folder"
+
+
+def test_gcaa_run_requires_unit_bids(tmp_path):
+  config = {
+    "base_solution_folder": str(tmp_path),
+    "seed": 1,
+    "limits": {"load": {}},
+    "solver_name": "mock",
+    "solver_options": {"gcaa": {"unit_bids": False}},
+    "max_iterations": 1,
+    "max_steps": 1,
+    "checkpoint_interval": 1,
+  }
+  with pytest.raises(ValueError, match="unit_bids must be true"):
+    decentralized_gcaa.run(config, parallelism=0)
 
 
 def test_gcaa_run_stops_when_no_bids_available(tmp_path, monkeypatch):
@@ -85,12 +101,12 @@ def test_gcaa_run_stops_when_no_bids_available(tmp_path, monkeypatch):
       1,
     ),
   )
+  expected_solution = {"sp": {
+    "x": np.zeros((1, 1)), "y": np.zeros((1, 1, 1)),
+    "z": np.zeros((1, 1)), "r": np.ones((1, 1)), "U": np.zeros((1, 1)),
+  }}
   monkeypatch.setattr(
-    decentralized_gcaa, "combine_solutions",
-    lambda *args: {"sp": {
-      "x": np.zeros((1, 1)), "y": np.zeros((1, 1, 1)),
-      "z": np.zeros((1, 1)), "r": np.ones((1, 1)), "U": np.zeros((1, 1)),
-    }},
+    decentralized_gcaa, "combine_solutions", lambda *args: expected_solution,
   )
   monkeypatch.setattr(decentralized_gcaa, "compute_centralized_objective", lambda *args: -1.0)
   monkeypatch.setattr(decentralized_gcaa, "check_feasibility", lambda *args: (True, "ok"))
@@ -132,3 +148,7 @@ def test_gcaa_run_stops_when_no_bids_available(tmp_path, monkeypatch):
   decentralized_gcaa.run(config, parallelism=0, disable_plotting=True)
 
   assert len(decoded) == 2
+  assert all(solution is not None for solution in decoded)
+  for solution in decoded:
+    for name, expected in expected_solution["sp"].items():
+      assert np.array_equal(solution["sp"][name], expected)
