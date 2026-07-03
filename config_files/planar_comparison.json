@@ -35,7 +35,13 @@
     "br_r": { "latency_weight": 0.0, "fairness_weight": 0.0 },
     "br_o": { "latency_weight": 0.0, "fairness_weight": 0.0 },
     "pg_s": { "epsilon": 1e-6 },
-    "pg_r": { "epsilon": 1e-6 }
+    "pg_r": { "epsilon": 1e-6 },
+    "gcaa": {
+      "unit_bids": true,
+      "epsilon": 0.01,
+      "latency_weight": 0.0,
+      "fairness_weight": 0.0
+    }
   },
   "max_iterations": 20,
   "patience": 5,
