@@ -4,7 +4,9 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
 import pytest
+from gurobipy import GurobiError
 from parse import parse
+from pyomo.common.errors import ApplicationError
 
 from decentralized_gcaa import run as run_gcaa
 
@@ -13,6 +15,13 @@ def _require_gurobi() -> None:
   solver = pyo.SolverFactory("gurobi")
   if not solver.available(exception_flag=False):
     pytest.skip("Gurobi solver is not available")
+  model = pyo.ConcreteModel()
+  model.x = pyo.Var(bounds=(0, 1))
+  model.objective = pyo.Objective(expr=model.x)
+  try:
+    solver.solve(model)
+  except (ApplicationError, GurobiError) as exc:
+    pytest.skip(f"Gurobi solver/license is not available: {exc}")
 
 
 def _e2e_config(base_solution_folder: Path) -> dict:
