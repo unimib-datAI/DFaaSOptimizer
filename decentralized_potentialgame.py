@@ -150,7 +150,8 @@ def node_move(
   the mover keeps serving committed inbound flows (enforced by LSP_pg via
   y_bar) and only claims advertised residual capacity of its neighbours.
   The move is committed iff the TRUE utility (per-pair beta) improves by
-  more than epsilon; x, y, r are mutated in place only on acceptance."""
+  more than epsilon; x, y, r are mutated in place only on acceptance.
+  Moves also respect the FRALB no-ping-pong constraint (see inline note)."""
   Nn = sp_data[None]["Nn"][None]
   Nf = sp_data[None]["Nf"][None]
   memory_bids = {"i": [], "j": [], "f": []}
@@ -161,14 +162,25 @@ def node_move(
   y_trial = np.array(y, dtype=float)
   y_trial[i, :, :] = 0.0
   _, ledger, _ = compute_residual_capacity(x, y_trial, r, sp_data)
+  # FRALB no-ping-pong (validate_centralized_solution): a node must not both
+  # send and receive the same function. Inductively (y starts at 0):
+  # a neighbour currently offloading f is not a valid seller for f, and the
+  # mover must not offload any f it holds inbound commitments for. Both rules
+  # only shrink the move class, so the exact-potential argument is unaffected.
+  outbound = y_trial.sum(axis=1)
+  ledger[outbound > tolerance] = 0.0
+  inbound_row = y_trial[:, i, :].sum(axis=0)
   omega_ub_row = np.zeros(Nf)
   for f in range(Nf):
+    if inbound_row[f] > tolerance:
+      continue
     gamma_if = sp_data[None]["gamma"][(i + 1, f + 1)]
     omega_ub_row[f] = sum(
       ledger[j, f] for j in neighbours
       if sp_data[None]["beta"][(i + 1, j + 1, f + 1)] > -gamma_if
     )
   x_row, r_row, omega_row, runtime = propose_fn(i, omega_ub_row)
+  omega_row = np.minimum(np.array(omega_row, dtype=float), omega_ub_row)
   new_row = split_omega(i, omega_row, ledger, neighbours, sp_data)
   # candidate state (copies: commit only on acceptance)
   x_new = np.array(x, dtype=float)

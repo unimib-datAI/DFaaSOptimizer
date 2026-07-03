@@ -113,3 +113,73 @@ def test_check_pg_stopping_guards():
   assert stop and "time limit" in why
   stop, why = check_pg_stopping(0, 100, 5, 0, 0.0, np.inf)
   assert not stop
+
+
+def test_node_move_blocks_offload_of_committed_inbound_function():
+  # node 0 already receives f from node 1: node 0 must not offload f
+  # (FRALB no_ping_pong), even when offloading would improve its utility
+  data = _data_2n_1f()
+  data[None]["incoming_load"][(2, 1)] = 4.0
+  x = np.array([[4.0], [2.0]])
+  y = np.zeros((2, 2, 1))
+  y[1, 0, 0] = 2.0  # committed inbound onto node 0
+  r = np.array([[10.0], [3.0]])
+  neighborhood = np.array([[0, 1], [1, 0]])
+  seen_ub = {}
+
+  def probe_proposal(i, omega_ub_row):
+    seen_ub[i] = omega_ub_row.copy()
+    return np.array([0.0]), np.array([0.0]), np.array([4.0]), 0.0
+
+  accepted, _, _, _ = node_move(
+    0, x, y, r, data, neighborhood, np.zeros(2), 1e-6, probe_proposal, 1e-9
+  )
+  # the cap advertised to the proposal must be zero for the inbound function
+  assert np.isclose(seen_ub[0][0], 0.0)
+  # and even a rogue proposal cannot place anything (omega clamped to cap)
+  assert np.isclose(y[0, :, 0].sum(), 0.0)
+
+
+def test_node_move_excludes_sellers_that_offload_same_function():
+  # 3 nodes: node 1 currently offloads f to node 2, so node 1 must not be a
+  # seller of f for node 0 despite having residual capacity
+  data = {None: {
+    "Nn": {None: 3},
+    "Nf": {None: 1},
+    "incoming_load": {(1, 1): 4.0, (2, 1): 4.0, (3, 1): 4.0},
+    "demand": {(i, 1): 1.0 for i in (1, 2, 3)},
+    "max_utilization": {1: 0.8},
+    "memory_capacity": {1: 100, 2: 100, 3: 100},
+    "memory_requirement": {1: 2},
+    "alpha": {(i, 1): 1.0 for i in (1, 2, 3)},
+    "delta": {(i, 1): 0.2 for i in (1, 2, 3)},
+    "gamma": {(i, 1): 0.1 for i in (1, 2, 3)},
+    "beta": {
+      (1, 2, 1): 2.0, (1, 3, 1): 1.5,
+      (2, 1, 1): 1.0, (2, 3, 1): 1.0,
+      (3, 1, 1): 1.0, (3, 2, 1): 1.0,
+    },
+    "neighborhood": {
+      (1, 2): 1, (1, 3): 1, (2, 1): 1, (2, 3): 1, (3, 1): 1, (3, 2): 1,
+    },
+  }}
+  x = np.array([[4.0], [2.0], [4.0]])
+  y = np.zeros((3, 3, 1))
+  y[1, 2, 0] = 2.0  # node 1 offloads f to node 2
+  # node 1 has spare capacity (r=10 -> cap 8, serves only x=2), node 2 is full
+  r = np.array([[5.0], [10.0], [8.0]])
+  neighborhood = np.array([[0, 1, 1], [1, 0, 1], [1, 1, 0]])
+
+  def offload_all(i, omega_ub_row):
+    return (
+      np.array([0.0]), np.array([0.0]),
+      np.minimum(np.array([4.0]), omega_ub_row), 0.0,
+    )
+
+  node_move(
+    0, x, y, r, data, neighborhood, np.zeros(3), 1e-6, offload_all, 1e-9
+  )
+  # nothing may be placed on node 1 (it offloads f): no ping-pong
+  assert np.isclose(y[0, 1, 0], 0.0)
+  # combined y must satisfy the centralized no-ping-pong invariant
+  assert not ((y.sum(axis=1) > 1e-9) & (y.sum(axis=0) > 1e-9)).any()

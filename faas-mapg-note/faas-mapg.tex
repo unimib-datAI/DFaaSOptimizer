@@ -134,6 +134,15 @@ defined and keep $\Phi$ an exact potential:
   the resulting residual capacity of eligible neighbours,
   $\omega_i^{\mathrm{ub},f}=\sum_{j\in N_i:\ \beta_{ij}^f>-\gamma_i^f}\tilde C_j^f$,
   enforced by the \texttt{cap\_offloading} constraint $\omega_i^f\le\omega_i^{\mathrm{ub},f}$.
+\item \textbf{No ping-pong (FRALB feasibility).} FRALB forbids a node from
+  simultaneously sending and receiving the same function. Accordingly, a
+  neighbour $j$ currently offloading $f$ (i.e., $\sum_k y_{jk}^f>0$) is
+  excluded from the seller set for $f$, and the mover sets
+  $\omega_i^{\mathrm{ub},f}=0$ for every $f$ it holds inbound commitments
+  for ($\sum_m \bar y_{mi}^f>0$). Since $y=0$ initially, these two rules
+  inductively keep every intermediate state ping-pong-free. Both only
+  shrink the feasible move set, so the exact-potential argument below is
+  unaffected.
 \end{enumerate}
 Because $i$'s move only ever reallocates $i$'s own row $y_{i\cdot}$ within
 capacity every other node has already advertised as unused, and every other
