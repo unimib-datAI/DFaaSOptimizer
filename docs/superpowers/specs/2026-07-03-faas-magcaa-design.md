@@ -85,33 +85,77 @@ existing `run_faasmacro.py` / `run_centralized_model.py` helpers.
 
 ## Components
 
-New file: `decentralized_gcaa.py`, structured like `decentralized_auction.py`:
+**Correction after re-reading the codebase** (the version below supersedes
+the first draft): the canonical, actively-maintained MADeA implementation
+is `run_faasmadea.py` (imported by `run.py` as `run_auction`), not the
+older `decentralized_auction.py` (dead code, unreferenced by `run.py`,
+lacks the `unit_bids` mode). `run_faasmadea.py`'s `define_bids` already
+has a `unit_bids: true` mode that generates one bid row per integer unit
+of load, each carrying both a ranking price `b` (VCG-style, includes
+`epsilon`/`delta`) *and* the raw `utility` value in a separate column.
+Since GCAA's bid is pure utility with no price adaptation, calling
+`define_bids` with `p` pinned at an all-zero array that is **never
+updated** (no `evaluate_bids` price-update step) makes its `ut`
+computation exactly `beta - latency_weight*latency - fairness_weight*fairness`
+— precisely the GCAA bid formula, with no fork needed. Passing
+`rho = np.zeros(Nn)` (instead of the real `sp_rho`) makes
+`potential_memory_sellers` always empty, so `memory_bids` stays empty and
+the replica-bidding path is inert without needing to strip any code.
+`check_stopping_criteria` in `run_faasmadea.py` is already fully
+parameterized (all its branches degrade gracefully when `memory_bids` is
+always empty and `a`/`additional_replicas` is always zero), so it is
+reused unmodified too.
 
-- `compute_bid(i, f, candidates, sp_data, latency, fairness) -> dict[j] = utility`
-  — pure-utility bid, no price term. New code (small, ~15 lines).
-- `select_best_tasks(omega, blackboard, neighborhood, sp_data, latency, fairness) -> proposals: pd.DataFrame`
-  — one row per agent with a proposal (i, f, j, bid). Agents with no
-  positive-utility candidate are omitted (null assignment). New code,
-  analogous shape to MADeA's `define_bids` but without price/memory_bids.
-- `resolve_consensus(proposals, blackboard, omega) -> (y_round, blackboard, omega)`
-  — groups proposals by (j, f), picks the single highest-bid winner per
-  group, transfers `min(omega[winner,f], blackboard[j,f])`. New code
-  (~Algorithm 3 from the paper).
-- `check_stopping_criteria(...)` — trimmed copy of MADeA's version without
-  the `rmp_omega` / `memory_bids` branches.
+This means only the **consensus/winner-selection step** is new code —
+everything else is direct reuse. New file: `decentralized_gcaa.py`.
+
+- `resolve_gcaa_round(bids: pd.DataFrame, blackboard: np.array) -> Tuple[np.array, np.array]`
+  — implements Algorithm 1 + Algorithm 3 from the paper in one pass:
+  first keeps only the highest-`utility` row per agent `(i, f)` (one
+  proposal per agent per round, i.e. `SelectBestTask`), then, per
+  contested task `(j, f)`, picks the single highest-`utility` row as
+  winner and transfers its `d` (always `1` under `unit_bids`) from
+  `blackboard[j,f]`. Returns `(y_round, blackboard)` where `y_round` is
+  the `(Nn, Nn, Nf)` allocation delta for this round. Losers are simply
+  absent from `y_round`; they reappear in `bids` next round via the
+  outer loop's call to `define_bids` (their `omega` is unchanged). New
+  code, ~20-25 lines.
 - `run(config, parallelism, log_on_file=False, disable_plotting=False)` —
-  same outer per-timestep loop as `decentralized_auction.py`'s `run()`,
-  swapping `define_bids` + `evaluate_bids` (+ price update) for
-  `select_best_tasks` + `resolve_consensus` in an inner `while` loop.
+  copy of `run_faasmadea.py`'s `run()` outer per-timestep loop and inner
+  `while not stop_searching` loop, with the price/`evaluate_bids` block
+  replaced by a call to `resolve_gcaa_round`, `p` never updated (stays
+  zero), and no replica-bidding branch (dead under `rho=zeros`, so
+  omitted rather than left as inert code — YAGNI). Everything else
+  (subproblem solve, restricted-problem solve, best-solution tracking,
+  checkpointing, saving) is an unmodified copy of the existing loop
+  shape, per repo convention (each `decentralized_*.py` file owns a full
+  `run()`, not a shared parameterized one).
 
 Reused unmodified (imported, not reimplemented):
-- `run_faasmadea.compute_residual_capacity`, `neigh_dict_to_matrix`
+- `run_faasmadea.define_bids`, `check_stopping_criteria`,
+  `compute_residual_capacity`, `neigh_dict_to_matrix`
 - `run_faasmacro.solve_subproblem`, `combine_solutions`, `decode_solutions`,
-  `compute_social_welfare`, `compute_centralized_objective`
+  `compute_social_welfare`
+- `utils.faasmacro.compute_centralized_objective`
+- `utils.centralized.check_feasibility`
 - `run_centralized_model.init_problem`, `get_current_load`,
   `init_complete_solution`, `join_complete_solution`, `save_checkpoint`,
   `save_solution`, `plot_history`, `update_data`
 - `models.sp.LSP`, `LSPr`
+
+## Config
+
+New `solver_options.gcaa` block (mirrors `solver_options.auction` but only
+the keys `define_bids` actually reads — no `eta`/`zeta`, those are
+`evaluate_bids`-only and GCAA never calls it):
+```json
+"gcaa": {
+  "unit_bids": true,
+  "epsilon": 0.01,
+  "latency_weight": 0.0,
+  "fairness_weight": 0.0
+}
+```
 
 ## Integration
 
@@ -126,18 +170,28 @@ Reused unmodified (imported, not reimplemented):
 
 ## Testing
 
-Following repo convention (no existing test suite dedicated to individual
-decentralized algorithms was found beyond running them end-to-end via
-`run.py`/manual configs) — verification is a runnable self-check: a small
-`if __name__ == "__main__"` block already exists in sibling files
-(`decentralized_auction.py`) for standalone invocation via
-`parse_arguments()` + `load_configuration`. `decentralized_gcaa.py` will
-follow the same pattern, plus one small `assert`-based smoke test
-(e.g. a 2-node/1-function synthetic `sp_data` fixture) verifying:
-- a single winner is picked per contested task per round
-- losers retry and eventually get allocated once capacity or rounds allow
-- the loop terminates within `Nn * Nf` rounds worst case (mirrors the
-  paper's ≤ n convergence bound, adapted to the number of agent-task pairs)
+**Correction:** the repo does have a real pytest suite
+(`tests/test_potentialgame_*.py`, `tests/test_diffusion_*.py`, etc.), one
+per algorithm, following a consistent three-layer pattern that
+`decentralized_gcaa.py` will follow:
+
+1. **Helper unit tests** (`tests/test_gcaa_helpers.py`, mirrors
+   `test_potentialgame_helpers.py`) — pure-function tests of
+   `resolve_gcaa_round` against small synthetic `bids` DataFrames and
+   `blackboard` arrays: single winner picked per contested task, losers
+   absent from `y_round`, ties broken deterministically, empty `bids`
+   returns an all-zero `y_round`.
+2. **Wiring tests** (`tests/test_gcaa_wiring.py`, mirrors
+   `test_diffusion_wiring.py`) — `--methods faas-gcaa` accepted by
+   `run.parse_arguments()`, `run.run_gcaa` exists and is callable,
+   `run.set_solution_folder` tolerates a missing `"faas-gcaa"` key, and a
+   fully monkeypatched `run()` smoke test (all I/O and solver calls
+   stubbed) verifying the orchestration wiring without solving any MILP.
+3. **End-to-end test** (`tests/test_gcaa_e2e.py`, mirrors
+   `test_potentialgame_e2e.py`) — skipped if Gurobi is unavailable, runs
+   `decentralized_gcaa.run()` on a small planar instance (same shape as
+   `_e2e_config` in `test_potentialgame_e2e.py`) and asserts `obj.csv`,
+   `runtime.csv`, `termination_condition.csv` are produced and well-formed.
 
 ## Open questions / risks
 
