@@ -343,7 +343,7 @@ requires-dist = [
     { name = "python-dateutil", specifier = "==2.9.0.post0" },
     { name = "pytz", specifier = "==2025.2" },
     { name = "pyyaml", specifier = ">=6.0.2" },
-    { name = "ray-dispatcher", git = "https://github.com/miciav/ray-dispatcher.git?rev=30e91c81959eab30908675102e639a8953945049" },
+    { name = "ray-dispatcher", git = "https://github.com/miciav/ray-dispatcher.git?rev=858cc46d26ca9ad12a7843ceb99f625a1bd60c76" },
     { name = "rich", specifier = ">=13,<15" },
     { name = "scipy", specifier = "==1.15.3" },
     { name = "seaborn", specifier = ">=0.13.2" },
@@ -1023,7 +1023,7 @@ wheels = [
 [[package]]
 name = "ray-dispatcher"
 version = "0.1.0"
-source = { git = "https://github.com/miciav/ray-dispatcher.git?rev=30e91c81959eab30908675102e639a8953945049#30e91c81959eab30908675102e639a8953945049" }
+source = { git = "https://github.com/miciav/ray-dispatcher.git?rev=858cc46d26ca9ad12a7843ceb99f625a1bd60c76#858cc46d26ca9ad12a7843ceb99f625a1bd60c76" }
 dependencies = [
     { name = "fabric" },
     { name = "pyyaml" },

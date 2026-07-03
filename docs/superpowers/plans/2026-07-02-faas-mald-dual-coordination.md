@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - **NEVER modify any existing file.** Only create: `decentralized_dual.py`, `tests/test_dual_helpers.py`, `tests/test_dual_e2e.py`, `faas-mald-note/*`.
-- **Model policy:** every task is executed by a subagent with **`model: sonnet` at most**; `model: haiku` is allowed for simpler tasks. Each task below states its model.
+- **Model policy:** every task is executed by a subagent with **`model: gpt-5.4` at most**; `model: gpt-5.4-mini` is allowed for simpler tasks. Each task below states its model.
 - Code style: 2-space indentation, same import layout and docstring style as `decentralized_diffusion.py` / `decentralized_powerd.py`.
 - Run tests with `uv run pytest <file> -v` from the repo root.
 - Commits: one per task, message style matching repo history (short imperative subject).
@@ -27,7 +27,7 @@
 
 ### Task 1: Pure buyer-side helpers (`pair_scores`, `buyer_price_response`)
 
-**Model:** sonnet
+**Model:** gpt-5.4
 
 **Files:**
 - Create: `decentralized_dual.py` (helpers only in this task)
@@ -261,7 +261,7 @@ git commit -m "add FaaS-MALD buyer-side dual helpers"
 
 ### Task 2: Dual subgradient loop with certificate (`dual_coordination_round`)
 
-**Model:** sonnet
+**Model:** gpt-5.4
 
 **Files:**
 - Modify: `decentralized_dual.py` (append; created in Task 1 — this is our new file, allowed)
@@ -521,7 +521,7 @@ git commit -m "add FaaS-MALD dual subgradient round with gap certificate"
 
 ### Task 3: Runner, CLI, and end-to-end tests
 
-**Model:** sonnet
+**Model:** gpt-5.4
 
 **Files:**
 - Modify: `decentralized_dual.py` (append `parse_arguments`, `run`, `__main__`)
@@ -759,7 +759,7 @@ git commit -m "add FaaS-MALD runner and e2e tests"
 
 ### Task 4: LaTeX technical note (`faas-mald-note/`)
 
-**Model:** sonnet (the `.gitignore` and compile check are haiku-grade, but the note's math must match the shipped code, so keep one sonnet task)
+**Model:** gpt-5.4 (the `.gitignore` and compile check are gpt-5.4-mini-grade, but the note's math must match the shipped code, so keep one gpt-5.4 task)
 
 **Files:**
 - Create: `faas-mald-note/faas-mald.tex`, `faas-mald-note/main.tex`, `faas-mald-note/references.bib`, `faas-mald-note/README.md`, `faas-mald-note/.gitignore`
