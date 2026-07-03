@@ -434,8 +434,7 @@ def _run(
     )
     obj_dict["phi_final"].append(objf)
     tc_dict["pg"].append(
-      f"{why_stop_searching} "
-      f"(it: {it}; phi: {phi}; total runtime: {total_runtime})"
+      f"{why_stop_searching} (it: {it}; obj. deviation: {None}; best it: {it}; total runtime: {total_runtime})"
     )
     if t % checkpoint_interval == 0 or t == max_steps - 1:
       save_checkpoint(

@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
 import pytest
+from parse import parse
 
 from decentralized_potentialgame import run_pg_s, run_pg_r
 
@@ -67,6 +68,10 @@ def _assert_artifacts(folder, column):
   assert (runtime["tot"] >= 0).all()
   tc = pd.read_csv(Path(folder, "termination_condition.csv"))
   assert len(tc) >= 1
+  for s in tc["0"]:
+    assert parse(
+      "{} (it: {}; obj. deviation: {}; best it: {}; total runtime: {})", s
+    ) is not None
 
 
 def test_run_pg_s_produces_artifacts(tmp_path):
