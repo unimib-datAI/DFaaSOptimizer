@@ -108,7 +108,9 @@ def test_gcaa_run_stops_when_no_bids_available(tmp_path, monkeypatch):
   monkeypatch.setattr(
     decentralized_gcaa, "combine_solutions", lambda *args: expected_solution,
   )
-  monkeypatch.setattr(decentralized_gcaa, "compute_centralized_objective", lambda *args: -1.0)
+  monkeypatch.setattr(
+    decentralized_gcaa, "compute_centralized_objective", lambda *args: -np.inf
+  )
   monkeypatch.setattr(decentralized_gcaa, "check_feasibility", lambda *args: (True, "ok"))
 
   decoded = []

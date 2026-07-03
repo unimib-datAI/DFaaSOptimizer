@@ -238,7 +238,7 @@ def run(
         best_cost_so_far = spr_obj
         best_solution_so_far = deepcopy(csol)
         best_it_so_far = it
-      if cobj > best_centralized_cost:
+      if best_centralized_solution is None or cobj > best_centralized_cost:
         best_centralized_cost = cobj
         best_centralized_solution = deepcopy(csol)
         best_centralized_it = it
