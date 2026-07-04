@@ -30,6 +30,7 @@ class PlasmaOptions:
   sb_dt: float = 0.05
   sb_delta: float = 1.0
   sb_c0: float = 0.2
+  sb_restarts: int = 8
   a_final: float = 1.0
   A: Optional[float] = None  # None -> auto: 2 * max_f(benefit_f / ram_req_f)
   B: float = 1.0
