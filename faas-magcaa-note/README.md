@@ -28,7 +28,7 @@ Optionally remove generated files with `latexmk -C main.tex`.
    already defines the FRALB notation and capacity model.
 3. Replace section/equation/algorithm labels and plain cross-references where
    needed to match the host paper's naming and numbering conventions.
-4. Merge the required entry from `references.bib` into the paper bibliography.
+4. Merge the required entries from `references.bib` into the paper bibliography.
 5. Ensure the host preamble loads `amsmath`, `amssymb`, `amsthm`, `booktabs`,
    `algorithm`, `algpseudocode`, and `natbib`, and defines the `proposition`
    theorem environment. The standalone wrapper also loads `inputenc` and
@@ -46,5 +46,7 @@ For each prefix `LSP` and `LSPc`, the implementation writes
 
 When `t % checkpoint_interval == 0` or `t == max_steps - 1`, component CSVs
 are checkpointed under `LSP/<t>/` and `LSPc/<t>/`; no checkpoint directory is
-written for other periods. The only plot artifact is `sp.png`, written only
-when plotting is enabled and both `Nf <= 10` and `Nn <= 10`.
+written for other periods. The MAGCAA history plot `sp.png` is written when
+plotting is enabled and both `Nf <= 10` and `Nn <= 10`. The shared
+`init_problem` setup also creates instance artifacts, including
+`graph/graph.png` and, for planar graphs, the `graph/PLANAR` marker.

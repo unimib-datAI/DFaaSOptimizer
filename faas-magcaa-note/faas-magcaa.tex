@@ -253,11 +253,13 @@ $\rho$ is retained for solution construction, while the separate all-zero
 $\widehat\rho$ disables memory bids.
 
 The runner always writes \texttt{config.json}. It writes \texttt{out.log}
-only when \texttt{log\_on\_file=True}, and writes the sole plot artifact
-\texttt{sp.png} only when plotting is enabled and both $N_f\le10$ and
-$N_n\le10$. After all control periods, it joins the complete period solutions
-and writes the final \textsc{LSP} and \textsc{LSPc} outputs. For each prefix
-\texttt{LSP} and \texttt{LSPc}, these
+only when \texttt{log\_on\_file=True}. The MAGCAA history plot
+\texttt{sp.png} is written when plotting is enabled and both $N_f\le10$ and
+$N_n\le10$. The shared instance setup also creates artifacts including
+\texttt{graph/graph.png} and, for planar graphs, the \texttt{graph/PLANAR}
+marker. After all control periods, the runner joins the complete period
+solutions and writes the final \textsc{LSP} and \textsc{LSPc} outputs. For
+each prefix \texttt{LSP} and \texttt{LSPc}, these
 are:
 \begin{itemize}
   \item \texttt{<prefix>\_solution.csv};
