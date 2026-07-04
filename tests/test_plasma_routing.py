@@ -126,3 +126,14 @@ def test_end_window_reinforces_local_conductance():
   d_before = node.D[0, LOCAL]
   node.end_window()
   assert node.D[0, LOCAL] > d_before  # phi*alpha > evaporation at D_init
+
+
+def test_spare_advertises_floored_capacity():
+  node = _node(r=(1,), u_max=(2.085,))  # capacity_units = 2
+  node.begin_window()
+  assert node.admit_forward(0)
+  assert node.admit_forward(0)
+  assert not node.admit_forward(0)  # floored capacity exhausted
+  node.end_window()
+  hb = node.make_heartbeat()
+  assert hb.spare[0] == 0.0  # not 0.085: nothing more is admittable

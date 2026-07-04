@@ -136,7 +136,9 @@ class PlasmaNode:
     self.demand_hat = (1 - ew) * self.demand_hat + ew * (self._x + self._xi)
     self.lam_hat = (1 - ew) * self.lam_hat + ew * self._arrivals
     self._spare_last = np.maximum(
-      0.0, self.r * self.params.u_max * self.opts.W - self._admitted
+      0.0,
+      np.array([self._capacity_units(f) for f in range(self.Nf)])
+      - self._admitted,
     )
     self._pull_last = self._pull
     self.begin_window()
