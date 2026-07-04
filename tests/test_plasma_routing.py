@@ -59,3 +59,70 @@ def test_conductance_clipped_above():
   rewards = np.full((1, 3), 1e9)
   D2 = update_conductance(D, phi, rewards, opts)
   assert (D2 <= opts.D_max).all()
+
+
+from plasma.core.node import NodeParams, PlasmaNode
+
+
+def _node(r=(2,), u_max=(5.0,), nbrs=(1,), opts=None):
+  Nf = len(u_max)
+  params = NodeParams(
+    node_id=0, nbrs=tuple(nbrs), alpha=np.full(Nf, 2.0),
+    gamma=np.full(Nf, 0.1), beta=np.full((len(nbrs), Nf), 1.5),
+    u_max=np.array(u_max), ram_cap=100.0, ram_req=np.full(Nf, 2.0),
+  )
+  node = PlasmaNode(params, opts or PlasmaOptions(), np.random.default_rng(0))
+  node.r = np.array(r, dtype=int)
+  return node
+
+
+def test_capacity_gate_never_admits_beyond_r_umax():
+  node = _node(r=(2,), u_max=(5.0,))  # capacity 10 req/window
+  node.begin_window()
+  local = sum(node.route_request(0, round_=0) == LOCAL for _ in range(100))
+  counts = node.end_window()
+  assert local <= 10
+  assert counts.x[0] == local
+
+
+def test_incoming_forwards_share_the_same_capacity():
+  node = _node(r=(1,), u_max=(3.0,))
+  node.begin_window()
+  admitted = sum(node.admit_forward(0) for _ in range(10))
+  assert admitted == 3
+  assert node.route_request(0, round_=0) != LOCAL  # capacity exhausted
+
+
+def test_nack_counts_as_origin_rejection_and_pull():
+  node = _node()
+  node.begin_window()
+  node.record_forward_result(0, col=2, accepted=False)
+  node.record_forward_result(0, col=2, accepted=True)
+  counts = node.end_window()
+  assert counts.z[0] == 1
+  assert counts.y[0, 0] == 1
+  hb = node.make_heartbeat()
+  assert hb.pull[0] == 2  # both attempts are offload pressure
+
+
+def test_zero_replicas_rejects_or_forwards_everything():
+  node = _node(r=(0,))
+  node.begin_window()
+  for _ in range(20):
+    assert node.route_request(0, round_=0) != LOCAL
+
+
+def test_dead_node_admits_nothing():
+  node = _node()
+  node.alive = False
+  assert node.admit_forward(0) is False
+
+
+def test_end_window_reinforces_local_conductance():
+  node = _node(r=(4,), u_max=(100.0,))
+  node.begin_window()
+  for _ in range(50):
+    node.route_request(0, round_=0)
+  d_before = node.D[0, LOCAL]
+  node.end_window()
+  assert node.D[0, LOCAL] > d_before  # phi*alpha > evaporation at D_init
