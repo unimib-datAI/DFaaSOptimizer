@@ -250,9 +250,22 @@ $\widehat\rho$ disables memory bids.
 
 After all control periods, the runner joins the complete period solutions,
 optionally produces history plots, and writes the final \textsc{LSP} and
-\textsc{LSPc} solutions together with the objective, runtime, and termination
-artifacts. These final writes are distinct from the conditional per-period
-checkpoints in Algorithm~\ref{alg:magcaa}.
+\textsc{LSPc} outputs. For each prefix \texttt{LSP} and \texttt{LSPc}, these
+are:
+\begin{itemize}
+  \item \texttt{<prefix>\_solution.csv};
+  \item \texttt{<prefix>\_offloaded.csv};
+  \item \texttt{<prefix>\_utilization.csv};
+  \item \texttt{<prefix>\_replicas.csv};
+  \item \texttt{<prefix>\_detailed\_fwd\_solution.csv}; and
+  \item \texttt{<prefix>\_residual\_capacity.csv}.
+\end{itemize}
+The runner also writes
+\texttt{obj.csv}, \texttt{termination\_condition.csv}, and
+\texttt{runtime.csv}. When the checkpoint predicate in
+Algorithm~\ref{alg:magcaa} holds, the component CSVs are written beneath
+\texttt{LSP/<t>/} and \texttt{LSPc/<t>/}; those checkpoint directories are
+not written for other periods.
 
 \subsection{Round invariants}
 \label{sec:magcaa-properties}

@@ -36,8 +36,14 @@ Optionally remove generated files with `latexmk -C main.tex`.
 
 ## Runtime artifacts
 
-The implementation saves final `LSP` and `LSPc` solution outputs and writes
-`obj.csv`, `termination_condition.csv`, and `runtime.csv`. It also writes
-periodic `LSP`/`LSPc` checkpoints according to `checkpoint_interval`; these are
-separate from the final outputs. Plot files are optional and depend on the run
+For each prefix `LSP` and `LSPc`, the implementation writes
+`<prefix>_solution.csv`, `<prefix>_offloaded.csv`,
+`<prefix>_utilization.csv`, `<prefix>_replicas.csv`,
+`<prefix>_detailed_fwd_solution.csv`, and
+`<prefix>_residual_capacity.csv`. It also writes `obj.csv`,
+`termination_condition.csv`, and `runtime.csv`.
+
+When `t % checkpoint_interval == 0` or `t == max_steps - 1`, component CSVs
+are checkpointed under `LSP/<t>/` and `LSPc/<t>/`; no checkpoint directory is
+written for other periods. Plot files are optional and depend on the run
 configuration and problem size.
