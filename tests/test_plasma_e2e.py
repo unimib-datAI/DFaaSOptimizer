@@ -134,3 +134,41 @@ from plasma.runner import objective_load
 def test_objective_load_floors_zero_pairs_only():
   load = {(1, 1): 0, (1, 2): 7}
   assert objective_load(load) == {(1, 1): 1, (1, 2): 7}
+
+
+def _solver_available(name="gurobi"):
+  try:
+    from pyomo.environ import SolverFactory
+    return SolverFactory(name).available(exception_flag=False)
+  except Exception:
+    return False
+
+
+@pytest.mark.skipif(not _solver_available(), reason="no MILP solver")
+def test_plasma_gap_vs_milp_on_small_graph(tmp_path):
+  from generators.generate_data import update_data
+  from plasma.baselines.milp_baseline import solve_snapshot
+  from run_centralized_model import init_problem
+  from utils.centralized import get_current_load
+  config = _config(tmp_path, Nn=3, max_steps=6)
+  config["solver_options"]["plasma"]["rounds_per_step"] = 30
+  folder = run_plasma(config, parallelism=0)
+  plasma_obj = pd.read_csv(os.path.join(folder, "obj.csv"))["Plasma"]
+  # dynamic oracle on the same instance/traces (re-generated: same seed)
+  oracle_folder = tmp_path / "oracle"
+  oracle_folder.mkdir()
+  base, traces, agents, _ = init_problem(
+    config["limits"], "sinusoidal", config["max_steps"], config["seed"],
+    str(oracle_folder),
+  )
+  oracle = []
+  for t in range(0, config["max_steps"] - 1):
+    loadt = get_current_load(traces, agents, t)
+    loadt = {k: int(round(v)) for k, v in loadt.items()}
+    data = update_data(base, {"incoming_load": loadt})
+    oracle.append(solve_snapshot(data, "gurobi", {"OutputFlag": 0})[4])
+  # late-horizon gap (after Layer A/B settle): within 35% of the oracle
+  # (M5's 10% target applies to the tuned 20-node run, not this smoke)
+  late_p = plasma_obj.iloc[-2:].mean()
+  late_o = np.mean(oracle[-2:])
+  assert late_p >= late_o - abs(late_o) * 0.35

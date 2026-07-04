@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 
+from plasma.baselines.milp_baseline import routing_lp
+from plasma.engine import PlasmaEngine
 from plasma.core.types import LOCAL, REJ, PlasmaOptions
 from plasma.core.routing import choose_target, target_weights, update_conductance
 
@@ -137,3 +139,34 @@ def test_spare_advertises_floored_capacity():
   node.end_window()
   hb = node.make_heartbeat()
   assert hb.spare[0] == 0.0  # not 0.085: nothing more is admittable
+
+
+def test_physarum_converges_to_lp_routing_fractions():
+  # 2-node line, fixed replicas, stationary integer traffic (lambda = 40):
+  # node 0 undersized -> LP says: serve 20 locally, forward 20.
+  opts = PlasmaOptions(k_sb=0, hb_latency_rounds=1)
+  rng = np.random.default_rng(7)
+  make = lambda i, nbrs: PlasmaNode(
+    NodeParams(
+      node_id=i, nbrs=nbrs, alpha=np.array([2.0]), gamma=np.array([0.1]),
+      beta=np.full((len(nbrs), 1), 1.5), u_max=np.array([10.0]),
+      ram_cap=100.0, ram_req=np.array([2.0]),
+    ), opts, np.random.default_rng(10 + i))
+  n0, n1 = make(0, (1,)), make(1, (0,))
+  n0.r = np.array([2])   # capacity 20
+  n1.r = np.array([4])   # capacity 40
+  engine = PlasmaEngine([n0, n1], opts, rng)
+  arrivals = np.array([[40], [0]])
+  engine.run_rounds(150, arrivals)         # burn-in
+  x_acc = np.zeros(1); y_acc = 0.0
+  for _ in range(50):                      # measure 50 windows
+    res = engine.run_rounds(1, arrivals)
+    x_acc += res.x[0]; y_acc += res.y[0, 1, 0]
+  lp_obj, lp_x, lp_y, lp_z = routing_lp(
+    lam=np.array([[40.0], [0.0]]), r=np.array([[2], [4]]),
+    u_max=np.full((2, 1), 10.0), alpha=np.full((2, 1), 2.0),
+    beta=np.array([[[0.0], [1.5]], [[1.5], [0.0]]]),
+    gamma=np.full((2, 1), 0.1), adjacency=np.array([[0, 1], [1, 0]]),
+  )
+  assert abs(x_acc[0] / 50 - lp_x[0, 0]) / 40.0 <= 0.05   # +-5% band
+  assert abs(y_acc / 50 - lp_y[0, 1, 0]) / 40.0 <= 0.05
