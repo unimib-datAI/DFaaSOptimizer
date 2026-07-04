@@ -84,7 +84,11 @@ class PlasmaEngine:
         z[i] = counts.z
         for k, j in enumerate(node.params.nbrs):
           y[i, j, :] = counts.y[k]
+      # snapshot r as it stood WHILE this window's traffic was admitted,
+      # before any sb_pass below changes it -- utilization is x/xi over the
+      # replicas that actually gated admission, not the post-sb_pass count
       last["x"], last["z"], last["y"] = x, z, y
+      last["r"] = np.array([node.r for node in self.nodes])
       self._send_heartbeats(round_)
       if self.opts.k_sb > 0 and (round_ + 1) % self.opts.k_sb == 0:
         for node in self.nodes:
@@ -92,5 +96,6 @@ class PlasmaEngine:
 
     self.clock.run(n_rounds, on_round)
     xi = np.transpose(last["y"], (1, 0, 2))
-    r = np.array([node.r for node in self.nodes])
-    return StepResult(x=last["x"], z=last["z"], y=last["y"], xi=xi, r=r)
+    return StepResult(
+      x=last["x"], z=last["z"], y=last["y"], xi=xi, r=last["r"]
+    )

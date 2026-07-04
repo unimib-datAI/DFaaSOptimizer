@@ -80,9 +80,16 @@ class PlasmaNode:
   def _capacity(self, f: int) -> float:
     return float(self.r[f]) * self.params.u_max[f] * self.opts.W
 
+  def _capacity_units(self, f: int) -> int:
+    # admission is per-request (integer): floor the continuous capacity so
+    # a window never admits more than r*u_max*W actually allows -- using
+    # the raw fractional value as the gate threshold lets one extra unit
+    # through whenever capacity has a fractional part (e.g. 2.085 admits 3)
+    return int(self._capacity(f) + 1e-9)
+
   def route_request(self, f: int, round_: int) -> int:
     self._arrivals[f] += 1
-    local_open = self._admitted[f] < self._capacity(f)
+    local_open = self._admitted[f] < self._capacity_units(f)
     nbr_spare = np.array([
       self.cache.spare(
         j, round_, self.opts.staleness_rounds, self.Nf
@@ -106,7 +113,7 @@ class PlasmaNode:
     return col
 
   def admit_forward(self, f: int) -> bool:
-    if not self.alive or self._admitted[f] >= self._capacity(f):
+    if not self.alive or self._admitted[f] >= self._capacity_units(f):
       return False
     self._admitted[f] += 1
     self._xi[f] += 1
