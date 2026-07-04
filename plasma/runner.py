@@ -115,7 +115,7 @@ def run(
     with np.errstate(divide="ignore", invalid="ignore"):
       U = np.where(
         res.r > 0,
-        demand * (res.x + res.xi.sum(axis=1)) / np.maximum(res.r, 1),
+        demand * (res.x + res.xi.sum(axis=1)) / np.maximum(res.r, 1) / opts.W,
         0.0,
       )
     rho = ram_cap - (res.r * ram_req[None, :]).sum(axis=1)
