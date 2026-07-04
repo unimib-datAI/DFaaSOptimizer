@@ -54,6 +54,8 @@ class PlasmaOptions:
       raise ValueError(f"rounds_per_step must be >= 1, got {self.rounds_per_step}")
     if self.W <= 0.0:
       raise ValueError(f"W must be > 0, got {self.W}")
+    if self.hb_latency_rounds > self.staleness_rounds:
+      raise ValueError(f"hb_latency_rounds ({self.hb_latency_rounds}) must be <= staleness_rounds ({self.staleness_rounds}), otherwise every neighbor is permanently stale")
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,6 @@ class Heartbeat:
   # the ENTIRE control-plane message: nothing else may cross an edge
   node: int
   seq: int
-  spare: Tuple[float, ...]  # per function, max(0, r*u_max - admitted)
+  spare: Tuple[float, ...]  # per function, floored: max(0, capacity_units - admitted)
   alpha: Tuple[float, ...]  # per function
   pull: Tuple[float, ...]   # per function, offload pressure last window

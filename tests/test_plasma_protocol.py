@@ -112,3 +112,8 @@ def test_options_reject_nonpositive_rounds_per_step():
 def test_options_reject_nonpositive_w():
   with pytest.raises(ValueError, match="W"):
     PlasmaOptions(W=0.0)
+
+
+def test_options_reject_latency_beyond_staleness():
+  with pytest.raises(ValueError, match="hb_latency_rounds"):
+    PlasmaOptions(hb_latency_rounds=4, staleness_rounds=3)
