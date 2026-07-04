@@ -1,0 +1,29 @@
+% =====================================================================
+% FaaS-PLASMA: Physarum Routing with Simulated-Bifurcation Allocation.
+% Meant to be \input{} (or pasted) into the paper.
+% =====================================================================
+
+\section{PLASMA: Physarum Routing with Simulated-Bifurcation Allocation}
+\label{sec:plasma}
+
+\subsection{Problem statement}
+% FRALB/DiFRALB instance as in the other notes; neighbor-only communication.
+
+\subsection{Layer A: Physarum conductance routing}
+% Per-request categorical routing on gated conductances; window update
+% D <- (1-mu) D + mu g(phi) reward; capacity and spare-capacity gates.
+
+\subsection{Layer B: discrete simulated bifurcation for replicas}
+% Binary spin encoding, node-local Hamiltonian (field + RAM penalty +
+% capacity chance-constraint + churn), dSB integrator, hysteresis,
+% randomized commit (p_commit) under the shared round barrier.
+
+\subsection{Round-barrier formulation}
+% Single synchronous execution mode; SB pass every k_sb rounds.
+
+\subsection{Acceptance criteria and results}
+% LP-convergence band, dSB vs brute force, gap vs MILP (populate from M3).
+
+\subsection{Privacy comparison vs FaaS-MADeA}
+% Heartbeat carries only spare/alpha/pull: strictly less disclosure than
+% MADeA's bid exchange.
