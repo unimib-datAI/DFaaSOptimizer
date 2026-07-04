@@ -80,3 +80,25 @@ def test_pull_in_sums_fresh_neighbors_only():
   cache.store(_hb(node=2), round_=1)    # stale at now=12
   pull = cache.pull_in(now_round=12, staleness_rounds=3, Nf=2)
   assert pull.tolist() == [0.0, 4.0]
+
+
+from plasma.engine import PlasmaEngine  # noqa: F401 (import checks packaging)
+
+
+def test_message_budget_heartbeats_bounded_by_degree():
+  from plasma.core.node import NodeParams, PlasmaNode
+  from plasma.core.types import PlasmaOptions
+  opts = PlasmaOptions(k_sb=0, hb_loss=0.0)
+  rng = np.random.default_rng(0)
+  params0 = NodeParams(node_id=0, nbrs=(1,), alpha=np.ones(1),
+                       gamma=np.ones(1), beta=np.ones((1, 1)),
+                       u_max=np.ones(1), ram_cap=4.0, ram_req=np.ones(1))
+  params1 = NodeParams(node_id=1, nbrs=(0,), alpha=np.ones(1),
+                       gamma=np.ones(1), beta=np.ones((1, 1)),
+                       u_max=np.ones(1), ram_cap=4.0, ram_req=np.ones(1))
+  nodes = [PlasmaNode(params0, opts, np.random.default_rng(1)),
+           PlasmaNode(params1, opts, np.random.default_rng(2))]
+  engine = PlasmaEngine(nodes, opts, rng)
+  engine.run_rounds(10, np.zeros((2, 1), dtype=int))
+  # exactly deg(i) heartbeats per node per round, no hidden channels
+  assert engine.hb_count == 10 * 2 * 1
