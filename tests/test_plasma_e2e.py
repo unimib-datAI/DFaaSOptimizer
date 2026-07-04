@@ -111,8 +111,18 @@ def test_set_solution_folder_tolerates_missing_plasma_key():
 
 
 def test_runner_supports_w_not_one(tmp_path):
-  config = _config(tmp_path)
-  config["solver_options"]["plasma"]["W"] = 2.0
-  folder = run_plasma(config, parallelism=0)  # must not trip check_feasibility
-  obj = pd.read_csv(os.path.join(folder, "obj.csv"))["Plasma"]
+  cfg1 = _config(tmp_path / "w1")
+  folder1 = run_plasma(cfg1, parallelism=0)
+  cfg2 = _config(tmp_path / "w2")
+  cfg2["solver_options"]["plasma"]["W"] = 2.0
+  folder2 = run_plasma(cfg2, parallelism=0)  # must not trip check_feasibility
+  obj = pd.read_csv(os.path.join(folder2, "obj.csv"))["Plasma"]
   assert np.isfinite(obj).all()
+  # same seed => identical per-second load traces, so a W=2 window handles
+  # ~2x the requests of a W=1 window (every LSPc_solution column is a
+  # per-window request count)
+  def _total(folder):
+    sol = pd.read_csv(os.path.join(folder, "LSPc_solution.csv"))
+    return sol.select_dtypes(include=[np.number]).to_numpy().sum()
+  ratio = _total(folder2) / _total(folder1)
+  assert 1.8 <= ratio <= 2.2, ratio
