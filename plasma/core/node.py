@@ -6,6 +6,10 @@ import numpy as np
 
 from plasma.core.protocol import HeartbeatCache
 from plasma.core.routing import choose_target, target_weights, update_conductance
+from plasma.core.sbm import (
+  HamiltonianContext, bits_per_fn, decode_spins, dsb_minimize, hamiltonian,
+  r_max_per_fn, repair,
+)
 from plasma.core.types import LOCAL, REJ, Heartbeat, PlasmaOptions
 
 
@@ -142,3 +146,70 @@ class PlasmaNode:
   def on_heartbeat(self, hb: Heartbeat, round_: int) -> None:
     if self.alive:
       self.cache.store(hb, round_)
+
+  # ---------------- Layer B ----------------
+
+  def init_replicas(self) -> None:
+    if self.opts.r_init == "zero":
+      return
+    used = 0.0
+    while True:
+      progress = False
+      for f in range(self.Nf):
+        if used + self.params.ram_req[f] <= self.params.ram_cap:
+          self.r[f] += 1
+          used += self.params.ram_req[f]
+          progress = True
+      if not progress:
+        return
+
+  def _hamiltonian_ctx(self, round_: int) -> HamiltonianContext:
+    pull_in = self.cache.pull_in(round_, self.opts.staleness_rounds, self.Nf)
+    benefit = self.params.alpha * (self.demand_hat + pull_in)
+    A = self.opts.A
+    if A is None:
+      A = max(1.0, 2.0 * float((benefit / self.params.ram_req).max()))
+    return HamiltonianContext(
+      benefit=benefit, ram_req=self.params.ram_req,
+      ram_cap=self.params.ram_cap, demand_hat=self.demand_hat,
+      margin=self.opts.z_delta * np.sqrt(self.demand_hat),
+      u_max=self.params.u_max * self.opts.W, r_prev=self.r.copy(),
+      A=A, B=self.opts.B, C=self.opts.C, switch_cost=self.opts.switch_cost,
+    )
+
+  def sb_pass(self, round_: int) -> bool:
+    if not self.alive:
+      return False
+    ctx = self._hamiltonian_ctx(round_)
+    r_max = r_max_per_fn(self.params.ram_cap, self.params.ram_req)
+    bits = bits_per_fn(r_max)
+    n_spins = int(bits.sum())
+    if n_spins == 0:
+      return False
+
+    def H(s: np.ndarray) -> float:
+      return hamiltonian(decode_spins(s, bits, r_max), ctx)
+
+    s = dsb_minimize(H, n_spins, self.opts, self.rng)
+    r_new = repair(
+      decode_spins(s, bits, r_max), ctx.benefit, self.params.ram_req,
+      self.params.ram_cap,
+    )
+    h_prev = hamiltonian(self.r, ctx)
+    h_new = hamiltonian(r_new, ctx)
+    improving = h_new < h_prev - self.opts.eps_commit * abs(h_prev)
+    if not improving or (self._pending is not None
+                         and not np.array_equal(r_new, self._pending)):
+      self._pending, self._streak = None, 0
+      return False
+    self._pending = r_new
+    self._streak += 1
+    if self._streak < self.opts.n_hyst:
+      return False
+    self._pending, self._streak = None, 0
+    # randomized commit: the mandatory Jacobi-oscillation countermeasure
+    # under the shared barrier (p_commit = 1 disables it, deliberately)
+    if self.rng.random() >= self.opts.p_commit:
+      return False
+    self.r = r_new
+    return True

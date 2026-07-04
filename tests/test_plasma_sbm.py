@@ -80,3 +80,57 @@ def test_brute_force_exact_on_tiny_instance():
   def H(s):
     return float(-(s[0] * s[1]) - s[0])  # ground state (+1, +1)
   assert brute_force(H, 2).tolist() == [1, 1]
+
+
+from plasma.core.node import NodeParams, PlasmaNode
+
+
+def _sb_node(p_commit=1.0, n_hyst=1, k_sb=1, ram_cap=8.0):
+  params = NodeParams(
+    node_id=0, nbrs=(), alpha=np.array([3.0, 1.0]),
+    gamma=np.array([0.1, 0.1]), beta=np.zeros((0, 2)),
+    u_max=np.array([5.0, 5.0]), ram_cap=ram_cap, ram_req=np.array([2.0, 2.0]),
+  )
+  opts = PlasmaOptions(p_commit=p_commit, n_hyst=n_hyst, k_sb=k_sb,
+                       n_sb_steps=200)
+  return PlasmaNode(params, opts, np.random.default_rng(1))
+
+
+def test_init_replicas_spread_fills_ram_round_robin():
+  node = _sb_node()
+  node.init_replicas()
+  assert (node.r * node.params.ram_req).sum() <= node.params.ram_cap
+  assert node.r.sum() == 4  # 8 RAM / 2 per replica
+
+
+def test_sb_pass_grows_replicas_under_demand():
+  node = _sb_node(n_hyst=1)
+  node.r = np.zeros(2, dtype=int)
+  node.demand_hat = np.array([8.0, 0.0])
+  committed = node.sb_pass(round_=0)
+  assert committed
+  assert node.r[0] >= 1
+  assert (node.r * node.params.ram_req).sum() <= node.params.ram_cap
+
+
+def test_hysteresis_requires_consecutive_confirmations():
+  node = _sb_node(n_hyst=2)
+  node.r = np.zeros(2, dtype=int)
+  node.demand_hat = np.array([8.0, 0.0])
+  assert node.sb_pass(round_=0) is False  # first proposal only counts
+  assert node.sb_pass(round_=1) is True   # second consecutive -> commit
+
+
+def test_p_commit_zero_never_commits():
+  node = _sb_node(p_commit=0.0, n_hyst=1)
+  node.demand_hat = np.array([8.0, 0.0])
+  for k in range(5):
+    assert node.sb_pass(round_=k) is False
+  assert node.r.sum() == 0
+
+
+def test_committed_r_is_always_ram_feasible():
+  node = _sb_node(n_hyst=1, ram_cap=4.0)
+  node.demand_hat = np.array([50.0, 50.0])  # wants far more than RAM allows
+  node.sb_pass(round_=0)
+  assert (node.r * node.params.ram_req).sum() <= 4.0
