@@ -224,7 +224,7 @@ tracks two best candidates, checkpoints, and saves artifacts.
     \EndFor
     \State $y\gets y+\Delta y$; $\widehat\omega_i^f\gets\sum_j y_{ij}^f$
     \State increment $q_i^f$ for each $(i,f)$ with $\widehat\omega_i^f>0$
-    \State reject the round if fixed $y$ fails the pre-solve \textsc{LSPr} memory-feasibility check
+    \State run the pre-solve fixed-$y$ \textsc{LSPr} memory-feasibility check; abort with a runtime error if it fails
     \State solve fixed-$y$ \textsc{LSPr} models via \textsc{ComputeSocialWelfare}; update $x,r,\rho$
     \State $\omega_i^f\gets\omega_i^{0,f}-\widehat\omega_i^f$; set values within $\tau$ of zero to zero
   \EndIf
@@ -233,7 +233,8 @@ tracks two best candidates, checkpoints, and saves artifacts.
   \State $(\mathrm{stop},\mathrm{reason})\gets\textsc{CheckStoppingCriteria}(h,H_{\max},B,\omega,\widehat\omega,0,\mathcal B,\mathcal B_{\rm mem},\tau,\mathrm{runtime},T_{\max})$
   \If{not $\mathrm{stop}$} \State $h\gets h+1$ \EndIf
 \Until{$\mathrm{stop}$}
-\State decode the two tracked candidates; checkpoint and save \textsc{LSP}/\textsc{LSPc}, objective, termination, and runtime artifacts
+\State decode the two tracked candidates and record the period objective and termination reason
+\State checkpoint \textsc{LSP}/\textsc{LSPc} only if $t\bmod I_{\rm checkpoint}=0$ or $t=\texttt{max\_steps}-1$
 \end{algorithmic}
 \end{algorithm}
 
@@ -244,6 +245,12 @@ recent round increment. The variable $n_a$ is returned by the inherited bid
 generator but is not used by this runner. Likewise, the local solution's
 $\rho$ is retained for solution construction, while the separate all-zero
 $\widehat\rho$ disables memory bids.
+
+After all control periods, the runner joins the complete period solutions,
+optionally produces history plots, and writes the final \textsc{LSP} and
+\textsc{LSPc} solutions together with the objective, runtime, and termination
+artifacts. These final writes are distinct from the conditional per-period
+checkpoints in Algorithm~\ref{alg:magcaa}.
 
 \subsection{Round invariants}
 \label{sec:magcaa-properties}
@@ -318,6 +325,12 @@ whether accumulated solver runtime has reached $T_{\max}$. The later
 ``feasible solution found'' branch of the shared helper is inactive because
 this call does not pass its optional \texttt{sp\_omega} and \texttt{sp\_y}
 arguments.
+
+The stopping helper is called only after bid resolution, any fixed-$y$
+restricted re-solve, and candidate evaluation. Consequently, every entered
+control period executes round $h=0$. For positive $H_{\max}$, the maximum
+iteration guard bounds the number of completed rounds; it does not prevent
+entry into the current round.
 
 These guards cover exhaustion of offered load, exhaustion of advertised
 capacity, absence of bidders, an initially unassignable allocation, the
