@@ -137,8 +137,13 @@ def run(
   pd.DataFrame(obj_list, columns=["Plasma"]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index=False
   )
+  # format matches results_postprocessing's shared parser (run.py
+  # load_termination_condition): "{criterion} (it: {iteration}; obj.
+  # deviation: {deviation})" -- PLASMA always runs the full rounds_per_step
+  # budget each step, there is no separate convergence criterion
   pd.DataFrame(
-    [f"rounds: {opts.rounds_per_step}"] * len(obj_list)
+    [f"converged (it: {opts.rounds_per_step}; obj. deviation: {None})"]
+    * len(obj_list)
   ).to_csv(os.path.join(solution_folder, "termination_condition.csv"))
   pd.DataFrame({"tot": runtime_list}).to_csv(
     os.path.join(solution_folder, "runtime.csv"), index=False

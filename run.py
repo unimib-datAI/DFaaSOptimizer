@@ -10,6 +10,7 @@ from decentralized_powerd import run as run_powerd
 from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
 from decentralized_potentialgame import run_pg_s, run_pg_r
 from decentralized_gcaa import run as run_gcaa
+from plasma.runner import run as run_plasma
 from postprocessing import load_models_results
 from utils.common import reconcile_paths
 
@@ -43,6 +44,7 @@ METHOD_RESULT_MODELS = {
   "faas-pg-s": ("LSPc", "FaaS-MAPG-S"),
   "faas-pg-r": ("LSPc", "FaaS-MAPG-R"),
   "faas-gcaa": ("LSPc", "FaaS-MAGCAA"),
+  "plasma": ("LSPc", "Plasma"),
 }
 
 
@@ -85,6 +87,7 @@ def parse_arguments() -> argparse.Namespace:
       "faas-pg-s",
       "faas-pg-r",
       "faas-gcaa",
+      "plasma",
       "generate_only"
     ],
     required = True
@@ -932,6 +935,7 @@ def run(
     run_pgs = False # -- faas-pg-s (FaaS-MAPG-S)
     run_pgr = False # -- faas-pg-r (FaaS-MAPG-R)
     run_g = False # -- faas-gcaa (FaaS-MAGCAA)
+    run_pl = False # -- plasma (Plasma)
     experiment_idx = None
     try:
       experiment_idx = solution_folders["experiments_list"].index(
@@ -1021,6 +1025,12 @@ def run(
           solution_folders["faas-gcaa"][experiment_idx] is None
         )):
         run_g = True
+      if (not generate_only and "plasma" in methods) and ((
+          len(solution_folders.get("plasma", [])) <= experiment_idx
+        ) or (
+          solution_folders["plasma"][experiment_idx] is None
+        )):
+        run_pl = True
     except ValueError:
       run_c = "centralized" in methods
       run_i = "faas-macro" in methods
@@ -1036,8 +1046,9 @@ def run(
       run_pgs = "faas-pg-s" in methods
       run_pgr = "faas-pg-r" in methods
       run_g = "faas-gcaa" in methods
+      run_pl = "plasma" in methods
     # if the experiment is still to run...
-    if run_c or run_i or run_i_v0 or run_a or run_h or run_hm or run_d or run_p or run_brs or run_brr or run_bro or run_pgs or run_pgr or run_g or generate_only:
+    if run_c or run_i or run_i_v0 or run_a or run_h or run_hm or run_d or run_p or run_brs or run_brr or run_bro or run_pgs or run_pgr or run_g or run_pl or generate_only:
       # -- update configuration
       config = deepcopy(base_config)
       if loop_over in config["limits"]:
@@ -1224,6 +1235,15 @@ def run(
         )
         set_solution_folder(
           solution_folders, "faas-gcaa", experiment_idx, g_folder
+        )
+      # -- solve PLASMA (Physarum + simulated bifurcation)
+      if run_pl:
+        pl_folder = run_plasma(
+          config, sp_parallelism,
+          log_on_file = log_on_file, disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "plasma", experiment_idx, pl_folder
         )
       # -- save info
       if experiment_idx is None:

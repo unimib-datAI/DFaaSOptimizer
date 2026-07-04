@@ -76,3 +76,35 @@ def test_runner_messages_bounded(tmp_path):
   folder = run_plasma(_config(tmp_path), parallelism=0)
   msgs = pd.read_csv(os.path.join(folder, "plasma_messages.csv"))
   assert (msgs["hb_per_node_s"] <= 2.0 + 1e-9).all()  # deg <= 2 on a tree of 3
+
+
+import run as run_module
+
+
+def test_methods_choice_accepts_plasma(monkeypatch):
+  argv = ["run.py", "-c", "config_files/plasma_comparison.json",
+          "--methods", "plasma"]
+  monkeypatch.setattr("sys.argv", argv)
+  args = run_module.parse_arguments()
+  assert "plasma" in args.methods
+
+
+def test_run_module_exposes_plasma_runner():
+  assert callable(run_module.run_plasma)
+
+
+def test_method_result_models_has_plasma_entry():
+  assert run_module.METHOD_RESULT_MODELS["plasma"] == ("LSPc", "Plasma")
+
+
+def test_plasma_comparison_config_exists_and_has_section():
+  config = json.loads(
+    Path("config_files/plasma_comparison.json").read_text()
+  )
+  assert "plasma" in config["solver_options"]
+
+
+def test_set_solution_folder_tolerates_missing_plasma_key():
+  solution_folders = {"experiments_list": []}
+  run_module.set_solution_folder(solution_folders, "plasma", 0, "/x")
+  assert solution_folders["plasma"][0] == "/x"
