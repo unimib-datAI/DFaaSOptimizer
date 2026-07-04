@@ -101,7 +101,7 @@ def run(
       print(f"t = {t}", file=log_stream, flush=True)
     loadt = get_current_load(input_requests_traces, agents, t)
     arrivals = np.array([
-      [int(round(loadt[(n + 1, f + 1)])) for f in range(Nf)]
+      [int(round(loadt[(n + 1, f + 1)] * opts.W)) for f in range(Nf)]
       for n in range(Nn)
     ])
     data = update_data(base_instance_data, {"incoming_load": {

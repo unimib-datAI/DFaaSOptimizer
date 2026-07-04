@@ -108,3 +108,11 @@ def test_set_solution_folder_tolerates_missing_plasma_key():
   solution_folders = {"experiments_list": []}
   run_module.set_solution_folder(solution_folders, "plasma", 0, "/x")
   assert solution_folders["plasma"][0] == "/x"
+
+
+def test_runner_supports_w_not_one(tmp_path):
+  config = _config(tmp_path)
+  config["solver_options"]["plasma"]["W"] = 2.0
+  folder = run_plasma(config, parallelism=0)  # must not trip check_feasibility
+  obj = pd.read_csv(os.path.join(folder, "obj.csv"))["Plasma"]
+  assert np.isfinite(obj).all()
