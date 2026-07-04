@@ -62,7 +62,9 @@ given the looser blackboard quantity
 $B_j^f=\max\{0,\operatorname{Cap}_j^f-x_j^f\}$, whereas final acceptance
 uses $C_j^f$, which also subtracts inbound assignments accumulated in $y$.
 
-For a buyer $i$, seller $j$, and function $f$, the implemented utility is
+For a buyer $i$, seller $j$, and function $f$, the inherited helper computes
+$\beta_{ij}^f-p_j^f-w_L\ell_{ij}-w_Fq_i^f(h)$. FaaS-MAGCAA fixes
+$p_j^f=0$, so its specialized baseline utility is
 \begin{equation}
   u_{ij}^f(h)=\beta_{ij}^f-w_L\ell_{ij}-w_Fq_i^f(h),
   \label{eq:magcaa-utility}
@@ -195,13 +197,13 @@ separates the greedy auction operation from the common FRALB machinery that
 re-solves local models, validates feasibility, evaluates candidate welfare,
 tracks two best candidates, checkpoints, and saves artifacts.
 
-\begin{algorithm}[H]
+\begin{algorithm}[tbp]
 \caption{\textsc{FaaS-MAGCAA} at one control period}
 \label{alg:magcaa}
 \begin{algorithmic}[1]
 \Require period data, neighbourhoods, $H_{\max}$, $T_{\max}$, tolerance $\tau$
-\State solve one local \textsc{LSP} for each node; obtain $x$, $r$, $\rho$, $U$, and initial $\omega^{0}$
-\State $y\gets0$; $\omega\gets\omega^{0}$; $q\gets0$; $p\gets0$; replica-seller vector $\widehat\rho\gets0$
+\State solve one local \textsc{LSP} for each node; obtain $x$, $r$, $\rho$, $U$, and initial components $\omega_i^{f,0}$
+\State $y\gets0$; $\boldsymbol\omega\gets(\omega_i^{f,0})_{i,f}$; $q\gets0$; $p\gets0$; replica-seller vector $\widehat\rho\gets0$
 \State require \texttt{unit\_bids}${}={}$true; set round $h\gets0$
 \Repeat
   \State compute $\operatorname{Cap}$, $C$, and served load from $(x,y,r)$ by Eq.~\eqref{eq:magcaa-residual-capacity}
@@ -226,7 +228,7 @@ tracks two best candidates, checkpoints, and saves artifacts.
     \State increment $q_i^f$ for each $(i,f)$ with $\widehat\omega_i^f>0$
     \State run the pre-solve fixed-$y$ \textsc{LSPr} memory-feasibility check; abort with a runtime error if it fails
     \State solve fixed-$y$ \textsc{LSPr} models via \textsc{ComputeSocialWelfare}; update $x,r,\rho$
-    \State $\omega_i^f\gets\omega_i^{0,f}-\widehat\omega_i^f$; set values within $\tau$ of zero to zero
+    \State $\omega_i^f\gets\omega_i^{f,0}-\widehat\omega_i^f$; set values within $\tau$ of zero to zero
   \EndIf
   \State combine $(x,y,r,\rho)$, tighten replicas to realized served load, and assert centralized feasibility
   \State update the best restricted-objective candidate and the best centralized-objective candidate
