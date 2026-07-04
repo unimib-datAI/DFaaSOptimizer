@@ -3,6 +3,7 @@ import pytest
 
 from plasma.baselines.milp_baseline import routing_lp
 from plasma.baselines import madea_iface
+from plasma.eval.regret import adaptation_lag, cumulative_regret
 
 
 def test_routing_lp_prefers_local_when_capacity_allows():
@@ -77,3 +78,24 @@ def _tiny_instance():
     "memory_requirement": {1: 2},
     "incoming_load": {(1, 1): 10, (2, 1): 1},
   }}
+
+
+def test_cumulative_regret():
+  method = np.array([1.0, 1.0, 2.0])
+  oracle = np.array([2.0, 2.0, 2.0])
+  assert cumulative_regret(method, oracle).tolist() == [1.0, 2.0, 2.0]
+
+
+def test_adaptation_lag_measures_recovery():
+  times = np.arange(6, dtype=float)
+  oracle = np.full(6, 10.0)
+  method = np.array([10.0, 10.0, 2.0, 5.0, 9.5, 9.8])  # change point at t=2
+  lag = adaptation_lag(times, method, oracle, change_points=[2.0])
+  assert lag == [2.0]  # recovered at t=4 (9.5 >= 9.0)
+
+
+def test_adaptation_lag_nan_when_never_recovering():
+  times = np.arange(3, dtype=float)
+  lag = adaptation_lag(times, np.zeros(3), np.full(3, 10.0),
+                       change_points=[0.0])
+  assert np.isnan(lag[0])
