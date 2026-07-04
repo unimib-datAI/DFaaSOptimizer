@@ -62,7 +62,6 @@ class PlasmaNode:
     self._pending = None
     self._streak = 0
     self.begin_window()
-    # Layer B state initialized in sb_setup (Task 7)
 
   # ---------------- Layer A: data plane ----------------
 

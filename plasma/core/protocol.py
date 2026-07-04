@@ -49,12 +49,6 @@ class HeartbeatCache:
     hb = self._fresh(nbr, now_round, staleness_rounds)
     return np.array(hb.spare) if hb else np.zeros(Nf)
 
-  def alpha(
-      self, nbr: int, now_round: int, staleness_rounds: int, Nf: int
-    ) -> np.ndarray:
-    hb = self._fresh(nbr, now_round, staleness_rounds)
-    return np.array(hb.alpha) if hb else np.zeros(Nf)
-
   def pull_in(
       self, now_round: int, staleness_rounds: int, Nf: int
     ) -> np.ndarray:
