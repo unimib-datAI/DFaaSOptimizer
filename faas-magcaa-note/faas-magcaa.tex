@@ -1,0 +1,365 @@
+% =====================================================================
+% FaaS-MAGCAA: greedy coalition-auction allocation for FRALB.
+% Meant to be \input{} (or pasted) into the paper. The notation recap
+% below is removable when the host paper has already defined FRALB.
+% =====================================================================
+
+\section{FaaS-MAGCAA: greedy coalition auction allocation}
+\label{sec:magcaa}
+
+\textsc{FaaS-MAGCAA} adapts the task-selection and winner-consensus
+mechanism of the Greedy Coalition Auction Algorithm (GCAA) of
+\citet{braquetbakolas2021} to Function Replica Allocation and Load Balancing
+(FRALB). It is included as an experimental decentralized baseline rather
+than as a new auction-theoretic mechanism. At every control period, local
+problems first determine the load that each node would like to offload and
+the replicas already available. Repeated auction rounds then match unit
+loads to neighbouring execution capacity by greedy utility ranking.
+
+This baseline deliberately omits two mechanisms used by other methods in
+the paper. First, its price array is fixed at zero: there is no adaptive
+price update as in \textsc{FaaS-MADeA}. Second, its replica-seller array is
+fixed at zero: there is no memory or replica market, and unmatched load
+receives the null allocation. Consequently, the method provides neither the
+price or dual certificate associated with \textsc{FaaS-MALD} nor the
+equilibrium certificate associated with \textsc{FaaS-MAPG}. Its role is to
+isolate the empirical behaviour of a greedy GCAA-style selection and
+consensus rule inside the common FRALB execution pipeline.
+
+% =====================================================================
+% BEGIN self-contained notation recap.
+% This subsection restates only the FRALB notation needed by FaaS-MAGCAA.
+% REMOVE this whole fenced block when inserting the section into a paper
+% that has already introduced these symbols and the capacity model.
+% =====================================================================
+\subsection{Notation and capacity model}
+\label{sec:magcaa-notation}
+
+Let $\mathcal N$ be the set of compute nodes, $\mathcal F$ the function set,
+and $N_i\subseteq\mathcal N$ the one-hop neighbourhood of node $i$. At a
+control period, node $i$ receives workload $\lambda_i^f$ for function $f$.
+Its local solve partitions this workload into locally executed load $x_i^f$,
+load $\omega_i^f$ offered to the coordination mechanism, and rejected or
+Cloud-forwarded load $z_i^f$. The coordination variable $y_{ij}^f$ is the
+amount originating at $i$ and executed by neighbour $j$. Node $j$ runs
+$r_j^f$ replicas, each governed by maximum utilization $U_{\max}^f$ and by
+the per-request service demand $D_j^f$ used by the implementation.
+
+Before auction round $h$, the implementation computes execution capacity
+and residual capacity as
+\begin{equation}
+  \operatorname{Cap}_j^f(h)=
+    \frac{r_j^f(h)U_{\max}^f}{D_j^f},
+  \qquad
+  C_j^f(h)=\max\!\left\{0,
+    \frac{r_j^f(h)U_{\max}^f}{D_j^f}
+    -x_j^f(h)-\sum_{i\in\mathcal N}y_{ij}^f(h)
+  \right\}.
+  \label{eq:magcaa-residual-capacity}
+\end{equation}
+Thus $C_j^f$ is measured in load units, not replicas. The bid generator is
+given the looser blackboard quantity
+$B_j^f=\max\{0,\operatorname{Cap}_j^f-x_j^f\}$, whereas final acceptance
+uses $C_j^f$, which also subtracts inbound assignments accumulated in $y$.
+
+For a buyer $i$, seller $j$, and function $f$, the implemented utility is
+\begin{equation}
+  u_{ij}^f(h)=\beta_{ij}^f-w_L\ell_{ij}-w_Fq_i^f(h),
+  \label{eq:magcaa-utility}
+\end{equation}
+where $\beta_{ij}^f$ is the FRALB offloading benefit, $\ell_{ij}$ is network
+latency, and $q_i^f$ is a within-period fairness counter. The configurations
+used for this baseline set $w_L=w_F=0$, so
+$u_{ij}^f=\beta_{ij}^f$. The symbol $\ell_{ij}$ in
+Eq.~\eqref{eq:magcaa-utility} denotes latency and is distinct from the
+served-load quantity $x_j^f+\sum_i y_{ij}^f$ computed internally by the
+capacity helper.
+
+The no-ping-pong state for function $f$ is represented by
+\begin{equation}
+  S_i^f(y)=\mathbf 1\!\left\{\sum_j y_{ij}^f>0\right\},
+  \qquad
+  R_i^f(y)=\mathbf 1\!\left\{\sum_k y_{ki}^f>0\right\},
+  \label{eq:magcaa-send-receive}
+\end{equation}
+where $S_i^f$ and $R_i^f$ mean, respectively, that $i$ is sending or
+receiving function-$f$ load. Feasibility requires that they are not both
+true for the same node and function.
+
+\begin{table}[t]
+\centering
+\caption{Notation used in the FaaS-MAGCAA section.}
+\label{tab:magcaa-notation}
+\small
+\begin{tabular}{@{}l l p{0.59\linewidth}@{}}
+\toprule
+Nodes, functions & $\mathcal N,\mathcal F$ & compute nodes and deployable functions.\\
+Neighbourhood & $N_i$ & sellers visible to buyer node $i$.\\
+Input workload & $\lambda_i^f$ & function-$f$ load arriving at node $i$.\\
+Local load & $x_i^f$ & load executed at its origin node $i$.\\
+Auction load & $\omega_i^f$ & residual load of active buyer--function pair $(i,f)$.\\
+Routed load & $y_{ij}^f$ & load sent from buyer $i$ to seller $j$.\\
+Cloud/rejected load & $z_i^f$ & load not executed locally or by a neighbour.\\
+Replicas & $r_i^f$ & number of function-$f$ replicas at node $i$.\\
+Residual capacity & $C_j^f$ & seller capacity after local $x_j^f$ and inbound $\sum_i y_{ij}^f$.\\
+Benefit, latency & $\beta_{ij}^f,\ell_{ij}$ & offloading benefit and network-latency input.\\
+Fairness state & $q_i^f$ & number of prior inner rounds in the period in which $(i,f)$ has an allocation.\\
+Utility & $u_{ij}^f$ & consensus ranking value in Eq.~\eqref{eq:magcaa-utility}.\\
+Sending, receiving & $S_i^f,R_i^f$ & predicates in Eq.~\eqref{eq:magcaa-send-receive}.\\
+Iteration limits & $H_{\max},T_{\max}$ & maximum auction rounds and accumulated solver-time limit.\\
+\bottomrule
+\end{tabular}
+\end{table}
+% ===================== END self-contained notation recap =====================
+
+\subsection{From GCAA tasks to FRALB unit allocations}
+\label{sec:magcaa-mapping}
+
+In the original GCAA, an agent selects at most one task during an auction
+iteration, agents proposing the same task are compared by utility, and the
+winner is finalized. Several agents may ultimately form a coalition on the
+same task over successive iterations; the null task remains available when
+no task yields an acceptable assignment \citep{braquetbakolas2021}. In the
+FRALB adaptation, every active buyer--function pair $(i,f)$ with
+$\omega_i^f>0$ plays the role of one GCAA agent. A neighbouring
+seller--function pair $(j,f)$ with advertised capacity plays the role of a
+task. The translation is deliberately unit based: the runner rejects any
+configuration in which \texttt{unit\_bids} is not true, and every bid row
+therefore has demand $d=1$.
+
+This mapping changes the meaning of coalition formation. A seller--function
+task accepts at most one buyer in one FaaS-MAGCAA round, but its capacity may
+be filled by buyers accepted in later rounds. The accumulated tensor $y$
+therefore records the analogue of a coalition across rounds. Conversely, a
+buyer--function pair is not permanently finalized after its first accepted
+unit: if residual load remains, it can bid again in a later round. If no row
+survives neighbourhood, convenience, capacity, and no-ping-pong checks, the
+pair receives no allocation in that round. This is the FRALB counterpart of
+GCAA's null assignment, without creating a replica to manufacture a task.
+
+\paragraph{Utility and bid columns.}
+The inherited bid generator produces both a utility column
+$u_{ij}^f$ and a ranking-price column
+\begin{equation}
+  b_{ij}^f=p_j^f+\epsilon+\delta_{ij}^f,
+  \label{eq:magcaa-b-column}
+\end{equation}
+where $\delta_{ij}^f$ is the gap to the next seller in the generator's
+utility ordering. FaaS-MAGCAA fixes $p_j^f=0$ and does not call the adaptive
+price-update routine. More importantly, its proposal and consensus code
+ranks the \texttt{utility} column, not $b_{ij}^f$. Hence $\epsilon$ and
+$\delta_{ij}^f$ may change the unused $b$ column but cannot change the
+winner ranking; under the baseline configurations, that ranking is simply
+descending $\beta_{ij}^f$.
+
+\subsection{Proposal and consensus round}
+\label{sec:magcaa-consensus}
+
+Let $\mathcal B(h)$ denote the rows emitted by the bid generator in round
+$h$. Because unit mode expands available quantities, $\mathcal B(h)$ can
+contain repeated unit rows and rows for several sellers for the same
+buyer--function pair. The proposal stage keeps exactly the row selected by
+the data-frame operation
+\begin{equation}
+  \widehat b_i^f(h)\in
+  \underset{b\in\mathcal B(h):\,(b.i,b.f)=(i,f)}{\operatorname{arg\,max}}
+  b.\textit{utility}.
+  \label{eq:magcaa-proposal}
+\end{equation}
+The implementation uses \texttt{groupby(...).idxmax()}, including its
+data-frame semantics when equal maxima occur; no stronger universal
+tie-breaking rule is part of the algorithmic contract.
+
+The selected proposals are grouped by seller--function pair $(j,f)$. If
+$S_j^f(y)=1$, the entire group is skipped because that seller already sends
+the same function. Otherwise its contenders are visited in descending
+utility. A contender $(i,f)$ is skipped if $R_i^f(y)=1$ or if
+$C_j^f(h)<d$. The first contender passing both tests is accepted,
+$y_{ij}^f$ is increased by $d=1$, and the round-local states are updated to
+$S_i^f=1$ and $R_j^f=1$ before the next group is examined. The group then
+terminates. A lower-ranked contender can therefore win when a higher-ranked
+one is invalid under the receiving or capacity test; the code does not
+blindly discard the whole task after rejecting its first row.
+
+The state used to initialize these predicates is the cumulative
+\texttt{current\_y} from all previous rounds. The immediate round-local
+updates additionally prevent an allocation accepted earlier in the same
+round from participating in a later ping-pong chain. Once all task groups
+have been visited, the round increment is added to cumulative $y$.
+
+\subsection{Implemented procedure}
+\label{sec:magcaa-procedure}
+
+Algorithm~\ref{alg:magcaa} states the complete per-period procedure. It
+separates the greedy auction operation from the common FRALB machinery that
+re-solves local models, validates feasibility, evaluates candidate welfare,
+tracks two best candidates, checkpoints, and saves artifacts.
+
+\begin{algorithm}[H]
+\caption{\textsc{FaaS-MAGCAA} at one control period}
+\label{alg:magcaa}
+\begin{algorithmic}[1]
+\Require period data, neighbourhoods, $H_{\max}$, $T_{\max}$, tolerance $\tau$
+\State solve one local \textsc{LSP} for each node; obtain $x$, $r$, $\rho$, $U$, and initial $\omega^{0}$
+\State $y\gets0$; $\omega\gets\omega^{0}$; $q\gets0$; $p\gets0$; replica-seller vector $\widehat\rho\gets0$
+\State require \texttt{unit\_bids}${}={}$true; set round $h\gets0$
+\Repeat
+  \State compute $\operatorname{Cap}$, $C$, and served load from $(x,y,r)$ by Eq.~\eqref{eq:magcaa-residual-capacity}
+  \State $B\gets\max\{0,\operatorname{Cap}-x\}$
+  \State $(\mathcal B,\mathcal B_{\rm mem},n_a)\gets\textsc{DefineBids}(\omega,B,p,\widehat\rho,q)$
+  \Comment{$\mathcal B_{\rm mem}=\emptyset$ because $\widehat\rho=0$}
+  \State $\widehat\omega\gets0$
+  \If{$\mathcal B\ne\emptyset$}
+    \State $\Delta y\gets0$; initialize $S,R$ from cumulative $y$
+    \State keep one maximum-utility row per active $(i,f)$ as in Eq.~\eqref{eq:magcaa-proposal}
+    \For{each resulting seller--function group $(j,f)$}
+      \If{$S_j^f=0$}
+        \For{each contender $(i,f,d)$ in descending utility}
+          \If{$R_i^f=0$ and $C_j^f\ge d$}
+            \State $\Delta y_{ij}^f\gets\Delta y_{ij}^f+d$; $S_i^f\gets1$; $R_j^f\gets1$
+            \State \textbf{break}
+          \EndIf
+        \EndFor
+      \EndIf
+    \EndFor
+    \State $y\gets y+\Delta y$; $\widehat\omega_i^f\gets\sum_j y_{ij}^f$
+    \State increment $q_i^f$ for each $(i,f)$ with $\widehat\omega_i^f>0$
+    \State reject the round if fixed $y$ fails the pre-solve \textsc{LSPr} memory-feasibility check
+    \State solve fixed-$y$ \textsc{LSPr} models via \textsc{ComputeSocialWelfare}; update $x,r,\rho$
+    \State $\omega_i^f\gets\omega_i^{0,f}-\widehat\omega_i^f$; set values within $\tau$ of zero to zero
+  \EndIf
+  \State combine $(x,y,r,\rho)$, tighten replicas to realized served load, and assert centralized feasibility
+  \State update the best restricted-objective candidate and the best centralized-objective candidate
+  \State $(\mathrm{stop},\mathrm{reason})\gets\textsc{CheckStoppingCriteria}(h,H_{\max},B,\omega,\widehat\omega,0,\mathcal B,\mathcal B_{\rm mem},\tau,\mathrm{runtime},T_{\max})$
+  \If{not $\mathrm{stop}$} \State $h\gets h+1$ \EndIf
+\Until{$\mathrm{stop}$}
+\State decode the two tracked candidates; checkpoint and save \textsc{LSP}/\textsc{LSPc}, objective, termination, and runtime artifacts
+\end{algorithmic}
+\end{algorithm}
+
+The zero in the stopping call is the default all-zero additional-replica
+allocation created when the argument is passed as \texttt{None}; the
+restricted allocation $\widehat\omega$ is cumulative, not merely the most
+recent round increment. The variable $n_a$ is returned by the inherited bid
+generator but is not used by this runner. Likewise, the local solution's
+$\rho$ is retained for solution construction, while the separate all-zero
+$\widehat\rho$ disables memory bids.
+
+\subsection{Round invariants}
+\label{sec:magcaa-properties}
+
+\begin{proposition}[At most one winner per task and round]
+\label{prop:magcaa-one-winner}
+For every round $h$ and seller--function pair $(j,f)$,
+$\sum_i\Delta y_{ij}^f(h)$ contains at most one accepted unit.
+\end{proposition}
+\begin{proof}
+All selected proposals for $(j,f)$ are processed in one data-frame group.
+After the first valid contender is accepted, the inner contender loop
+terminates. If no contender is valid, the group contributes zero. Because
+the outer grouping visits $(j,f)$ only once, no second unit can be accepted
+for that task during the same round.
+\end{proof}
+
+\begin{proposition}[Capacity at acceptance]
+\label{prop:magcaa-capacity}
+Every unit accepted for $(j,f)$ is no larger than the residual capacity
+$C_j^f(h)$ computed at the start of that round.
+\end{proposition}
+\begin{proof}
+The acceptance branch is entered only if $C_j^f(h)\ge d$, and mandatory
+unit mode gives $d=1$. By Proposition~\ref{prop:magcaa-one-winner}, no other
+unit for $(j,f)$ is accepted in that round, so the start-of-round residual
+need not be decremented again within the group traversal. Before the next
+round, $C_j^f$ is recomputed from the cumulative $y$ and the latest
+restricted re-optimization. Thus each accepted unit respects the residual
+capacity available at the time of its check, including load accumulated in
+earlier rounds.
+\end{proof}
+
+\begin{proposition}[Inductive no-ping-pong preservation]
+\label{prop:magcaa-no-ping-pong}
+Starting from $y=0$, every cumulative allocation produced by
+Algorithm~\ref{alg:magcaa} satisfies
+$S_i^f(y)R_i^f(y)=0$ for every $(i,f)$.
+\end{proposition}
+\begin{proof}
+The property is true at initialization. Assume it holds for cumulative $y$
+at the beginning of a round. A proposed edge $i\to j$ is accepted only if
+$R_i^f=0$ and $S_j^f=0$, so it cannot make an existing receiver send or an
+existing sender receive. Immediately after acceptance, the algorithm sets
+$S_i^f=1$ and $R_j^f=1$. Subsequent groups in the same round therefore
+cannot use $i$ as a seller or $j$ as a buyer. Each accepted edge preserves
+the invariant both relative to prior rounds and relative to earlier edges
+in the current round. Induction over accepted edges and then over rounds
+proves the claim.
+\end{proof}
+
+These propositions are local feasibility statements. They do not establish
+global optimality, truthfulness, a market equilibrium, or a dual bound. In
+particular, Proposition~\ref{prop:magcaa-capacity} concerns the residual at
+each acceptance; overall FRALB feasibility is additionally checked by the
+fixed-$y$ memory pre-check, the restricted local solves, and the centralized
+feasibility assertion shown in Algorithm~\ref{alg:magcaa}.
+
+\subsection{Stopping conditions and practical limits}
+\label{sec:magcaa-stopping}
+
+The runner reuses \texttt{check\_stopping\_criteria} from
+\textsc{FaaS-MADeA} with its arguments specialized as shown in
+Algorithm~\ref{alg:magcaa}. Its tests are ordered. It first stops when
+$h\ge H_{\max}-1$. It next stops if all blackboard capacities $B$ are at
+most $\tau$, or if all residual buyer loads $\omega$ are at most $\tau$.
+The default all-zero additional-replica allocation then makes the inherited
+``load cannot be assigned'' branch apply whenever cumulative
+$\widehat\omega$ is also all zero. If that branch does not apply, the code
+stops when both ordinary and memory bid tables are empty. Finally, it tests
+whether accumulated solver runtime has reached $T_{\max}$. The later
+``feasible solution found'' branch of the shared helper is inactive because
+this call does not pass its optional \texttt{sp\_omega} and \texttt{sp\_y}
+arguments.
+
+These guards cover exhaustion of offered load, exhaustion of advertised
+capacity, absence of bidders, an initially unassignable allocation, the
+iteration cap, and the time cap. They do not make every stalled state an
+algorithmic fixed point: after some allocation has accumulated,
+$\widehat\omega$ is nonzero, and bid rows rejected only by the stricter
+residual-capacity or no-ping-pong checks may persist until another guard
+fires. Reaching ``max iterations reached'' or the time limit therefore
+returns a feasibility-checked candidate but is not a convergence
+certificate.
+
+The original GCAA proves completion within at most the number of agents
+because each iteration finalizes an additional agent under that paper's
+task-allocation protocol \citep{braquetbakolas2021}. That result does not
+transfer automatically here. A FaaS-MAGCAA buyer--function pair may demand
+several units, may bid again after an accepted unit, and competes under
+capacity, re-optimization, eligibility, and no-ping-pong constraints.
+Moreover, several distinct seller--function tasks can accept concurrently
+in one round. Accordingly, this implementation relies on the practical
+guards above and claims no inherited finite bound in terms of the number of
+nodes or buyer--function pairs.
+
+\subsection{Relation to GCAA and the other coordination baselines}
+\label{sec:magcaa-positioning}
+
+FaaS-MAGCAA retains the two recognizable operations of GCAA: an active agent
+selects one currently best task, and contenders for a common task are
+resolved greedily by utility. It does not reproduce the paper's distributed
+bid-vector exchange or its permanent finalized-agent vector. Instead, the
+shared runner materializes bid rows centrally for an experimental baseline,
+resolves one winner per seller--function task and round, and carries the
+accepted flow tensor across rounds. The original paper permits multiple
+agents to form a task coalition through repeated finalizations; the FRALB
+counterpart accumulates unit winners against execution capacity through
+repeated fixed-$y$ re-optimization.
+
+This construction also explains its narrower interpretation relative to
+the paper's other baselines. Unlike \textsc{FaaS-MADeA}, it never updates
+prices and never solicits replica memory. Unlike \textsc{FaaS-MALD}, it does
+not optimize or certify a Lagrangian bound. Unlike \textsc{FaaS-MAPG}, its
+stopping reasons do not certify a Nash equilibrium. FaaS-MAGCAA should
+therefore be read as an implementation-faithful greedy allocation heuristic
+whose empirical results can be compared under the same FRALB local-solve,
+feasibility, evaluation, and persistence pipeline, not as a transfer of the
+original GCAA theorem or as an alternative optimality certificate.
