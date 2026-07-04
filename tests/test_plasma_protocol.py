@@ -102,3 +102,13 @@ def test_message_budget_heartbeats_bounded_by_degree():
   engine.run_rounds(10, np.zeros((2, 1), dtype=int))
   # exactly deg(i) heartbeats per node per round, no hidden channels
   assert engine.hb_count == 10 * 2 * 1
+
+
+def test_options_reject_nonpositive_rounds_per_step():
+  with pytest.raises(ValueError, match="rounds_per_step"):
+    PlasmaOptions(rounds_per_step=0)
+
+
+def test_options_reject_nonpositive_w():
+  with pytest.raises(ValueError, match="W"):
+    PlasmaOptions(W=0.0)

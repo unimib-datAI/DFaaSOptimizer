@@ -49,6 +49,12 @@ class PlasmaOptions:
   def from_config(cls, config: dict) -> "PlasmaOptions":
     return cls(**config.get("solver_options", {}).get("plasma", {}))
 
+  def __post_init__(self) -> None:
+    if self.rounds_per_step < 1:
+      raise ValueError(f"rounds_per_step must be >= 1, got {self.rounds_per_step}")
+    if self.W <= 0.0:
+      raise ValueError(f"W must be > 0, got {self.W}")
+
 
 @dataclass(frozen=True)
 class Heartbeat:
