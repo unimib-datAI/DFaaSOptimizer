@@ -7,6 +7,7 @@ from scipy.optimize import linprog
 
 from generators.generate_data import update_data
 from models.model import LoadManagementModel
+from plasma.runner import objective_load
 from run_centralized_model import solve_instance
 from utils.centralized import get_current_load
 from utils.faasmacro import compute_centralized_objective
@@ -75,12 +76,34 @@ def routing_lp(
   return float(-res.fun), x, y, z
 
 
+def shed_overflow(
+    x: np.ndarray, y: np.ndarray, lam: np.ndarray
+  ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+  """Shed true-load overflow from a held (x, y) plan against true load lam.
+  Overflow is shed from local (x) first; any remainder is shed from the
+  outgoing y row for that (n, f), scaled proportionally, so no phantom
+  (never-arrived) traffic is credited by the objective. Returns
+  (x_eff, y_eff, z_eff) with x_eff + y_eff.sum(axis=1) + z_eff == lam."""
+  y_row_sum = y.sum(axis=1)  # per (n, f) outgoing total
+  handled = x + y_row_sum
+  over = np.maximum(0.0, handled - lam)
+  x_eff = np.maximum(0.0, x - over)
+  over2 = over - (x - x_eff)  # overflow left after shedding x
+  safe_row_sum = np.where(y_row_sum > 0, y_row_sum, 1.0)
+  scale = np.where(y_row_sum > 0, 1.0 - over2 / safe_row_sum, 1.0)
+  y_eff = y * scale[:, None, :]
+  z_eff = np.maximum(0.0, lam - x_eff - y_eff.sum(axis=1))
+  return x_eff, y_eff, z_eff
+
+
 def stale_objectives(
     base_instance_data: dict, traces: dict, agents, t_range,
     solver_name: str, solver_options: dict, resolve_every: int
   ) -> List[float]:
   """Centralized MILP re-solved every resolve_every steps on then-current
   load, held in between, scored on the true load (staleness is the point)."""
+  if resolve_every < 1:
+    raise ValueError("resolve_every must be >= 1")
   held = None
   objs = []
   for k, t in enumerate(t_range):
@@ -94,9 +117,11 @@ def stale_objectives(
       [loadt[(n + 1, f + 1)] for f in range(x.shape[1])]
       for n in range(x.shape[0])
     ])
-    handled = x + y.sum(axis=1)
-    over = np.maximum(0.0, handled - lam)
-    x_eff = np.maximum(0.0, x - over)  # shed overflow from local first
-    z_eff = np.maximum(0.0, lam - x_eff - y.sum(axis=1))
-    objs.append(compute_centralized_objective(data, x_eff, y, z_eff))
+    x_eff, y_eff, z_eff = shed_overflow(x, y, lam)
+    score_data = update_data(
+      data, {"incoming_load": objective_load(loadt)}
+    )
+    objs.append(
+      compute_centralized_objective(score_data, x_eff, y_eff, z_eff)
+    )
   return objs

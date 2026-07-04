@@ -161,12 +161,21 @@ def test_plasma_gap_vs_milp_on_small_graph(tmp_path):
     config["limits"], "sinusoidal", config["max_steps"], config["seed"],
     str(oracle_folder),
   )
+  # mirror plasma.runner.run's own t-range exactly (min_run_time..ub,
+  # run_time_step) so oracle[t] and plasma_obj[t] score the same timestep
+  min_run_time = config.get("min_run_time", 0)
+  max_run_time = config.get("max_run_time", config["max_steps"])
+  run_time_step = config.get("run_time_step", 1)
+  ub = (
+    max_run_time + run_time_step
+  ) if max_run_time == min_run_time else max_run_time
   oracle = []
-  for t in range(0, config["max_steps"] - 1):
+  for t in range(min_run_time, ub, run_time_step):
     loadt = get_current_load(traces, agents, t)
     loadt = {k: int(round(v)) for k, v in loadt.items()}
     data = update_data(base, {"incoming_load": loadt})
     oracle.append(solve_snapshot(data, "gurobi", {"OutputFlag": 0})[4])
+  assert len(oracle) == len(plasma_obj)
   # late-horizon gap (after Layer A/B settle): within 35% of the oracle
   # (M5's 10% target applies to the tuned 20-node run, not this smoke)
   late_p = plasma_obj.iloc[-2:].mean()

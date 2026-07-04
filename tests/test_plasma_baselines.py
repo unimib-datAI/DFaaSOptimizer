@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from plasma.baselines.milp_baseline import routing_lp
+from plasma.baselines.milp_baseline import routing_lp, shed_overflow
 from plasma.baselines import madea_iface
 from plasma.eval.regret import adaptation_lag, cumulative_regret
 
@@ -45,6 +45,23 @@ def test_routing_lp_respects_receiver_capacity():
   obj, x, y, z = routing_lp(lam, r, u_max, alpha, beta, gamma, adjacency)
   assert y[0, 1, 0] == pytest.approx(4.0)
   assert z[0, 0] == pytest.approx(6.0)
+
+
+def test_shed_overflow_sheds_x_then_phantom_y():
+  # held plan: node 0 handles x=30 locally and forwards y=20 to node 1;
+  # true load collapses to lam=10 -- x must be shed to 0 first, then the
+  # remaining 10 units of overflow scaled out of the outgoing y row so no
+  # phantom (never-arrived) traffic is credited to the objective.
+  x = np.array([[30.0], [0.0]])
+  y = np.zeros((2, 2, 1))
+  y[0, 1, 0] = 20.0
+  lam = np.array([[10.0], [0.0]])
+  x_eff, y_eff, z_eff = shed_overflow(x, y, lam)
+  assert x_eff[0, 0] == pytest.approx(0.0)
+  assert y_eff[0, 1, 0] == pytest.approx(10.0)
+  assert z_eff[0, 0] == pytest.approx(0.0)
+  handled = x_eff + y_eff.sum(axis=1) + z_eff
+  assert handled == pytest.approx(lam)
 
 
 def test_madea_iface_reexports_runner():
