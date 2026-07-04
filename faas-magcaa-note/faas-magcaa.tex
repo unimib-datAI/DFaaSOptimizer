@@ -25,6 +25,10 @@ price or dual certificate associated with \textsc{FaaS-MALD} nor the
 equilibrium certificate associated with \textsc{FaaS-MAPG}. Its role is to
 isolate the empirical behaviour of a greedy GCAA-style selection and
 consensus rule inside the common FRALB execution pipeline.
+Classical price-based auction algorithms and distributed numerical methods
+provide broader background for such coordination
+\citep{bertsekas1988,bertsekas1989}; FaaS-MAGCAA's fixed zero price means that
+it does not inherit their price-adjustment results or guarantees.
 
 % =====================================================================
 % BEGIN self-contained notation recap.
@@ -248,9 +252,12 @@ generator but is not used by this runner. Likewise, the local solution's
 $\rho$ is retained for solution construction, while the separate all-zero
 $\widehat\rho$ disables memory bids.
 
-After all control periods, the runner joins the complete period solutions,
-optionally produces history plots, and writes the final \textsc{LSP} and
-\textsc{LSPc} outputs. For each prefix \texttt{LSP} and \texttt{LSPc}, these
+The runner always writes \texttt{config.json}. It writes \texttt{out.log}
+only when \texttt{log\_on\_file=True}, and writes the sole plot artifact
+\texttt{sp.png} only when plotting is enabled and both $N_f\le10$ and
+$N_n\le10$. After all control periods, it joins the complete period solutions
+and writes the final \textsc{LSP} and \textsc{LSPc} outputs. For each prefix
+\texttt{LSP} and \texttt{LSPc}, these
 are:
 \begin{itemize}
   \item \texttt{<prefix>\_solution.csv};

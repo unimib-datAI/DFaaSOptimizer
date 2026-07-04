@@ -41,9 +41,10 @@ For each prefix `LSP` and `LSPc`, the implementation writes
 `<prefix>_utilization.csv`, `<prefix>_replicas.csv`,
 `<prefix>_detailed_fwd_solution.csv`, and
 `<prefix>_residual_capacity.csv`. It also writes `obj.csv`,
-`termination_condition.csv`, and `runtime.csv`.
+`termination_condition.csv`, `runtime.csv`, and `config.json`. The file
+`out.log` is written only when `log_on_file=True`.
 
 When `t % checkpoint_interval == 0` or `t == max_steps - 1`, component CSVs
 are checkpointed under `LSP/<t>/` and `LSPc/<t>/`; no checkpoint directory is
-written for other periods. Plot files are optional and depend on the run
-configuration and problem size.
+written for other periods. The only plot artifact is `sp.png`, written only
+when plotting is enabled and both `Nf <= 10` and `Nn <= 10`.
