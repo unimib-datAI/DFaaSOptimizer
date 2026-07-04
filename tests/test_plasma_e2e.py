@@ -126,3 +126,11 @@ def test_runner_supports_w_not_one(tmp_path):
     return sol.select_dtypes(include=[np.number]).to_numpy().sum()
   ratio = _total(folder2) / _total(folder1)
   assert 1.8 <= ratio <= 2.2, ratio
+
+
+from plasma.runner import objective_load
+
+
+def test_objective_load_floors_zero_pairs_only():
+  load = {(1, 1): 0, (1, 2): 7}
+  assert objective_load(load) == {(1, 1): 1, (1, 2): 7}
