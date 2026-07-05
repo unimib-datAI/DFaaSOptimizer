@@ -205,10 +205,12 @@ def test_field_saturates_at_demand():
 
 def test_exact_prefers_high_throughput_allocation():
   # same RAM cost, f0 yields more served demand per replica -> DP must pick f0
+  # benefit favors f1: the old linear field (-benefit*r) would pick f1 here,
+  # so this assertion only passes under the served-demand field
   ctx = _ctx(alpha=np.array([1.0, 1.0]), u_max=np.array([4.0, 1.0]),
              demand_target=np.array([8.0, 8.0]), ram_req=np.array([2.0, 2.0]),
              ram_cap=4.0, r_prev=np.array([0, 0]),
              demand_hat=np.array([0.0, 0.0]), margin=np.array([0.0, 0.0]),
-             B=0.0, C=0.0)
+             B=0.0, C=0.0, benefit=np.array([1.0, 3.0]))
   r = exact_minimize(ctx, np.array([2, 2]))
   assert r[0] == 2 and r[1] == 0  # all RAM to the high-throughput function
