@@ -75,9 +75,8 @@
   "tolerance": 1e-06,
   "limits": {
     "Nn": {
-      "values": [
-        10
-      ]
+      "min": 10,
+      "max": 10
     },
     "Nf": {
       "min": 3,
