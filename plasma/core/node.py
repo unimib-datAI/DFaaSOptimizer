@@ -200,7 +200,8 @@ class PlasmaNode:
 
   def _hamiltonian_ctx(self, round_: int) -> HamiltonianContext:
     pull_in = self.cache.pull_in(round_, self.opts.staleness_rounds, self.Nf)
-    benefit = self.params.alpha * (self.demand_hat + pull_in)
+    demand_target = self.demand_hat + pull_in
+    benefit = self.params.alpha * demand_target
     A = self.opts.A
     if A is None:
       A = max(1.0, 2.0 * float((benefit / self.params.ram_req).max()))
@@ -210,6 +211,7 @@ class PlasmaNode:
       margin=self.opts.z_delta * np.sqrt(self.demand_hat),
       u_max=self.params.u_max * self.opts.W, r_prev=self.r.copy(),
       A=A, B=self.opts.B, C=self.opts.C, switch_cost=self.opts.switch_cost,
+      alpha=self.params.alpha, demand_target=demand_target,
     )
 
   def sb_pass(self, round_: int) -> bool:

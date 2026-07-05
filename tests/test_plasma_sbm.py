@@ -29,6 +29,7 @@ def _ctx(**over):
     demand_hat=np.array([4.0, 1.0]), margin=np.array([1.0, 0.5]),
     u_max=np.array([5.0, 5.0]), r_prev=np.array([1, 0]),
     A=10.0, B=1.0, C=0.1, switch_cost=1.0,
+    alpha=np.array([2.0, 1.0]), demand_target=np.array([4.0, 1.0]),
   )
   base.update(over)
   return HamiltonianContext(**base)
@@ -42,7 +43,7 @@ def test_hamiltonian_penalizes_ram_violation():
 
 
 def test_hamiltonian_churn_term():
-  ctx = _ctx(B=0.0, A=0.0, benefit=np.zeros(2))
+  ctx = _ctx(B=0.0, A=0.0, benefit=np.zeros(2), alpha=np.zeros(2))
   h_stay = hamiltonian(np.array([1, 0]), ctx)
   h_move = hamiltonian(np.array([3, 2]), ctx)
   assert h_move == pytest.approx(h_stay + 0.1 * 1.0 * (2 + 2))
@@ -148,6 +149,7 @@ def test_exact_matches_brute_force_ground_state():
       demand_hat=rng.uniform(0, 10, Nf), margin=rng.uniform(0, 2, Nf),
       u_max=rng.uniform(1, 6, Nf), r_prev=rng.integers(0, 3, Nf),
       A=10.0, B=1.0, C=0.1, switch_cost=1.0,
+      alpha=rng.uniform(0.5, 3, Nf), demand_target=rng.uniform(0, 12, Nf),
     )
     r_star = exact_minimize(ctx, r_max)
     assert (ctx.ram_req * r_star).sum() <= ctx.ram_cap + 1e-9
@@ -182,6 +184,7 @@ def test_exact_minimize_fast_on_large_ram():
     ram_cap=32768.0, demand_hat=np.array([40.0, 10.0, 30.0]),
     margin=np.array([2.0, 1.0, 2.0]), u_max=np.array([1.2, 1.1, 0.9]),
     r_prev=np.array([0, 0, 0]), A=10.0, B=1.0, C=0.1, switch_cost=1.0,
+    alpha=np.array([2.0, 1.5, 1.8]), demand_target=np.array([45.0, 12.0, 33.0]),
   )
   r_max = np.floor(ctx.ram_cap / ctx.ram_req).astype(int)
   start = time.perf_counter()
@@ -189,3 +192,23 @@ def test_exact_minimize_fast_on_large_ram():
   elapsed = time.perf_counter() - start
   assert (ctx.ram_req * r).sum() <= ctx.ram_cap + 1e-9
   assert elapsed < 0.5  # was ~1.7s before gcd scaling
+
+
+def test_field_saturates_at_demand():
+  # replicas beyond served demand must not improve the Hamiltonian
+  ctx = _ctx(demand_target=np.array([6.0, 0.0]), u_max=np.array([3.0, 3.0]),
+             r_prev=np.array([2, 0]), B=0.0, C=0.0, A=0.0)
+  h_enough = hamiltonian(np.array([2, 0]), ctx)   # 2*3 = 6 serves it all
+  h_extra = hamiltonian(np.array([4, 0]), ctx)    # extra capacity is idle
+  assert h_extra == pytest.approx(h_enough)
+
+
+def test_exact_prefers_high_throughput_allocation():
+  # same RAM cost, f0 yields more served demand per replica -> DP must pick f0
+  ctx = _ctx(alpha=np.array([1.0, 1.0]), u_max=np.array([4.0, 1.0]),
+             demand_target=np.array([8.0, 8.0]), ram_req=np.array([2.0, 2.0]),
+             ram_cap=4.0, r_prev=np.array([0, 0]),
+             demand_hat=np.array([0.0, 0.0]), margin=np.array([0.0, 0.0]),
+             B=0.0, C=0.0)
+  r = exact_minimize(ctx, np.array([2, 2]))
+  assert r[0] == 2 and r[1] == 0  # all RAM to the high-throughput function

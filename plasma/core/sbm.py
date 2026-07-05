@@ -44,10 +44,13 @@ class HamiltonianContext:
   B: float
   C: float
   switch_cost: float
+  alpha: np.ndarray          # per-request utility per function
+  demand_target: np.ndarray  # demand_hat + pull_in, per-window units
 
 
 def hamiltonian(r: np.ndarray, ctx: HamiltonianContext) -> float:
-  field = -(ctx.benefit * r).sum()
+  served = np.minimum(r * ctx.u_max, ctx.demand_target)
+  field = -(ctx.alpha * served).sum()
   ram_over = max(0.0, float((ctx.ram_req * r).sum() - ctx.ram_cap))
   cap_short = np.maximum(0.0, ctx.demand_hat + ctx.margin - r * ctx.u_max)
   churn = ctx.switch_cost * np.abs(r - ctx.r_prev).sum()
@@ -118,7 +121,7 @@ def _level_values(ctx: HamiltonianContext, f: int, r_max_f: int) -> np.ndarray:
     0.0, ctx.demand_hat[f] + ctx.margin[f] - levels * ctx.u_max[f]
   )
   return (
-    -ctx.benefit[f] * levels
+    -ctx.alpha[f] * np.minimum(levels * ctx.u_max[f], ctx.demand_target[f])
     + ctx.B * cap_short ** 2
     + ctx.C * ctx.switch_cost * np.abs(levels - ctx.r_prev[f])
   )
