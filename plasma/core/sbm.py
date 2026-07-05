@@ -110,6 +110,54 @@ def brute_force(H: Callable[[np.ndarray], float], n_spins: int) -> np.ndarray:
   return best_s
 
 
+def _level_values(ctx: HamiltonianContext, f: int, r_max_f: int) -> np.ndarray:
+  # per-function contribution of r_f = 0..r_max_f (Hamiltonian minus RAM term,
+  # which the DP enforces as a hard budget)
+  levels = np.arange(r_max_f + 1)
+  cap_short = np.maximum(
+    0.0, ctx.demand_hat[f] + ctx.margin[f] - levels * ctx.u_max[f]
+  )
+  return (
+    -ctx.benefit[f] * levels
+    + ctx.B * cap_short ** 2
+    + ctx.C * ctx.switch_cost * np.abs(levels - ctx.r_prev[f])
+  )
+
+
+def exact_minimize(ctx: HamiltonianContext, r_max: np.ndarray) -> np.ndarray:
+  # multi-choice knapsack DP over the integer RAM budget: exact argmin of the
+  # Hamiltonian under the hard RAM constraint (per-node problem is separable
+  # per function; RAM is the only coupling)
+  ram_req = np.rint(ctx.ram_req).astype(int)
+  budget = int(np.floor(ctx.ram_cap + 1e-9))
+  if not np.allclose(ctx.ram_req, ram_req, atol=1e-9) or (ram_req <= 0).any():
+    raise ValueError(
+      "exact_minimize requires positive integer ram_req; use sbm_method 'dsb'"
+    )
+  Nf = len(r_max)
+  INF = np.inf
+  best = np.full(budget + 1, 0.0)  # value of best partial assignment
+  choice = np.zeros((Nf, budget + 1), dtype=int)
+  for f in range(Nf):
+    values = _level_values(ctx, f, int(r_max[f]))
+    new_best = np.full(budget + 1, INF)
+    for b in range(budget + 1):
+      k_hi = min(int(r_max[f]), b // ram_req[f])
+      for k in range(k_hi + 1):
+        cand = best[b - k * ram_req[f]] + values[k]
+        if cand < new_best[b]:
+          new_best[b] = cand
+          choice[f, b] = k
+    best = new_best
+  # backtrack from the best final budget
+  b = int(np.argmin(best))
+  r = np.zeros(Nf, dtype=int)
+  for f in range(Nf - 1, -1, -1):
+    r[f] = choice[f, b]
+    b -= r[f] * ram_req[f]
+  return r
+
+
 def repair(
     r: np.ndarray, benefit: np.ndarray, ram_req: np.ndarray, ram_cap: float
   ) -> np.ndarray:

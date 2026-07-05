@@ -40,6 +40,7 @@ class PlasmaOptions:
   eps_commit: float = 0.05
   n_hyst: int = 2
   p_commit: float = 0.5
+  sbm_method: str = "exact"  # "exact" | "dsb"
   # protocol
   hb_latency_rounds: int = 1
   hb_loss: float = 0.0
@@ -56,6 +57,8 @@ class PlasmaOptions:
       raise ValueError(f"W must be > 0, got {self.W}")
     if self.hb_latency_rounds > self.staleness_rounds:
       raise ValueError(f"hb_latency_rounds ({self.hb_latency_rounds}) must be <= staleness_rounds ({self.staleness_rounds}), otherwise every neighbor is permanently stale")
+    if self.sbm_method not in ("exact", "dsb"):
+      raise ValueError(f"sbm_method must be 'exact' or 'dsb', got {self.sbm_method!r}")
 
 
 @dataclass(frozen=True)

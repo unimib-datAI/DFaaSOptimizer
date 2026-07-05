@@ -4,7 +4,7 @@ import pytest
 from plasma.core.types import PlasmaOptions
 from plasma.core.sbm import (
   HamiltonianContext, bits_per_fn, brute_force, decode_spins, dsb_minimize,
-  hamiltonian, r_max_per_fn, repair,
+  exact_minimize, hamiltonian, r_max_per_fn, repair,
 )
 
 
@@ -134,3 +134,42 @@ def test_committed_r_is_always_ram_feasible():
   node.demand_hat = np.array([50.0, 50.0])  # wants far more than RAM allows
   node.sb_pass(round_=0)
   assert (node.r * node.params.ram_req).sum() <= 4.0
+
+
+def test_exact_matches_brute_force_ground_state():
+  rng = np.random.default_rng(0)
+  for trial in range(50):
+    Nf = 3
+    ram_req = rng.integers(1, 4, Nf).astype(float)
+    ram_cap = float(rng.integers(4, 13))
+    r_max = np.floor(ram_cap / ram_req).astype(int)
+    ctx = HamiltonianContext(
+      benefit=rng.uniform(0, 5, Nf), ram_req=ram_req, ram_cap=ram_cap,
+      demand_hat=rng.uniform(0, 10, Nf), margin=rng.uniform(0, 2, Nf),
+      u_max=rng.uniform(1, 6, Nf), r_prev=rng.integers(0, 3, Nf),
+      A=10.0, B=1.0, C=0.1, switch_cost=1.0,
+    )
+    r_star = exact_minimize(ctx, r_max)
+    assert (ctx.ram_req * r_star).sum() <= ctx.ram_cap + 1e-9
+    # brute force over all feasible r
+    from itertools import product as iproduct
+    best = min(
+      (hamiltonian(np.array(rr), ctx)
+       for rr in iproduct(*[range(m + 1) for m in r_max])
+       if (ctx.ram_req * np.array(rr)).sum() <= ctx.ram_cap + 1e-9))
+    assert hamiltonian(r_star, ctx) <= best + 1e-9
+
+
+def test_exact_rejects_fractional_ram():
+  ctx = _ctx(ram_req=np.array([1.5, 2.0]))
+  with pytest.raises(ValueError, match="dsb"):
+    exact_minimize(ctx, np.array([5, 4]))
+
+
+def test_sb_pass_exact_is_deterministic():
+  a = _sb_node(n_hyst=1)
+  b = _sb_node(n_hyst=1)
+  for node in (a, b):
+    node.demand_hat = np.array([8.0, 3.0])
+    node.sb_pass(round_=0)
+  assert np.array_equal(a.r, b.r)

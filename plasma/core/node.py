@@ -7,8 +7,8 @@ import numpy as np
 from plasma.core.protocol import HeartbeatCache
 from plasma.core.routing import choose_target, target_weights, update_conductance
 from plasma.core.sbm import (
-  HamiltonianContext, bits_per_fn, decode_spins, dsb_minimize, hamiltonian,
-  r_max_per_fn, repair,
+  HamiltonianContext, bits_per_fn, decode_spins, dsb_minimize, exact_minimize,
+  hamiltonian, r_max_per_fn, repair,
 )
 from plasma.core.types import LOCAL, REJ, Heartbeat, PlasmaOptions
 
@@ -194,19 +194,22 @@ class PlasmaNode:
       return False
     ctx = self._hamiltonian_ctx(round_)
     r_max = r_max_per_fn(self.params.ram_cap, self.params.ram_req)
-    bits = bits_per_fn(r_max)
-    n_spins = int(bits.sum())
-    if n_spins == 0:
-      return False
+    if self.opts.sbm_method == "exact":
+      r_new = exact_minimize(ctx, r_max)
+    else:
+      bits = bits_per_fn(r_max)
+      n_spins = int(bits.sum())
+      if n_spins == 0:
+        return False
 
-    def H(s: np.ndarray) -> float:
-      return hamiltonian(decode_spins(s, bits, r_max), ctx)
+      def H(s: np.ndarray) -> float:
+        return hamiltonian(decode_spins(s, bits, r_max), ctx)
 
-    s = dsb_minimize(H, n_spins, self.opts, self.rng)
-    r_new = repair(
-      decode_spins(s, bits, r_max), ctx.benefit, self.params.ram_req,
-      self.params.ram_cap,
-    )
+      s = dsb_minimize(H, n_spins, self.opts, self.rng)
+      r_new = repair(
+        decode_spins(s, bits, r_max), ctx.benefit, self.params.ram_req,
+        self.params.ram_cap,
+      )
     h_prev = hamiltonian(self.r, ctx)
     h_new = hamiltonian(r_new, ctx)
     improving = h_new < h_prev - self.opts.eps_commit * abs(h_prev)
