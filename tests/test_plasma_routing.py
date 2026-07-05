@@ -102,7 +102,27 @@ def test_nack_counts_as_origin_rejection_and_pull():
   node.record_forward_results(0, k=0, attempted=2, accepted=1)
   counts = node.end_window()
   assert counts.z[0] == 1 and counts.y[0, 0] == 1
-  assert node.make_heartbeat().pull[0] == 2
+  # pull is accounted at routing time, not at result recording
+  assert node.make_heartbeat().pull[0] == 0
+
+
+def test_pull_counts_overflow_exactly_once():
+  from plasma.core.types import Heartbeat
+  node = _node(r=(1,), u_max=(5.0,))  # capacity 5
+  node.begin_window()
+  # fresh heartbeat opens the neighbor gate so overflow actually forwards
+  node.on_heartbeat(
+    Heartbeat(node=1, seq=1, spare=(50.0,), alpha=(2.0,), pull=(0.0,)),
+    round_=0,
+  )
+  desired = node.route_window(np.array([50]), round_=0)
+  assert desired[0].sum() > 0  # some overflow really was forwarded
+  for k in range(desired.shape[1]):
+    n = int(desired[0, k])
+    if n:
+      node.record_forward_results(0, k, n, accepted=0)  # all NACKed
+  node.end_window()
+  assert node.make_heartbeat().pull[0] == 45  # exactly the overflow, not more
 
 
 def test_zero_replicas_rejects_or_forwards_everything():

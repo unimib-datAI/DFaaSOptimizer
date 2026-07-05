@@ -147,10 +147,11 @@ class PlasmaNode:
   def record_forward_results(
       self, f: int, k: int, attempted: int, accepted: int
     ) -> None:
+    # pull is fully accounted at routing time (route_window adds the whole
+    # overflow); adding attempted here would double-count forwarded requests
     self._y[k, f] += accepted
     self._phi[f, 2 + k] += accepted
     self._z[f] += attempted - accepted
-    self._pull[f] += attempted
 
   # ---------------- Layer A: control plane ----------------
 
