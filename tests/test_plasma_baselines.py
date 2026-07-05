@@ -116,3 +116,57 @@ def test_adaptation_lag_nan_when_never_recovering():
   lag = adaptation_lag(times, np.zeros(3), np.full(3, 10.0),
                        change_points=[0.0])
   assert np.isnan(lag[0])
+
+
+def _scenario_config(tmp_path, Nn=3, max_steps=6):
+  return {
+    "base_solution_folder": str(tmp_path),
+    "verbose": 0,
+    "seed": 7,
+    "max_steps": max_steps,
+    "min_run_time": 0,
+    "max_run_time": max_steps,
+    "run_time_step": 1,
+    "checkpoint_interval": 1,
+    "solver_name": "none",
+    "solver_options": {
+      "plasma": {"rounds_per_step": 5, "k_sb": 2, "n_sb_steps": 100,
+                 "n_hyst": 1}
+    },
+    "limits": {
+      "Nn": {"min": Nn, "max": Nn},
+      "Nf": {"min": 2, "max": 2},
+      "neighborhood": {"m": Nn - 1},
+      "demand": {"values": [1.0, 1.2]},
+      "memory_capacity": {"min": 12, "max": 12},
+      "memory_requirement": {"values": [2, 3]},
+      "max_utilization": {"min": 0.65, "max": 0.75},
+      "load": {"trace_type": "sinusoidal",
+               "min": {"min": 5, "max": 10},
+               "max": {"min": 20, "max": 30}},
+      "weights": {"alpha": {"min": 1.0, "max": 1.5},
+                  "beta_multiplier": {"min": 1.5, "max": 2.5},
+                  "gamma": {"min": 0.05, "max": 0.15},
+                  "delta_multiplier": {"min": 0.1, "max": 0.2}},
+    },
+  }
+
+
+def _solver_available(name="gurobi"):
+  try:
+    from pyomo.environ import SolverFactory
+    return SolverFactory(name).available(exception_flag=False)
+  except Exception:
+    return False
+
+
+@pytest.mark.skipif(not _solver_available(), reason="no MILP solver")
+def test_scenario_driver_produces_comparison(tmp_path):
+  from plasma.eval.scenario import run_scenario
+  config = _scenario_config(tmp_path)
+  df = run_scenario(config, kill=(1, 2, 4), solver_name="gurobi",
+                    solver_options={"OutputFlag": 0})
+  assert list(df.columns) == ["t", "plasma", "oracle", "stale_milp",
+                              "greedy", "plasma_msgs_per_node_s"]
+  assert len(df) == 6
+  assert (df["oracle"] >= df["plasma"] - 1e-6).all()  # oracle upper-bounds
