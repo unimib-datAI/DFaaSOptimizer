@@ -7,7 +7,7 @@ import numpy as np
 
 from plasma.core.node import PlasmaNode
 from plasma.core.protocol import decode_heartbeat, encode_heartbeat
-from plasma.core.types import LOCAL, REJ, PlasmaOptions
+from plasma.core.types import PlasmaOptions
 from plasma.sim.clock import RoundClock
 
 
@@ -39,14 +39,15 @@ class PlasmaEngine:
     for i, node in enumerate(self.nodes):
       if not node.alive:
         continue
-      for f in range(node.Nf):
-        for _ in range(int(arrivals[i, f])):
-          col = node.route_request(f, round_)
-          if col >= 2:
-            j = node.params.nbrs[col - 2]
-            self.msg_count += 1
-            accepted = self.nodes[j].admit_forward(f)
-            node.record_forward_result(f, col, accepted)
+      desired = node.route_window(arrivals[i], round_)
+      for k, j in enumerate(node.params.nbrs):
+        for f in range(node.Nf):
+          n = int(desired[f, k])
+          if n == 0:
+            continue
+          self.msg_count += n
+          accepted = self.nodes[j].accept_forwards(f, n)
+          node.record_forward_results(f, k, n, accepted)
 
   def _send_heartbeats(self, round_: int) -> None:
     for node in self.nodes:

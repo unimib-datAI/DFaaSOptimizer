@@ -5,7 +5,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from plasma.core.protocol import HeartbeatCache
-from plasma.core.routing import choose_target, target_weights, update_conductance
+from plasma.core.routing import target_weights, update_conductance
 from plasma.core.sbm import (
   HamiltonianContext, bits_per_fn, decode_spins, dsb_minimize, exact_minimize,
   hamiltonian, r_max_per_fn, repair,
@@ -86,49 +86,71 @@ class PlasmaNode:
     # through whenever capacity has a fractional part (e.g. 2.085 admits 3)
     return int(self._capacity(f) + 1e-9)
 
-  def route_request(self, f: int, round_: int) -> int:
-    self._arrivals[f] += 1
-    if self._admitted[f] < self._capacity_units(f):
-      # local-first: serve own load up to capacity (reference-model x),
-      # Physarum coordinates only the overflow
-      self._x[f] += 1
-      self._admitted[f] += 1
-      self._phi[f, LOCAL] += 1
-      return LOCAL
-    nbr_spare = np.array([
-      self.cache.spare(
-        j, round_, self.opts.staleness_rounds, self.Nf
-      )[f] for j in self.params.nbrs
+  def _nbr_spare(self, round_: int) -> np.ndarray:
+    # (deg, Nf) spare matrix, ONE cache read per neighbor per window
+    return np.array([
+      self.cache.spare(j, round_, self.opts.staleness_rounds, self.Nf)
+      for j in self.params.nbrs
     ])
-    weights = target_weights(
-      self.D[f], False, nbr_spare, self.opts.eps_explore
-    )
-    unsplittable = (
-      self.opts.rare_function_mode == "unsplittable"
-      and self.lam_hat[f] < self.opts.lambda_split_threshold
-    )
-    col = choose_target(self.rng, weights, unsplittable)
-    if col == LOCAL:  # weight is 0; only reachable if every weight is 0
-      col = REJ
-    if col == REJ:
-      self._z[f] += 1
-      self._pull[f] += 1
-    return col
 
-  def admit_forward(self, f: int) -> bool:
-    if not self.alive or self._admitted[f] >= self._capacity_units(f):
-      return False
-    self._admitted[f] += 1
-    self._xi[f] += 1
-    return True
+  def route_window(self, arrivals: np.ndarray, round_: int) -> np.ndarray:
+    self._arrivals += arrivals
+    Nf, deg = self.Nf, self.deg
+    desired = np.zeros((Nf, deg), dtype=int)
+    nbr_spare = self._nbr_spare(round_)
+    for f in range(Nf):
+      n = int(arrivals[f])
+      if n == 0:
+        continue
+      cap = self._capacity_units(f)
+      local = max(0, min(n, cap - int(self._admitted[f])))
+      if local:
+        self._x[f] += local
+        self._admitted[f] += local
+        self._phi[f, LOCAL] += local
+      overflow = n - local
+      if overflow == 0:
+        continue
+      weights = target_weights(
+        self.D[f], False, nbr_spare[:, f], self.opts.eps_explore
+      )
+      weights[LOCAL] = 0.0
+      unsplittable = (
+        self.opts.rare_function_mode == "unsplittable"
+        and self.lam_hat[f] < self.opts.lambda_split_threshold
+      )
+      if unsplittable:
+        counts = np.zeros(len(weights), dtype=int)
+        counts[int(np.argmax(weights))] = overflow
+      else:
+        total = weights.sum()
+        if total <= 0.0:
+          counts = np.zeros(len(weights), dtype=int)
+          counts[REJ] = overflow
+        else:
+          counts = self.rng.multinomial(overflow, weights / total)
+      counts[REJ] += counts[LOCAL]  # zero-weight LOCAL can only be hit by argmax ties
+      self._z[f] += counts[REJ]
+      self._pull[f] += overflow
+      desired[f, :] = counts[2:]
+    return desired
 
-  def record_forward_result(self, f: int, col: int, accepted: bool) -> None:
-    self._pull[f] += 1
-    if accepted:
-      self._y[col - 2, f] += 1
-      self._phi[f, col] += 1
-    else:
-      self._z[f] += 1
+  def accept_forwards(self, f: int, n: int) -> int:
+    if not self.alive:
+      return 0
+    remaining = self._capacity_units(f) - int(self._admitted[f])
+    k = max(0, min(n, remaining))
+    self._admitted[f] += k
+    self._xi[f] += k
+    return k
+
+  def record_forward_results(
+      self, f: int, k: int, attempted: int, accepted: int
+    ) -> None:
+    self._y[k, f] += accepted
+    self._phi[f, 2 + k] += accepted
+    self._z[f] += attempted - accepted
+    self._pull[f] += attempted
 
   # ---------------- Layer A: control plane ----------------
 

@@ -81,50 +81,49 @@ def _node(r=(2,), u_max=(5.0,), nbrs=(1,), opts=None):
 def test_capacity_gate_never_admits_beyond_r_umax():
   node = _node(r=(2,), u_max=(5.0,))  # capacity 10 req/window
   node.begin_window()
-  local = sum(node.route_request(0, round_=0) == LOCAL for _ in range(100))
+  desired = node.route_window(np.array([100]), round_=0)
   counts = node.end_window()
-  assert local <= 10
-  assert counts.x[0] == local
+  assert counts.x[0] == 10                       # local-first fills capacity
+  assert counts.z[0] + desired[0].sum() == 90    # overflow rejected or forwarded
 
 
 def test_incoming_forwards_share_the_same_capacity():
   node = _node(r=(1,), u_max=(3.0,))
   node.begin_window()
-  admitted = sum(node.admit_forward(0) for _ in range(10))
-  assert admitted == 3
-  assert node.route_request(0, round_=0) != LOCAL  # capacity exhausted
+  assert node.accept_forwards(0, 10) == 3
+  desired = node.route_window(np.array([5]), round_=0)
+  counts = node.end_window()
+  assert counts.x[0] == 0                        # capacity consumed by forwards
 
 
 def test_nack_counts_as_origin_rejection_and_pull():
   node = _node()
   node.begin_window()
-  node.record_forward_result(0, col=2, accepted=False)
-  node.record_forward_result(0, col=2, accepted=True)
+  node.record_forward_results(0, k=0, attempted=2, accepted=1)
   counts = node.end_window()
-  assert counts.z[0] == 1
-  assert counts.y[0, 0] == 1
-  hb = node.make_heartbeat()
-  assert hb.pull[0] == 2  # both attempts are offload pressure
+  assert counts.z[0] == 1 and counts.y[0, 0] == 1
+  assert node.make_heartbeat().pull[0] == 2
 
 
 def test_zero_replicas_rejects_or_forwards_everything():
   node = _node(r=(0,))
   node.begin_window()
-  for _ in range(20):
-    assert node.route_request(0, round_=0) != LOCAL
+  desired = node.route_window(np.array([20]), round_=0)
+  counts = node.end_window()
+  assert counts.x[0] == 0
+  assert counts.z[0] + desired[0].sum() == 20
 
 
 def test_dead_node_admits_nothing():
   node = _node()
   node.alive = False
-  assert node.admit_forward(0) is False
+  assert node.accept_forwards(0, 5) == 0
 
 
 def test_end_window_reinforces_local_conductance():
   node = _node(r=(4,), u_max=(100.0,))
   node.begin_window()
-  for _ in range(50):
-    node.route_request(0, round_=0)
+  node.route_window(np.array([50]), round_=0)
   d_before = node.D[0, LOCAL]
   node.end_window()
   assert node.D[0, LOCAL] > d_before  # phi*alpha > evaporation at D_init
@@ -133,9 +132,7 @@ def test_end_window_reinforces_local_conductance():
 def test_spare_advertises_floored_capacity():
   node = _node(r=(1,), u_max=(2.085,))  # capacity_units = 2
   node.begin_window()
-  assert node.admit_forward(0)
-  assert node.admit_forward(0)
-  assert not node.admit_forward(0)  # floored capacity exhausted
+  assert node.accept_forwards(0, 3) == 2  # floored capacity exhausted
   node.end_window()
   hb = node.make_heartbeat()
   assert hb.spare[0] == 0.0  # not 0.085: nothing more is admittable
@@ -173,9 +170,10 @@ def test_physarum_converges_to_lp_routing_fractions():
 
 
 def test_local_first_admission_fills_local_capacity_before_any_forward():
-  # capacity 10: the FIRST 10 requests must all go LOCAL, deterministically
+  # capacity 10: local-first admits exactly 10, the rest is overflow
   node = _node(r=(2,), u_max=(5.0,))
   node.begin_window()
-  cols = [node.route_request(0, round_=0) for _ in range(15)]
-  assert cols[:10] == [LOCAL] * 10
-  assert LOCAL not in cols[10:]
+  desired = node.route_window(np.array([15]), round_=0)
+  counts = node.end_window()
+  assert counts.x[0] == 10
+  assert counts.z[0] + desired[0].sum() == 5
