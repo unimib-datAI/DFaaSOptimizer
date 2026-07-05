@@ -88,25 +88,29 @@ class PlasmaNode:
 
   def route_request(self, f: int, round_: int) -> int:
     self._arrivals[f] += 1
-    local_open = self._admitted[f] < self._capacity_units(f)
+    if self._admitted[f] < self._capacity_units(f):
+      # local-first: serve own load up to capacity (reference-model x),
+      # Physarum coordinates only the overflow
+      self._x[f] += 1
+      self._admitted[f] += 1
+      self._phi[f, LOCAL] += 1
+      return LOCAL
     nbr_spare = np.array([
       self.cache.spare(
         j, round_, self.opts.staleness_rounds, self.Nf
       )[f] for j in self.params.nbrs
     ])
     weights = target_weights(
-      self.D[f], local_open, nbr_spare, self.opts.eps_explore
+      self.D[f], False, nbr_spare, self.opts.eps_explore
     )
     unsplittable = (
       self.opts.rare_function_mode == "unsplittable"
       and self.lam_hat[f] < self.opts.lambda_split_threshold
     )
     col = choose_target(self.rng, weights, unsplittable)
-    if col == LOCAL:
-      self._x[f] += 1
-      self._admitted[f] += 1
-      self._phi[f, LOCAL] += 1
-    elif col == REJ:
+    if col == LOCAL:  # weight is 0; only reachable if every weight is 0
+      col = REJ
+    if col == REJ:
       self._z[f] += 1
       self._pull[f] += 1
     return col

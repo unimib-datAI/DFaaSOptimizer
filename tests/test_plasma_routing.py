@@ -170,3 +170,12 @@ def test_physarum_converges_to_lp_routing_fractions():
   )
   assert abs(x_acc[0] / 50 - lp_x[0, 0]) / 40.0 <= 0.05   # +-5% band
   assert abs(y_acc / 50 - lp_y[0, 1, 0]) / 40.0 <= 0.05
+
+
+def test_local_first_admission_fills_local_capacity_before_any_forward():
+  # capacity 10: the FIRST 10 requests must all go LOCAL, deterministically
+  node = _node(r=(2,), u_max=(5.0,))
+  node.begin_window()
+  cols = [node.route_request(0, round_=0) for _ in range(15)]
+  assert cols[:10] == [LOCAL] * 10
+  assert LOCAL not in cols[10:]
