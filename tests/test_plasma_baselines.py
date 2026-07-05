@@ -160,6 +160,15 @@ def _solver_available(name="gurobi"):
     return False
 
 
+def test_sweep_driver_runs_grid(tmp_path):
+  from plasma.eval.sweep import sweep
+  config = _scenario_config(tmp_path)
+  df = sweep(config, {"mu": [0.1, 0.3]})
+  assert len(df) == 2
+  assert set(df["mu"]) == {0.1, 0.3}
+  assert df["obj_mean"].notna().all()
+
+
 @pytest.mark.skipif(not _solver_available(), reason="no MILP solver")
 def test_scenario_driver_produces_comparison(tmp_path):
   from plasma.eval.scenario import run_scenario
