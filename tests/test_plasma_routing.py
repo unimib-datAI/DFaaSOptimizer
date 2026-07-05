@@ -66,16 +66,22 @@ def test_conductance_clipped_above():
 from plasma.core.node import NodeParams, PlasmaNode
 
 
-def _node(r=(2,), u_max=(5.0,), nbrs=(1,), opts=None):
+def _node(r=(2,), u_max=(5.0,), nbrs=(1,), opts=None, beta=1.5):
   Nf = len(u_max)
   params = NodeParams(
     node_id=0, nbrs=tuple(nbrs), alpha=np.full(Nf, 2.0),
-    gamma=np.full(Nf, 0.1), beta=np.full((len(nbrs), Nf), 1.5),
+    gamma=np.full(Nf, 0.1), beta=np.full((len(nbrs), Nf), beta),
     u_max=np.array(u_max), ram_cap=100.0, ram_req=np.full(Nf, 2.0),
   )
   node = PlasmaNode(params, opts or PlasmaOptions(), np.random.default_rng(0))
   node.r = np.array(r, dtype=int)
   return node
+
+
+def _fresh_spare_hb(node, nbr, spare, Nf=1):
+  from plasma.core.types import Heartbeat
+  node.on_heartbeat(Heartbeat(node=nbr, seq=1, spare=(spare,) * Nf,
+                              alpha=(1.0,) * Nf, pull=(0.0,) * Nf), round_=0)
 
 
 def test_capacity_gate_never_admits_beyond_r_umax():
@@ -90,7 +96,7 @@ def test_capacity_gate_never_admits_beyond_r_umax():
 def test_incoming_forwards_share_the_same_capacity():
   node = _node(r=(1,), u_max=(3.0,))
   node.begin_window()
-  assert node.accept_forwards(0, 10) == 3
+  assert node.accept_forwards(0, 10, sender=1) == 3
   desired = node.route_window(np.array([5]), round_=0)
   counts = node.end_window()
   assert counts.x[0] == 0                        # capacity consumed by forwards
@@ -99,8 +105,10 @@ def test_incoming_forwards_share_the_same_capacity():
 def test_nack_counts_as_origin_rejection_and_pull():
   node = _node()
   node.begin_window()
+  node.route_window(np.array([10]), round_=0)  # saturate local capacity (10)
   node.record_forward_results(0, k=0, attempted=2, accepted=1)
   counts = node.end_window()
+  # capacity is exhausted, so the NACKed unit has no room to retry locally
   assert counts.z[0] == 1 and counts.y[0, 0] == 1
   # pull is accounted at routing time, not at result recording
   assert node.make_heartbeat().pull[0] == 0
@@ -137,7 +145,7 @@ def test_zero_replicas_rejects_or_forwards_everything():
 def test_dead_node_admits_nothing():
   node = _node()
   node.alive = False
-  assert node.accept_forwards(0, 5) == 0
+  assert node.accept_forwards(0, 5, sender=1) == 0
 
 
 def test_end_window_reinforces_local_conductance():
@@ -152,7 +160,7 @@ def test_end_window_reinforces_local_conductance():
 def test_spare_advertises_floored_capacity():
   node = _node(r=(1,), u_max=(2.085,))  # capacity_units = 2
   node.begin_window()
-  assert node.accept_forwards(0, 3) == 2  # floored capacity exhausted
+  assert node.accept_forwards(0, 3, sender=1) == 2  # floored capacity exhausted
   node.end_window()
   hb = node.make_heartbeat()
   assert hb.spare[0] == 0.0  # not 0.085: nothing more is admittable
@@ -197,3 +205,44 @@ def test_local_first_admission_fills_local_capacity_before_any_forward():
   counts = node.end_window()
   assert counts.x[0] == 10
   assert counts.z[0] + desired[0].sum() == 5
+
+
+def test_reward_aware_prefers_high_beta_neighbor_over_local():
+  node = _node(r=(4,), u_max=(5.0,), beta=3.0)   # beta 3.0 > alpha 2.0
+  _fresh_spare_hb(node, 1, spare=8.0)
+  node.begin_window()
+  desired = node.route_window(np.array([10]), round_=0)
+  counts = node.end_window()
+  assert desired[0, 0] == 8          # up to advertised spare goes to the neighbor
+  assert counts.x[0] == 2            # remainder served locally (capacity 20)
+  assert counts.z[0] == 0
+
+
+def test_alpha_dominant_degenerates_to_local_first():
+  node = _node(r=(4,), u_max=(5.0,), beta=1.5)   # beta 1.5 < alpha 2.0
+  _fresh_spare_hb(node, 1, spare=8.0)
+  node.begin_window()
+  desired = node.route_window(np.array([10]), round_=0)
+  counts = node.end_window()
+  assert counts.x[0] == 10           # all local, exactly today's behavior
+  assert desired[0].sum() == 0
+
+
+def test_anti_ping_pong_blocks_preferred_forward():
+  node = _node(r=(4,), u_max=(5.0,), beta=3.0)
+  _fresh_spare_hb(node, 1, spare=8.0)
+  node.begin_window()
+  assert node.accept_forwards(0, 3, sender=1) == 3   # we accepted from nbr 1
+  node.end_window()                                   # snapshot recv_from
+  node.begin_window()
+  desired = node.route_window(np.array([10]), round_=0)
+  assert desired[0, 0] == 0          # preferred forwarding to 1 is blocked
+
+
+def test_nack_retries_locally_before_rejecting():
+  node = _node(r=(4,), u_max=(5.0,))  # capacity 20, plenty free
+  node.begin_window()
+  node.record_forward_results(0, k=0, attempted=5, accepted=0)
+  counts = node.end_window()
+  assert counts.x[0] == 5            # NACKed requests served locally
+  assert counts.z[0] == 0

@@ -52,6 +52,7 @@ class PlasmaNode:
     self._seq = 0
     self._spare_last = np.zeros(Nf)
     self._pull_last = np.zeros(Nf)
+    self._recv_from_last = np.zeros((deg, Nf))
     # rewards are constant: local alpha, REJ floor, per-neighbor beta
     self._rewards = np.empty((Nf, 2 + deg))
     self._rewards[:, LOCAL] = params.alpha
@@ -74,6 +75,7 @@ class PlasmaNode:
     self._pull = np.zeros(Nf)
     self._admitted = np.zeros(Nf)
     self._arrivals = np.zeros(Nf)
+    self._recv_from = np.zeros((deg, Nf))
 
   def _capacity(self, f: int) -> float:
     return float(self.r[f]) * self.params.u_max[f] * self.opts.W
@@ -105,6 +107,25 @@ class PlasmaNode:
       n = int(arrivals[f])
       if n == 0:
         continue
+      preferred = 0
+      remaining = n
+      if deg:
+        candidates = [
+          k for k in range(deg)
+          if nbr_spare[k, f] > 0 and self._recv_from_last[k, f] == 0
+          and self.params.beta[k, f] > self.params.alpha[f]
+        ]
+        candidates.sort(key=lambda k: self.params.beta[k, f], reverse=True)
+        for k in candidates:
+          if remaining <= 0:
+            break
+          take = min(remaining, int(nbr_spare[k, f]))
+          if take <= 0:
+            continue
+          desired[f, k] += take
+          remaining -= take
+          preferred += take
+      n = remaining
       cap = self._capacity_units(f)
       local = max(0, min(n, cap - int(self._admitted[f])))
       if local:
@@ -112,6 +133,7 @@ class PlasmaNode:
         self._admitted[f] += local
         self._phi[f, LOCAL] += local
       overflow = n - local
+      self._pull[f] += preferred
       if overflow == 0:
         continue
       weights = target_weights(
@@ -135,16 +157,19 @@ class PlasmaNode:
       counts[REJ] += counts[LOCAL]  # zero-weight LOCAL can only be hit by argmax ties
       self._z[f] += counts[REJ]
       self._pull[f] += overflow
-      desired[f, :] = counts[2:]
+      desired[f, :] += counts[2:]
     return desired
 
-  def accept_forwards(self, f: int, n: int) -> int:
+  def accept_forwards(self, f: int, n: int, sender: int) -> int:
     if not self.alive:
       return 0
     remaining = self._capacity_units(f) - int(self._admitted[f])
     k = max(0, min(n, remaining))
     self._admitted[f] += k
     self._xi[f] += k
+    if k:
+      idx = self.params.nbrs.index(sender)
+      self._recv_from[idx, f] += k
     return k
 
   def record_forward_results(
@@ -154,7 +179,13 @@ class PlasmaNode:
     # overflow); adding attempted here would double-count forwarded requests
     self._y[k, f] += accepted
     self._phi[f, 2 + k] += accepted
-    self._z[f] += attempted - accepted
+    nacked = attempted - accepted
+    local_units = self._capacity_units(f)
+    retry = int(min(nacked, max(0, local_units - self._admitted[f])))
+    self._x[f] += retry
+    self._admitted[f] += retry
+    self._phi[f, LOCAL] += retry
+    self._z[f] += nacked - retry
 
   # ---------------- Layer A: control plane ----------------
 
@@ -169,6 +200,7 @@ class PlasmaNode:
       - self._admitted,
     )
     self._pull_last = self._pull
+    self._recv_from_last = self._recv_from
     self.begin_window()
     return counts
 
