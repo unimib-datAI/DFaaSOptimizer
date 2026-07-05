@@ -173,3 +173,19 @@ def test_sb_pass_exact_is_deterministic():
     node.demand_hat = np.array([8.0, 3.0])
     node.sb_pass(round_=0)
   assert np.array_equal(a.r, b.r)
+
+
+def test_exact_minimize_fast_on_large_ram():
+  import time
+  ctx = HamiltonianContext(
+    benefit=np.array([3.0, 1.0, 2.0]), ram_req=np.array([128.0, 512.0, 128.0]),
+    ram_cap=32768.0, demand_hat=np.array([40.0, 10.0, 30.0]),
+    margin=np.array([2.0, 1.0, 2.0]), u_max=np.array([1.2, 1.1, 0.9]),
+    r_prev=np.array([0, 0, 0]), A=10.0, B=1.0, C=0.1, switch_cost=1.0,
+  )
+  r_max = np.floor(ctx.ram_cap / ctx.ram_req).astype(int)
+  start = time.perf_counter()
+  r = exact_minimize(ctx, r_max)
+  elapsed = time.perf_counter() - start
+  assert (ctx.ram_req * r).sum() <= ctx.ram_cap + 1e-9
+  assert elapsed < 0.5  # was ~1.7s before gcd scaling

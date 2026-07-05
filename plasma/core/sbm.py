@@ -134,6 +134,10 @@ def exact_minimize(ctx: HamiltonianContext, r_max: np.ndarray) -> np.ndarray:
     raise ValueError(
       "exact_minimize requires positive integer ram_req; use sbm_method 'dsb'"
     )
+  # gcd scaling: states are multiples of gcd(ram_req); exactness preserved
+  scale = int(np.gcd.reduce(ram_req))
+  ram_req = ram_req // scale
+  budget = budget // scale
   Nf = len(r_max)
   INF = np.inf
   best = np.full(budget + 1, 0.0)  # value of best partial assignment
