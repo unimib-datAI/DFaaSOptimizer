@@ -48,7 +48,6 @@ class PlasmaNode:
     self.r = np.zeros(Nf, dtype=int)
     self.D = np.full((Nf, 2 + deg), opts.D_init)
     self.cache = HeartbeatCache()
-    self.demand_hat = np.zeros(Nf)
     self.lam_hat = np.zeros(Nf)
     self._seq = 0
     self._spare_last = np.zeros(Nf)
@@ -88,6 +87,10 @@ class PlasmaNode:
 
   def _nbr_spare(self, round_: int) -> np.ndarray:
     # (deg, Nf) spare matrix, ONE cache read per neighbor per window
+    if self.deg == 0:
+      # ponytail: np.array([]) on an empty list degenerates to 1-D; a
+      # node with no neighbors still needs a (0, Nf) matrix for [:, f]
+      return np.zeros((0, self.Nf))
     return np.array([
       self.cache.spare(j, round_, self.opts.staleness_rounds, self.Nf)
       for j in self.params.nbrs
@@ -159,7 +162,6 @@ class PlasmaNode:
     counts = WindowCounts(x=self._x, z=self._z, y=self._y, xi=self._xi)
     self.D = update_conductance(self.D, self._phi, self._rewards, self.opts)
     ew = self.opts.ewma
-    self.demand_hat = (1 - ew) * self.demand_hat + ew * (self._x + self._xi)
     self.lam_hat = (1 - ew) * self.lam_hat + ew * self._arrivals
     self._spare_last = np.maximum(
       0.0,
@@ -200,15 +202,15 @@ class PlasmaNode:
 
   def _hamiltonian_ctx(self, round_: int) -> HamiltonianContext:
     pull_in = self.cache.pull_in(round_, self.opts.staleness_rounds, self.Nf)
-    demand_target = self.demand_hat + pull_in
+    demand_target = self.lam_hat + pull_in
     benefit = self.params.alpha * demand_target
     A = self.opts.A
     if A is None:
       A = max(1.0, 2.0 * float((benefit / self.params.ram_req).max()))
     return HamiltonianContext(
       benefit=benefit, ram_req=self.params.ram_req,
-      ram_cap=self.params.ram_cap, demand_hat=self.demand_hat,
-      margin=self.opts.z_delta * np.sqrt(self.demand_hat),
+      ram_cap=self.params.ram_cap, demand_hat=self.lam_hat,
+      margin=self.opts.z_delta * np.sqrt(self.lam_hat),
       u_max=self.params.u_max * self.opts.W, r_prev=self.r.copy(),
       A=A, B=self.opts.B, C=self.opts.C, switch_cost=self.opts.switch_cost,
       alpha=self.params.alpha, demand_target=demand_target,

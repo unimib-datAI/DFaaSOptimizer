@@ -107,24 +107,37 @@ def test_init_replicas_spread_fills_ram_round_robin():
 def test_sb_pass_grows_replicas_under_demand():
   node = _sb_node(n_hyst=1)
   node.r = np.zeros(2, dtype=int)
-  node.demand_hat = np.array([8.0, 0.0])
+  node.lam_hat = np.array([8.0, 0.0])
   committed = node.sb_pass(round_=0)
   assert committed
   assert node.r[0] >= 1
   assert (node.r * node.params.ram_req).sum() <= node.params.ram_cap
 
 
+def test_rejected_own_demand_still_drives_provisioning():
+  # a node with r=0 rejects everything; its provisioning target must still
+  # see the full arrival rate (lam_hat), not the accepted traffic (zero)
+  node = _sb_node(n_hyst=1)
+  node.r = np.zeros(2, dtype=int)
+  node.begin_window()
+  node.route_window(np.array([12, 0]), round_=0)
+  node.end_window()  # everything was rejected or forwarded; nothing accepted
+  committed = node.sb_pass(round_=0)
+  assert committed
+  assert node.r[0] >= 1  # grows replicas from rejected demand
+
+
 def test_hysteresis_requires_consecutive_confirmations():
   node = _sb_node(n_hyst=2)
   node.r = np.zeros(2, dtype=int)
-  node.demand_hat = np.array([8.0, 0.0])
+  node.lam_hat = np.array([8.0, 0.0])
   assert node.sb_pass(round_=0) is False  # first proposal only counts
   assert node.sb_pass(round_=1) is True   # second consecutive -> commit
 
 
 def test_p_commit_zero_never_commits():
   node = _sb_node(p_commit=0.0, n_hyst=1)
-  node.demand_hat = np.array([8.0, 0.0])
+  node.lam_hat = np.array([8.0, 0.0])
   for k in range(5):
     assert node.sb_pass(round_=k) is False
   assert node.r.sum() == 0
@@ -132,7 +145,7 @@ def test_p_commit_zero_never_commits():
 
 def test_committed_r_is_always_ram_feasible():
   node = _sb_node(n_hyst=1, ram_cap=4.0)
-  node.demand_hat = np.array([50.0, 50.0])  # wants far more than RAM allows
+  node.lam_hat = np.array([50.0, 50.0])  # wants far more than RAM allows
   node.sb_pass(round_=0)
   assert (node.r * node.params.ram_req).sum() <= 4.0
 
@@ -172,7 +185,7 @@ def test_sb_pass_exact_is_deterministic():
   a = _sb_node(n_hyst=1)
   b = _sb_node(n_hyst=1)
   for node in (a, b):
-    node.demand_hat = np.array([8.0, 3.0])
+    node.lam_hat = np.array([8.0, 3.0])
     node.sb_pass(round_=0)
   assert np.array_equal(a.r, b.r)
 
