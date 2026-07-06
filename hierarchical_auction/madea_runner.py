@@ -16,7 +16,7 @@ import pandas as pd
 from networkx import adjacency_matrix
 
 from hierarchical_auction.engine import HierarchicalAuctionEngine
-from models.sp import LSP, LSPr
+from models.sp import LSP, LSPr, LSPr_x
 from run_centralized_model import (
   get_current_load,
   init_complete_solution,
@@ -137,18 +137,26 @@ def run(
   runtimes = []
 
   for t in range(min_run_time, ub, run_time_step):
+    if verbose > 0:
+      print(f"t = {t}", file=log_stream, flush=True)
     started_at = time.monotonic()
     loadt = get_current_load(traces, agents, t)
     sp_data = deepcopy(base_data)
     sp_data[None]["incoming_load"] = loadt
     sp = LSP()
-    spr = LSPr()
+    spr = LSPr_x()
     (
-      sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, _, _, _, _,
+      sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, _, obj, tc, sp_runtime
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism,
     )
-
+    if verbose > 1:
+      print(
+        f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
+        f"x = {sp_x.tolist()}; runtime = {sp_runtime['tot']})", 
+        file = log_stream, 
+        flush = True
+      )
     u0 = np.ones((Nn, Nf)) * 0.8
     p = np.zeros((Nn, Nf))
     y = np.zeros((Nn, Nn, Nf))
@@ -170,7 +178,8 @@ def run(
 
     while not stop:
       if verbose > 0:
-        print(f"t = {t}; it = {it}", file=log_stream, flush=True)
+        print(f"    it = {it}", file=log_stream, flush=True)
+      s = time.monotonic()
       capacity, residual_capacity, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data,
       )
@@ -179,38 +188,95 @@ def run(
         len(accepted_queue) >= accepted_queue.maxlen
         and all(value == accepted_queue[0] for value in accepted_queue)
       )
-      bids, memory_bids, _ = define_bids(
+      e = time.monotonic()
+      if verbose > 1:
+        print(
+          f"        compute_residual_capacity: DONE ",
+          f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
+          f"ell = {ell.tolist()}; stalled = {stalled}; "
+          f"runtime = {(e - s)})", 
+          file = log_stream, 
+          flush = True
+        )
+      s = time.monotonic()
+      bids, memory_bids, n_auctions = define_bids(
         omega, blackboard, p, sp_data, neighborhood, sp_rho,
         first_level_options, latency, fairness,
         force_memory_bids=(sp_rho > 0).any() and stalled,
       )
-
+      e = time.monotonic()
+      rt = (e - s)
+      if verbose > 1:
+        print(
+          f"        define_bids: DONE; runtime = {rt/n_auctions}; "
+          f"n_auctions = {n_auctions}; tot runtime = {rt})", 
+          file = log_stream, 
+          flush = True
+        )
+        if verbose > 2:
+          print(bids, file = log_stream, flush = True)
       additional_replicas = np.zeros((Nn, Nf))
       if len(bids) > 0:
-        auction_y, p, additional_replicas, _ = evaluate_bids(
+        s = time.monotonic()
+        auction_y, p, additional_replicas, n_auctions = evaluate_bids(
           bids, residual_capacity, sp_data, y, ell, p, capacity, u0,
           first_level_options, sp_rho, sp_r,
           tentatively_start_replicas=(len(memory_bids) == 0),
         )
+        e = time.monotonic()
+        rt = (e - s)
+        if verbose > 1:
+          print(
+           f"        evaluate_bids: DONE; runtime = {rt/n_auctions}; "
+           f"n_auctions = {n_auctions}; tot runtime = {rt})", 
+           file = log_stream, 
+           flush = True
+          )
         y += auction_y
         rmp_omega = compute_offloaded_demand(y)
         bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
         if bad_nodes:
           raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
-        spr_sol, _, _, _ = compute_social_welfare(
+        spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
-          y, rmp_omega, parallelism,
+          y, rmp_omega, parallelism, sp_x
         )
-        sp_x, _, _, _, sp_r, sp_rho = spr_sol
+        if verbose > 1:
+          print(
+            f"        solve 'restricted problem': DONE ({spr_tc}; "
+            f"obj: {spr_obj}; runtime = {spr_runtime})", 
+            file = log_stream, 
+            flush = True
+          )
+        _, _, _, _, sp_r, sp_rho = spr_sol
         omega = sp_omega - rmp_omega
         omega[np.abs(omega) < tolerance] = 0.0
+        if verbose > 1:
+          print(
+            f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
+            f"omega = {omega.tolist()}; x = {sp_x.tolist()}; "
+            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()}; ", 
+            f"y = {y.tolist()})", 
+            file = log_stream, 
+            flush = True
+          )
 
       if len(memory_bids) > 0 and not (additional_replicas > 0).any():
+        s = time.monotonic()
         additional_replicas, sp_rho = start_additional_replicas(
           memory_bids, sp_r, sp_data, sp_rho,
         )
         sp_r += additional_replicas
-
+        e = time.monotonic()
+        if verbose > 1:
+          print(
+            f"        additional replicas started: DONE "
+            f"(a = {additional_replicas.tolist()}; "
+            f"rho = {sp_rho.tolist()}; runtime = {(e - s)})", 
+            file = log_stream, 
+            flush = True
+          )
+      s = time.monotonic()
       _, residual_capacity, _ = compute_residual_capacity(
         sp_x, y, sp_r, sp_data,
       )
@@ -224,15 +290,30 @@ def run(
       )
       y = result.y
       rmp_omega = compute_offloaded_demand(y)
+      e = time.monotonic()
+      if verbose > 1:
+        print(
+          f"        higher-level auction: DONE (y = {y.tolist()}; "
+          f"rmp_omega = {rmp_omega.tolist()}; runtime = {(e - s)})", 
+          file = log_stream, 
+          flush = True
+        )
       if result.accepted_allocations:
         bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
         if bad_nodes:
           raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
-        spr_sol, _, _, _ = compute_social_welfare(
+        spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
-          y, rmp_omega, parallelism,
+          y, rmp_omega, parallelism, sp_x
         )
-        sp_x, _, _, _, sp_r, sp_rho = spr_sol
+        _, _, _, _, sp_r, sp_rho = spr_sol
+        if verbose > 1:
+          print(
+            f"        solve 'restricted problem': DONE ({spr_tc}; "
+            f"obj: {spr_obj}; runtime = {spr_runtime})", 
+            file = log_stream, 
+            flush = True
+          )
       omega = sp_omega - rmp_omega
       omega[np.abs(omega) < tolerance] = 0.0
       fairness += (rmp_omega > 0).astype(fairness.dtype)
