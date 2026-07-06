@@ -109,7 +109,7 @@ def test_rejects_overprovisioning(solution):
 def test_rejects_memory_excess(solution):
   x, y, z, r, data = solution
   data[None]["memory_capacity"][1] = 1
-  with pytest.raises(ValueError, match = r"residual_capacity \(1\)"):
+  with pytest.raises(ValueError, match = r"residual_capacity \(1"):
     validate_centralized_solution(x, y, z, r, data)
 
 

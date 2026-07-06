@@ -442,8 +442,8 @@ def test_buyer_node_model_fixedr_fixes_replicas():
   assert model.fix_r is not None
 
 
-def test_pyo_var_type_is_non_negative_reals():
-  assert PYO_VAR_TYPE == pyo.NonNegativeReals
+def test_pyo_var_type_is_non_negative_integers():
+  assert PYO_VAR_TYPE == pyo.NonNegativeIntegers
 
 
 def test_solve_caches_solver_per_name(monkeypatch):

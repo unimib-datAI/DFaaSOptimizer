@@ -36,7 +36,7 @@ dependencies = [
 package = false
 
 [tool.uv.sources]
-ray-dispatcher = { git = "https://github.com/miciav/ray-dispatcher.git", rev = "858cc46d26ca9ad12a7843ceb99f625a1bd60c76" }
+ray-dispatcher = { git = "https://github.com/miciav/ray-dispatcher.git", tag = "v0.1.1" }
 
 [dependency-groups]
 dev = [

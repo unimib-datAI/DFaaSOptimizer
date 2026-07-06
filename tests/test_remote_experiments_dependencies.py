@@ -8,5 +8,5 @@ def test_ray_dispatcher_source_is_remote_resolvable():
   source = config["tool"]["uv"]["sources"]["ray-dispatcher"]
   assert source == {
     "git": "https://github.com/miciav/ray-dispatcher.git",
-    "rev": "858cc46d26ca9ad12a7843ceb99f625a1bd60c76",
+    "tag": "v0.1.1",
   }

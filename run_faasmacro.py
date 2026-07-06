@@ -911,7 +911,8 @@ def run(
         general_solver_options, 
         rmp_y, 
         rmp_omega,
-        parallelism
+        parallelism,
+        sp_x
       )
       total_runtime += spr_runtime
       # # -- rejection cost
