@@ -15,11 +15,12 @@ def _experiment(algorithm="centralized"):
   )
 
 
-def test_all_eleven_algorithms_are_mapped():
+def test_all_fifteen_algorithms_are_mapped():
   expected = {
     "centralized", "faas-macro", "faas-macro-v0", "faas-madea", "hierarchical",
     "hierarchical-madea",
     "faas-diffuse", "faas-powd", "faas-br-s", "faas-br-r", "faas-br-o",
+    "faas-pg-s", "faas-pg-r", "faas-gcaa", "plasma",
   }
   assert set(SCRIPT_BY_ALGORITHM) == expected
 

@@ -23,6 +23,10 @@ SCRIPT_BY_ALGORITHM: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
   "faas-br-s":     (("decentralized_bestresponse.py",), ("--variant", "s")),
   "faas-br-r":     (("decentralized_bestresponse.py",), ("--variant", "r")),
   "faas-br-o":     (("decentralized_bestresponse.py",), ("--variant", "o")),
+  "faas-pg-s":     (("decentralized_potentialgame.py",), ("--variant", "s")),
+  "faas-pg-r":     (("decentralized_potentialgame.py",), ("--variant", "r")),
+  "faas-gcaa":     (("decentralized_gcaa.py",), ()),
+  "plasma":        (("-m", "plasma.cli"), ()),
 }
 
 
