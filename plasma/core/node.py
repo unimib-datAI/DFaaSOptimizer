@@ -206,9 +206,10 @@ class PlasmaNode:
 
   def make_heartbeat(self) -> Heartbeat:
     self._seq += 1
+    # fair share: each neighbor sees spare/deg, so simultaneous claimants cannot oversubscribe
     return Heartbeat(
       node=self.params.node_id, seq=self._seq,
-      spare=tuple(self._spare_last), alpha=tuple(self.params.alpha),
+      spare=tuple(self._spare_last / max(1, self.deg)), alpha=tuple(self.params.alpha),
       pull=tuple(self._pull_last),
     )
 
