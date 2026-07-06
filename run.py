@@ -1017,6 +1017,7 @@ def run(
         config["limits"]["neighborhood"][loop_over] = exp_value
       config["seed"] = seed
       # -- look for old instance path (if required)
+      c_folder = None
       if "experiments_list" in old_instance_paths:
         try:
           old_exp_idx = old_instance_paths["experiments_list"].index(
@@ -1027,6 +1028,7 @@ def run(
             old_exp_path = old_instance_paths["centralized"][
               old_exp_idx
             ]
+            c_folder = old_exp_path
           elif "faas-macro" in old_instance_paths:
             old_exp_path = old_instance_paths["faas-macro"][
               old_exp_idx
@@ -1045,7 +1047,6 @@ def run(
         except Exception:
           pass
       # -- solve centralized model
-      c_folder = None
       if run_c or generate_only:
         c_folder = run_centralized(
           config, 
@@ -1057,7 +1058,7 @@ def run(
           solution_folders, "centralized", experiment_idx, c_folder
         )
       else:
-        if experiment_idx is not None:
+        if c_folder is None and experiment_idx is not None:
           c_folder = solution_folders["centralized"][experiment_idx]
       # -- solve iterative model (v0)
       if fix_r:
