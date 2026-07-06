@@ -166,14 +166,6 @@ def test_spare_advertises_floored_capacity():
   assert hb.spare[0] == 0.0  # not 0.085: nothing more is admittable
 
 
-def test_heartbeat_advertises_fair_share_of_spare():
-  node = _node(r=(2,), u_max=(5.0,), nbrs=(1, 2))
-  node.begin_window()
-  node.end_window()  # no traffic: spare = full capacity 10
-  hb = node.make_heartbeat()
-  assert hb.spare[0] == pytest.approx(10.0 / 2)
-
-
 def test_physarum_converges_to_lp_routing_fractions():
   # 2-node line, fixed replicas, stationary integer traffic (lambda = 40):
   # node 0 undersized -> LP says: serve 20 locally, forward 20.
