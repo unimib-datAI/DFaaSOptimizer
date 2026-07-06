@@ -66,7 +66,7 @@ def test_build_base_config_uses_requested_sizes_and_seed(tmp_path: Path):
   assert config["limits"]["Nn"]["min"] == 20
   assert config["limits"]["Nn"]["max"] == 20
   assert config["seed"] == 3
-  assert config["solver_name"] == "gurobi"
+  assert config["solver_name"] == "gurobi_direct"
   assert config["limits"]["neighborhood"] == {"type": "planar", "degree": 3}
 
 
@@ -83,7 +83,7 @@ def test_run_benchmark_collects_three_models(monkeypatch, tmp_path: Path):
   monkeypatch.setattr("benchmark_planar_3reg.run_distributed", fake_run)
   monkeypatch.setattr("benchmark_planar_3reg.run_hierarchical", fake_run)
 
-  raw = run_benchmark(output_root=tmp_path, sizes=[20], seeds=[0], solver_name="gurobi")
+  raw = run_benchmark(output_root=tmp_path, sizes=[20], seeds=[0], solver_name="gurobi_direct")
   assert set(raw["model"]) == {"centralized", "distributed", "hierarchical"}
   assert len(raw) == 3
 

@@ -17,7 +17,7 @@ from run_faasmacro import run as run_distributed
 
 DEFAULT_SIZES = [20, 40, 50]
 DEFAULT_SEEDS = [0, 1, 2, 3, 4]
-DEFAULT_SOLVER = "gurobi"
+DEFAULT_SOLVER = "gurobi_direct"
 MODEL_ORDER = ["centralized", "distributed", "hierarchical"]
 
 
