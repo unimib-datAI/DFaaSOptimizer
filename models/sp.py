@@ -299,6 +299,68 @@ class LSPr(LSPr_v0):
     )
 
 
+class LSPr_x(LSPr_v0):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSPr_x"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    self.model.x_bar = pyo.Param(
+      self.model.N, self.model.F,
+      within = PYO_PARAM_TYPE
+    )
+    # objective function weights
+    self.model.gamma = pyo.Param(
+      self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.1
+    )
+    ###########################################################################
+    # Problem variables
+    ###########################################################################
+    # number of rejected requests
+    self.model.z = pyo.Var(
+      self.model.F, 
+      domain = PYO_VAR_TYPE
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.no_traffic_loss = pyo.Constraint(
+      self.model.F, rule = self.no_traffic_loss
+    )
+    self.model.temp_fix_x = pyo.Constraint(
+      self.model.F, rule = self.temp_fix_x
+    )
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.set_objective(rule = self.minimize_processing_cost)
+  
+  @staticmethod
+  def no_traffic_loss(model, f):
+    return (
+      model.x[f] + model.omega_bar[model.whoami,f] + model.z[f]
+    ) <= model.incoming_load[model.whoami,f]
+  
+  @staticmethod
+  def temp_fix_x(model, f):
+    return (
+      model.x[f] == model.x_bar[model.whoami,f]
+    )
+  
+  @staticmethod
+  def minimize_processing_cost(model):
+    return - (
+      sum(
+        (
+          model.alpha[model.whoami,f] * model.x[f] + 
+          model.delta[model.whoami,f] * model.omega_bar[model.whoami,f] -
+          model.gamma[model.whoami,f] * model.z[f]
+        ) / model.incoming_load[model.whoami,f] for f in model.F
+      )
+    )
+
+
 ##############################################################################
 # TEMPORARILY FIX r
 ##############################################################################

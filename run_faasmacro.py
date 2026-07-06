@@ -225,7 +225,8 @@ def compute_social_welfare(
     solver_options: dict,
     rmp_y: np.array, 
     rmp_omega: np.array,
-    parallelism: int
+    parallelism: int,
+    sp_x
   ) -> Tuple[list, float, list]:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
@@ -239,6 +240,9 @@ def compute_social_welfare(
   }
   spr_data[None]["omega_bar"] = {
     (n+1,f+1): max(rmp_omega[n,f], 0) for n in range(Nn) for f in range(Nf)
+  }
+  spr_data[None]["x_bar"] = {
+    (n+1,f+1): max(sp_x[n,f], 0) for n in range(Nn) for f in range(Nf)
   }
   # solve for all agents
   agents_sol = {}
