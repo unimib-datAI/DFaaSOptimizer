@@ -610,7 +610,7 @@ def run(
     if verbose > 1:
       print(
         f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
-        f"runtime = {sp_runtime['tot']})", 
+        f"x = {sp_x.tolist()}; runtime = {sp_runtime['tot']})", 
         file = log_stream, 
         flush = True
       )
@@ -721,7 +721,9 @@ def run(
         # -- solve "restricted problem"
         bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
         if bad_nodes:
-          raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
+          raise RuntimeError(
+            f"LSPr infeasible from fixed y assignments: {bad_nodes}"
+          )
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, 
           sp_data, 
@@ -750,8 +752,9 @@ def run(
         if verbose > 1:
           print(
             f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
-            f"omega = {omega.tolist()}; x: {sp_x.tolist()}; "
-            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()})", 
+            f"omega = {omega.tolist()}; x = {sp_x.tolist()}; "
+            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()}; ", 
+            f"y = {y.tolist()})", 
             file = log_stream, 
             flush = True
           )
@@ -763,13 +766,14 @@ def run(
         )
         sp_r += additional_replicas
         e = datetime.now()
-        print(
-          f"        additional replicas started: DONE "
-          f"(a = {additional_replicas.tolist()}; "
-          f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})", 
-          file = log_stream, 
-          flush = True
-        )
+        if verbose > 1:
+          print(
+            f"        additional replicas started: DONE "
+            f"(a = {additional_replicas.tolist()}; "
+            f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})", 
+            file = log_stream, 
+            flush = True
+          )
         total_runtime += (e - s).total_seconds()
       # merge solutions and compute the centralized objective value
       csol = combine_solutions(
