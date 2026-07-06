@@ -6,7 +6,7 @@
   "min_run_time": 0,
   "max_run_time": 29,
   "run_time_step": 1,
-  "solver_name": "gurobi",
+  "solver_name": "gurobi_direct",
   "solver_options": {
     "general": {
       "TimeLimit": 120,
