@@ -29,12 +29,13 @@ from decentralized_auction import (
 )
 from hierarchical_auction.engine import HierarchicalAuctionEngine
 from hierarchical_auction.types import FloatArray
-from models.sp import LSP, LSPr
+from models.sp import LSP, LSPr, LSPr_x
 from run_centralized_model import (
   get_current_load,
   init_complete_solution,
   init_problem,
   join_complete_solution,
+  plot_history,
   save_checkpoint,
   save_solution,
 )
@@ -173,7 +174,7 @@ def run(
 
     sp_data = deepcopy(data)
     sp = LSP()
-    spr = LSPr()
+    spr = LSPr_x()
     (
       sp_data, sp_x, _, _sp_z, sp_omega, sp_r, sp_rho, _sp_u,
       _obj, _tc, sp_runtime,
@@ -230,11 +231,11 @@ def run(
 
         spr_sol, _spr_obj, _spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
-          y, rmp_omega, parallelism,
+          y, rmp_omega, parallelism, sp_x
         )
         total_runtime += spr_runtime if isinstance(spr_runtime, (int, float)) else 0.0
 
-        sp_x = spr_sol[0]
+        # sp_x = spr_sol[0]
         sp_r = spr_sol[4]
         sp_rho = spr_sol[5]
         omega = sp_omega - rmp_omega
@@ -263,13 +264,13 @@ def run(
       if result.accepted_allocations:
         spr_sol, _spr_obj, _spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
-          y, rmp_omega, parallelism,
+          y, rmp_omega, parallelism, sp_x
         )
         total_runtime += (
           spr_runtime if isinstance(spr_runtime, (int, float)) else 0.0
         )
 
-        sp_x = spr_sol[0]
+        # sp_x = spr_sol[0]
         sp_r = spr_sol[4]
         sp_rho = spr_sol[5]
         omega = sp_omega - rmp_omega
@@ -323,6 +324,20 @@ def run(
   spc_solution, spc_offloaded, spc_detailed_fwd_solution = join_complete_solution(
     spc_complete_solution,
   )
+  if not disable_plotting:# and Nf <= 10 and Nn <= 10:
+    plot_history(
+      input_requests_traces, 
+      min_run_time,
+      max_run_time,
+      run_time_step,
+      spc_solution, 
+      spc_complete_solution["utilization"], 
+      spc_complete_solution["replicas"], 
+      spc_offloaded,
+      # obj_dict["LSP"][max_iterations-1],
+      obj_dict["LSPr_final"],
+      os.path.join(solution_folder, "sp.png")
+    )
   save_solution(
     spc_solution, spc_offloaded, spc_complete_solution,
     spc_detailed_fwd_solution, "LSPc", solution_folder,

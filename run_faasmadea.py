@@ -19,7 +19,7 @@ from run_faasmacro import (
 from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
-from models.sp import LSP, LSPr, LSP_fixedr
+from models.sp import LSP, LSPr, LSP_fixedr, LSPr_x
 from models.model import PYO_VAR_TYPE
 
 from networkx import adjacency_matrix
@@ -594,7 +594,7 @@ def run(
           sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r[n,f])
     # -- solve subproblem
     sp = LSP() if opt_solution is None else LSP_fixedr()
-    spr = LSPr()
+    spr = LSPr_x()
     s = datetime.now()
     (
       sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
@@ -610,7 +610,7 @@ def run(
     if verbose > 1:
       print(
         f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
-        f"runtime = {sp_runtime['tot']})", 
+        f"x = {sp_x.tolist()}; runtime = {sp_runtime['tot']})", 
         file = log_stream, 
         flush = True
       )
@@ -721,7 +721,9 @@ def run(
         # -- solve "restricted problem"
         bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
         if bad_nodes:
-          raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
+          raise RuntimeError(
+            f"LSPr infeasible from fixed y assignments: {bad_nodes}"
+          )
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, 
           sp_data, 
@@ -730,7 +732,8 @@ def run(
           general_solver_options, 
           y, 
           rmp_omega,
-          parallelism
+          parallelism,
+          sp_x
         )
         total_runtime += spr_runtime
         if verbose > 1:
@@ -750,8 +753,9 @@ def run(
         if verbose > 1:
           print(
             f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
-            f"omega = {omega.tolist()}; x: {sp_x.tolist()}; "
-            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()})", 
+            f"omega = {omega.tolist()}; x = {sp_x.tolist()}; "
+            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()}; ", 
+            f"y = {y.tolist()})", 
             file = log_stream, 
             flush = True
           )
@@ -763,13 +767,14 @@ def run(
         )
         sp_r += additional_replicas
         e = datetime.now()
-        print(
-          f"        additional replicas started: DONE "
-          f"(a = {additional_replicas.tolist()}; "
-          f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})", 
-          file = log_stream, 
-          flush = True
-        )
+        if verbose > 1:
+          print(
+            f"        additional replicas started: DONE "
+            f"(a = {additional_replicas.tolist()}; "
+            f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})", 
+            file = log_stream, 
+            flush = True
+          )
         total_runtime += (e - s).total_seconds()
       # merge solutions and compute the centralized objective value
       csol = combine_solutions(

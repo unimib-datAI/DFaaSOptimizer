@@ -111,7 +111,10 @@ def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
   invalid = r @ memory_requirement - memory_capacity > tolerance
   if invalid.any():
     n = np.argwhere(invalid)[0, 0]
-    raise ValueError(f"residual_capacity ({n + 1})")
+    raise ValueError(
+      f"residual_capacity ({n + 1}: "
+      f"{r[n,:] @ memory_requirement} > {memory_capacity[n]})"
+    )
 
 
 def check_feasibility(
