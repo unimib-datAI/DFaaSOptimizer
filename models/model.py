@@ -12,6 +12,9 @@ PYO_VAR_TYPE = pyo.NonNegativeReals
 PYO_PARAM_TYPE = pyo.NonNegativeReals
 
 
+_SOLVER_CACHE: dict = {}
+
+
 def _solver_option_name(solver_name: str, option_name: str) -> str:
   if solver_name in {"glpk", "glpsol"} and option_name == "TimeLimit":
     return "tmlim"
@@ -42,8 +45,13 @@ class BaseAbstractModel():
       solver_name: str = "glpk",
       initial_solution: dict = None
     ):
-    # initialize solver and set options
-    solver = pyo.SolverFactory(solver_name)
+    # initialize solver and set options (cached per process: SolverFactory
+    # re-creates the Gurobi environment/license handshake on every call,
+    # which dominated runtime for the small per-node subproblems)
+    solver = _SOLVER_CACHE.get(solver_name)
+    if solver is None:
+      solver = pyo.SolverFactory(solver_name)
+      _SOLVER_CACHE[solver_name] = solver
     for k, v in solver_options.items():
       solver.options[_solver_option_name(solver_name, k)] = v
     # provide initial solution (if any)

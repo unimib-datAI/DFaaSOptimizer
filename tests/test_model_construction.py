@@ -174,6 +174,7 @@ def test_model_objective_overrides_are_explicit(caplog):
 
 def test_solve_does_not_pass_disabled_warmstart(monkeypatch):
   solver = FakeSolver()
+  monkeypatch.setattr(model_module, "_SOLVER_CACHE", {})
   monkeypatch.setattr(model_module.pyo, "SolverFactory", lambda _name: solver)
 
   solution = BaseAbstractModel().solve(FakeInstance(), {}, solver_name="glpk")
@@ -184,6 +185,7 @@ def test_solve_does_not_pass_disabled_warmstart(monkeypatch):
 
 def test_solve_maps_glpk_time_limit_option(monkeypatch):
   solver = FakeSolver()
+  monkeypatch.setattr(model_module, "_SOLVER_CACHE", {})
   monkeypatch.setattr(model_module.pyo, "SolverFactory", lambda _name: solver)
 
   solution = BaseAbstractModel().solve(FakeInstance(), {"TimeLimit": 7}, solver_name="glpk")
@@ -198,6 +200,7 @@ def test_solver_option_name_keeps_time_limit_for_non_glpk():
 
 def test_solve_passes_enabled_warmstart_for_initial_solution(monkeypatch):
   solver = FakeSolver()
+  monkeypatch.setattr(model_module, "_SOLVER_CACHE", {})
   monkeypatch.setattr(model_module.pyo, "SolverFactory", lambda _name: solver)
 
   solution = WarmstartModel().solve(FakeInstance(), {}, initial_solution={}, solver_name="gurobi")
@@ -208,6 +211,7 @@ def test_solve_passes_enabled_warmstart_for_initial_solution(monkeypatch):
 
 def test_solve_retries_without_warmstart_when_solver_rejects_it(monkeypatch):
   solver = FakeSolver(fail_on_warmstart=True)
+  monkeypatch.setattr(model_module, "_SOLVER_CACHE", {})
   monkeypatch.setattr(model_module.pyo, "SolverFactory", lambda _name: solver)
 
   solution = WarmstartModel().solve(FakeInstance(), {}, initial_solution={}, solver_name="glpk")
@@ -440,3 +444,16 @@ def test_buyer_node_model_fixedr_fixes_replicas():
 
 def test_pyo_var_type_is_non_negative_reals():
   assert PYO_VAR_TYPE == pyo.NonNegativeReals
+
+
+def test_solve_caches_solver_per_name(monkeypatch):
+  calls = []
+  monkeypatch.setattr(model_module, "_SOLVER_CACHE", {})
+  monkeypatch.setattr(
+    model_module.pyo, "SolverFactory",
+    lambda name: calls.append(name) or FakeSolver(),
+  )
+  m = BaseAbstractModel()
+  m.solve(FakeInstance(), {}, solver_name="glpk")
+  m.solve(FakeInstance(), {}, solver_name="glpk")
+  assert calls == ["glpk"]  # factory hit once, then reused
