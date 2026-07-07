@@ -195,7 +195,11 @@ def test_certificate_brackets_lp_optimum_and_gap_closes():
     data, neighborhood, np.zeros_like(neighborhood),
     np.zeros(omega.shape), DUAL_ROUND_OPTIONS,
   )
-  opt = coordination_lp_optimum(omega, capacity, s, elig)
+  # the round enforces no_ping_pong: a node with residual demand for f cannot
+  # also host f, so the certificate brackets the LP with those sellers removed
+  # (their advertised capacity zeroed), not the unconstrained LP.
+  constrained_capacity = np.where(omega > 1e-6, 0.0, capacity)
+  opt = coordination_lp_optimum(omega, constrained_capacity, s, elig)
   assert gap_info["UB"] >= opt - 1e-6
   assert gap_info["LB"] <= opt + 1e-6
   assert gap_info["gap"] <= 0.05

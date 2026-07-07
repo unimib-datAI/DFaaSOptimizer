@@ -374,6 +374,12 @@ def evaluate_bids(
   # last value once the schedule is exhausted, accept a plain scalar too
   eta = auction_options["eta"]
   eta = eta[min(it, len(eta) - 1)] if isinstance(eta, (list, tuple)) else eta
+  # no_ping_pong (validate_centralized_solution): a node must not both send and
+  # receive the same function across the accumulated y. Track realized roles and
+  # refuse any bid that would give a node a second, conflicting role. Mirrors the
+  # guard in decentralized_auction.evaluate_bids.
+  sending = last_y.sum(axis = 1) > 1e-10
+  receiving = last_y.sum(axis = 0) > 1e-10
   # loop over agents and functions
   potential_sellers, functions_to_share = np.nonzero(blackboard)
   if tentatively_start_replicas:
@@ -396,11 +402,17 @@ def evaluate_bids(
     min_b = bids_for_j["b"].max()
     # loop over bids until there is remaining capacity
     while next_bid_idx < len(bids_for_j) and remaining_capacity > 0:
-      q = min(remaining_capacity, bids_for_j.iloc[next_bid_idx]["d"])
-      y[int(bids_for_j.iloc[next_bid_idx]["i"]),j,f] += q
-      remaining_capacity -= q
-      min_b = min(min_b, bids_for_j.iloc[next_bid_idx]["b"])
+      bid = bids_for_j.iloc[next_bid_idx]
+      i = int(bid["i"])
       next_bid_idx += 1
+      if receiving[i,f] or sending[j,f]:
+        continue
+      q = min(remaining_capacity, bid["d"])
+      y[i,j,f] += q
+      remaining_capacity -= q
+      min_b = min(min_b, bid["b"])
+      sending[i,f] = True
+      receiving[j,f] = True
     # if computational capacity is exhausted and there are still bids, 
     # consider starting new replicas
     if remaining_capacity == 0 and (
@@ -412,6 +424,10 @@ def evaluate_bids(
         if max_a > 0:
           a = 1
           while next_bid_idx < len(bids_for_j) and a <= max_a:
+            i = int(bids_for_j.iloc[next_bid_idx]["i"])
+            if receiving[i,f] or sending[j,f]:
+              next_bid_idx += 1
+              continue
             # -- check utilization with one more replica
             q = bids_for_j.iloc[next_bid_idx]["d"]
             u = data[None]["demand"][(j+1,f+1)] * (
@@ -419,12 +435,14 @@ def evaluate_bids(
             ) / (r[j,f] + a)
             if u <= data[None]["max_utilization"][f+1]:
               # -- if possible, accomodate one more bid...
-              y[int(bids_for_j.iloc[next_bid_idx]["i"]),j,f] += q
+              y[i,j,f] += q
               min_b = min(min_b, bids_for_j.iloc[next_bid_idx]["b"])
               next_bid_idx += 1
-              additional_replicas[j,f] = a 
+              additional_replicas[j,f] = a
               # -- and update the remaining memory capacity
               rho[j] -= (a * data[None]["memory_requirement"][f+1])
+              sending[i,f] = True
+              receiving[j,f] = True
             else:
               # -- ...otherwhise, try to increase replicas
               a += 1
@@ -436,13 +454,16 @@ def evaluate_bids(
         pbidx = 0
         while next_bid_idx < len(i_arr) and pbidx < len(previous_buyers):
           i = int(i_arr[next_bid_idx])
-          if previous_buyers[pbidx] != i and b_arr[next_bid_idx] > p[j,f]:
+          if (
+              previous_buyers[pbidx] != i and b_arr[next_bid_idx] > p[j,f]
+              and not receiving[i,f] and not sending[j,f]
+            ):
             max_to_remove = last_y[previous_buyers[pbidx],j,f]
             nbi = next_bid_idx
             swapped = 0
             while (
-                nbi < len(i_arr) and 
-                  i_arr[nbi] == i and 
+                nbi < len(i_arr) and
+                  i_arr[nbi] == i and
                     swapped < max_to_remove
               ):
               q = d_arr[nbi]
@@ -451,6 +472,9 @@ def evaluate_bids(
               swapped += q
               min_b = min(min_b, b_arr[nbi])
               nbi += 1
+            if swapped > 0:
+              sending[i,f] = True
+              receiving[j,f] = True
             next_bid_idx += (nbi if nbi > 0 else 1)
           pbidx += 1
     # compute utilization and update prices

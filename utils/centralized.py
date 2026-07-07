@@ -2,6 +2,22 @@ from typing import Tuple
 import numpy as np
 
 
+def ping_pong_forbidden_hosts(omega, y, tolerance = 1e-6) -> np.array:
+  """(Nn, Nf) boolean mask of (node, function) pairs that must NOT host f.
+
+  A node is forbidden as host (receiver) of f when it is already a *sender* of
+  f: either it still has residual demand to offload (``omega``) or it has
+  already forwarded some load for f (``y`` summed over receivers, axis 1).
+  Excluding these nodes from the seller side each round is what keeps the
+  decentralized methods that accumulate ``y`` inside the FRALB no_ping_pong
+  constraint enforced by validate_centralized_solution. Mirrors the guards
+  already inlined in decentralized_auction / _gcaa / _potentialgame.
+  """
+  omega = np.asarray(omega)
+  y = np.asarray(y)
+  return (omega > tolerance) | (y.sum(axis = 1) > tolerance)
+
+
 def validate_centralized_solution(x, y, z, r, data, tolerance = 1e-6) -> None:
   try:
     tolerance_value = np.asarray(tolerance)

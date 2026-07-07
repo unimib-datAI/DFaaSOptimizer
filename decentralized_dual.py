@@ -37,7 +37,7 @@ from run_faasmadea import (
   neigh_dict_to_matrix,
   start_additional_replicas,
 )
-from utils.centralized import check_feasibility
+from utils.centralized import check_feasibility, ping_pong_forbidden_hosts
 from utils.common import load_configuration
 from utils.faasmacro import compute_centralized_objective
 
@@ -133,6 +133,8 @@ def dual_coordination_round(
   dual_options: dict,
   latency: np.array,
   fairness: np.array,
+  current_y: np.array = None,
+  tolerance: float = 1e-6,
   ) -> Tuple[np.array, pd.DataFrame, dict, int]:
   """Projected dual subgradient loop with primal recovery and certificate."""
   max_inner_iterations = dual_options["max_inner_iterations"]
@@ -166,6 +168,14 @@ def dual_coordination_round(
     data, neighborhood, latency, fairness, dual_options
   )
   capacity = np.array(residual_capacity, dtype=float)
+  # no_ping_pong: a node already sending f (residual demand or forwarded load)
+  # must not host f. Drop it from the eligible seller set and zero its sellable
+  # capacity so no primal bid can place load there.
+  if current_y is None:
+    current_y = np.zeros((nn, nn, nf))
+  forbidden = ping_pong_forbidden_hosts(omega, current_y, tolerance)
+  eligible = eligible & ~forbidden[None, :, :]
+  capacity[forbidden] = 0.0
   lam = np.zeros((nn, nf))
   score_values = np.where(eligible, scores, 0.0)
   best_lb, best_ub = 0.0, np.inf
@@ -229,7 +239,7 @@ def dual_coordination_round(
     if placed[i, f] + 1e-12 < omega[i, f]:
       memory_requirement = data[None]["memory_requirement"][f + 1]
       for j in np.nonzero(neighborhood[i, :])[0]:
-        if rho[int(j)] >= memory_requirement:
+        if rho[int(j)] >= memory_requirement and not forbidden[int(j), f]:
           memory_bids["i"].append(i)
           memory_bids["j"].append(int(j))
           memory_bids["f"].append(f)
@@ -384,6 +394,7 @@ def run(
       y_inc, memory_bids, gap_info, n_active = dual_coordination_round(
         omega, residual_capacity, sp_data, neighborhood, coordination_rho,
         dual_options, latency, fairness,
+        current_y=y, tolerance=tolerance,
       )
       additional_replicas = np.zeros((Nn, Nf))
       rt = (datetime.now() - s).total_seconds()

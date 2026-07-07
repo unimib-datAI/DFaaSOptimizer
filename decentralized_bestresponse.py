@@ -64,6 +64,7 @@ def best_response_sweep(
     rng: np.random.Generator = None,
     reopt_fn=None,
     current_y: np.array = None,
+    tolerance: float = 1e-6,
   ) -> Tuple[np.array, pd.DataFrame, int, float, float]:
   """Sequential (Gauss-Seidel) best-response sweep.
 
@@ -81,6 +82,10 @@ def best_response_sweep(
     current_y = np.zeros((Nn, Nn, Nf))
   else:
     current_y = np.array(current_y, dtype=float)
+  # live view of committed forwarding: updated as each mover commits, so the
+  # no_ping_pong guard below sees earlier movers' sends within this sweep
+  # (matches decentralized_potentialgame's inductive argument).
+  live_y = np.array(current_y, dtype=float)
   y_increment = np.zeros((Nn, Nn, Nf))
   memory_bids = {"i": [], "j": [], "f": []}
   reopt_runtime = 0.0
@@ -103,6 +108,13 @@ def best_response_sweep(
       continue
     active.add(i)
     ledger += previous_row
+    # no_ping_pong: a node already sending f (residual demand or forwarded
+    # load, i's own released row excluded) must not host f; and the mover must
+    # not offload any f it already hosts inbound.
+    sender = live_y.sum(axis=1)
+    sender[i, :] = 0.0
+    forbidden = (omega > tolerance) | (sender > tolerance)
+    inbound_i = live_y[:, i, :].sum(axis=0)
     new_row = np.zeros((Nn, Nf))
     if response == "reopt" and reopt_fn is not None and np.any(omega[i, :] > 0):
       omega_ub_row = np.array(
@@ -114,11 +126,16 @@ def best_response_sweep(
     for f in range(Nf):
       if omega[i, f] <= 0:
         continue
+      if inbound_i[f] > tolerance:
+        continue
       memory_requirement = data[None]["memory_requirement"][f + 1]
       potential_memory = {
-        j for j in neighbours if rho[j] >= memory_requirement
+        j for j in neighbours
+        if rho[j] >= memory_requirement and not forbidden[j, f]
       }
-      potential_capacity = {j for j in neighbours if ledger[j, f] >= 1}
+      potential_capacity = {
+        j for j in neighbours if ledger[j, f] >= 1 and not forbidden[j, f]
+      }
       score = {}
       for j in potential_capacity:
         s = (
@@ -151,6 +168,7 @@ def best_response_sweep(
           memory_bids["j"].append(j)
           memory_bids["f"].append(f)
     y_increment[i, :, :] = new_row - previous_row
+    live_y[i, :, :] = new_row
   return (
     y_increment, pd.DataFrame(memory_bids), len(active),
     placed_total, reopt_runtime,
@@ -351,7 +369,7 @@ def _run(
           and all(x == n_accepted_queue[0] for x in n_accepted_queue)
         ),
         order=order, response=response, rng=rng, reopt_fn=reopt_fn,
-        current_y=y,
+        current_y=y, tolerance=tolerance,
       )
       rt = (datetime.now() - s).total_seconds()
       total_runtime += compute_sweep_runtime(rt, reopt_runtime, n_active)

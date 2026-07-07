@@ -24,7 +24,7 @@ from run_faasmadea import (
   neigh_dict_to_matrix,
   start_additional_replicas,
 )
-from utils.centralized import check_feasibility
+from utils.centralized import check_feasibility, ping_pong_forbidden_hosts
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.sp import LSP, LSP_fixedr, LSPr, LSPr_fixedr
@@ -52,6 +52,8 @@ def define_assignments(
     latency: np.array,
     fairness: np.array,
     force_memory_bids: bool,
+    current_y: np.array = None,
+    tolerance: float = 1e-6,
   ) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
   """Price-free counterpart of run_faasmadea.define_bids.
 
@@ -59,11 +61,18 @@ def define_assignments(
   capacity. No bid price is computed (no epsilon/delta); the per-pair score is
   stored in the ``utility`` column, on which evaluate_assignments later sorts.
   """
+  if current_y is None:
+    current_y = np.zeros((omega.shape[0], omega.shape[0], omega.shape[1]))
+  # no_ping_pong: a node that is a sender of f (residual demand or already
+  # forwarded) must not be picked as a host for f. Covers both the capacity and
+  # the memory seller path, since both derive from ``potential_sellers``.
+  forbidden = ping_pong_forbidden_hosts(omega, current_y, tolerance)
   potential_buyers, functions_to_share = np.nonzero(omega)
   bids = {"i": [], "j": [], "f": [], "d": [], "utility": []}
   memory_bids = {"i": [], "j": [], "f": []}
   for i, f in zip(potential_buyers, functions_to_share):
     potential_sellers = set(np.nonzero(neighborhood[i, :])[0])
+    potential_sellers -= {int(j) for j in np.nonzero(forbidden[:, f])[0]}
     potential_capacity_sellers = potential_sellers.intersection(
       set(np.where(blackboard[:, f] >= 1)[0])
     )
@@ -373,6 +382,7 @@ def run(
           and len(n_accepted_queue) >= n_accepted_queue.maxlen
           and all(x == n_accepted_queue[0] for x in n_accepted_queue)
         ),
+        current_y=y, tolerance=tolerance,
       )
       rt = (datetime.now() - s).total_seconds()
       total_runtime += (rt / n_auctions) if n_auctions else rt

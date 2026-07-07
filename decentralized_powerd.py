@@ -25,7 +25,7 @@ from run_faasmadea import (
   start_additional_replicas,
 )
 from decentralized_diffusion import evaluate_assignments
-from utils.centralized import check_feasibility
+from utils.centralized import check_feasibility, ping_pong_forbidden_hosts
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.sp import LSP, LSP_fixedr, LSPr, LSPr_fixedr
@@ -54,6 +54,8 @@ def sample_assignments(
     fairness: np.array,
     force_memory_bids: bool,
     rng: np.random.Generator,
+    current_y: np.array = None,
+    tolerance: float = 1e-6,
   ) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
   """Power-of-d-choices counterpart of decentralized_diffusion.define_assignments.
 
@@ -75,6 +77,11 @@ def sample_assignments(
   if criterion not in {"score", "capacity"}:
     raise ValueError("powerd criterion must be one of: score, capacity")
   unit_bids = powerd_options.get("unit_bids", False)
+  if current_y is None:
+    current_y = np.zeros((omega.shape[0], omega.shape[0], omega.shape[1]))
+  # no_ping_pong: exclude sender nodes of f from being hosts of f (covers both
+  # the capacity and memory seller path, both derived from potential_sellers).
+  forbidden = ping_pong_forbidden_hosts(omega, current_y, tolerance)
   potential_buyers, functions_to_share = np.nonzero(omega)
   bids = {"i": [], "j": [], "f": [], "d": [], "utility": []}
   memory_bids = {"i": [], "j": [], "f": []}
@@ -82,6 +89,7 @@ def sample_assignments(
     i = int(i)
     f = int(f)
     potential_sellers = set(np.nonzero(neighborhood[i, :])[0])
+    potential_sellers -= {int(j) for j in np.nonzero(forbidden[:, f])[0]}
     potential_capacity_sellers = potential_sellers.intersection(
       set(np.where(blackboard[:, f] >= 1)[0])
     )
@@ -281,6 +289,7 @@ def run(
           and all(x == n_accepted_queue[0] for x in n_accepted_queue)
         ),
         rng=rng,
+        current_y=y, tolerance=tolerance,
       )
       rt = (datetime.now() - s).total_seconds()
       total_runtime += (rt / n_auctions) if n_auctions else rt
