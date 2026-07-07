@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 
 from generators.generate_data import generate_data
@@ -152,3 +154,26 @@ def test_generated_config_builds_a_real_instance():
   assert data[None]["Nn"][None] == 10
   assert data[None]["Nf"][None] == 2
   assert graph.number_of_nodes() == 10
+
+
+def test_survivors_fallback_when_file_absent(tmp_path, monkeypatch):
+  monkeypatch.setattr(paper, "SURVIVORS_PATH", tmp_path / "missing.json")
+  assert paper._survivors() == paper.DEFAULT_SURVIVORS
+  assert paper._final_algorithms() == paper.ANCHORS + paper.DEFAULT_SURVIVORS
+
+
+def test_survivors_read_from_file(tmp_path, monkeypatch):
+  path = tmp_path / "survivors.json"
+  path.write_text(json.dumps({"survivors": ["faas-gcaa", "faas-pg-s", "faas-powd", "faas-diffuse"]}))
+  monkeypatch.setattr(paper, "SURVIVORS_PATH", path)
+  assert paper._survivors() == ("faas-gcaa", "faas-pg-s", "faas-powd", "faas-diffuse")
+
+
+def test_confirmatory_seeds_are_five():
+  assert len(paper.CONFIRMATORY_SEEDS) == 5
+
+
+def test_tunable_filters_non_weight_algorithms():
+  assert paper._tunable(("hierarchical-madea", "faas-powd", "faas-br-o")) == (
+    "hierarchical-madea", "faas-powd",
+  )

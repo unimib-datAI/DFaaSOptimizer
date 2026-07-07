@@ -12,19 +12,47 @@ from . import register_suite
 _BASE_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config_files" / "eval_full.json"
 
 PILOT_SEEDS = tuple(range(1, 11))
-CONFIRMATORY_SEEDS = tuple(range(1001, 1031))
+CONFIRMATORY_SEEDS = tuple(range(1001, 1006))
 
 ALL_ALGORITHMS = (
   "centralized", "faas-macro", "faas-macro-v0", "faas-madea", "hierarchical-madea",
   "faas-diffuse", "faas-powd", "faas-br-s", "faas-br-r", "faas-br-o",
 )
+ANCHORS = ("centralized", "hierarchical-madea")
+DEFAULT_SURVIVORS = ("faas-madea", "faas-diffuse", "faas-powd", "faas-br-o")
+WEIGHT_TUNABLE = {
+  "hierarchical-madea": "auction", "faas-madea": "auction",
+  "faas-diffuse": "diffusion", "faas-powd": "powerd",
+}
+SURVIVORS_PATH = Path(__file__).resolve().parents[2] / "batches" / "survivors.json"
+
+SCREENING_CANDIDATES = (
+  "faas-macro", "faas-macro-v0", "faas-madea", "faas-diffuse", "faas-powd",
+  "faas-br-s", "faas-br-r", "faas-br-o", "faas-pg-s", "faas-pg-r", "faas-gcaa", "plasma",
+)
+
 NON_CENTRALIZED_ALGORITHMS = tuple(a for a in ALL_ALGORITHMS if a != "centralized")
+# ponytail: kept for build_e3/e4/e5/e7/e8 defaults; Task 4 rewires those to _survivors()/_tunable() and removes these.
 REPRESENTATIVE_ALGORITHMS = (
   "hierarchical-madea", "faas-macro", "faas-madea", "faas-diffuse", "faas-powd", "faas-br-o",
 )
 TRADEOFF_ALGORITHMS = (
   "hierarchical-madea", "faas-madea", "faas-diffuse", "faas-powd",
 )
+
+
+def _survivors() -> tuple[str, ...]:
+  if SURVIVORS_PATH.exists():
+    return tuple(json.loads(SURVIVORS_PATH.read_text())["survivors"])
+  return DEFAULT_SURVIVORS
+
+
+def _final_algorithms() -> tuple[str, ...]:
+  return ANCHORS + _survivors()
+
+
+def _tunable(algorithms: tuple[str, ...]) -> tuple[str, ...]:
+  return tuple(a for a in algorithms if a in WEIGHT_TUNABLE)
 
 
 def _base_config() -> dict:
