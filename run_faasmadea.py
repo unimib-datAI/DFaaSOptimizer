@@ -466,7 +466,9 @@ def evaluate_bids(
                   i_arr[nbi] == i and
                     swapped < max_to_remove
               ):
-              q = d_arr[nbi]
+              # cap at what the incumbent still holds: removing the full bid
+              # quantity would over-subtract y (negative) and exceed j capacity
+              q = min(d_arr[nbi], max_to_remove - swapped)
               y[previous_buyers[pbidx],j,f] -= q
               y[i,j,f] += q
               swapped += q
