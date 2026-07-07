@@ -125,6 +125,15 @@ def sample_assignments(
         q = 1
       else:
         q = VAR_TYPE(min(remaining[j_star], omega[i, f] - assigned))
+      if q <= 0:
+        # VAR_TYPE truncates to int: q hits 0 when either j_star is nearly full
+        # (drop it and try others) or the residual demand is below one integer
+        # unit (nothing more can be offloaded) -- without this the loop spins
+        # forever appending zero-quantity bids.
+        if remaining[j_star] < 1:
+          candidates.remove(j_star)
+          continue
+        break
       bids["i"].append(i)
       bids["f"].append(f)
       bids["j"].append(j_star)
