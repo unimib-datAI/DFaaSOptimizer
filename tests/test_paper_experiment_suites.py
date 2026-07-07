@@ -8,6 +8,7 @@ from remote_experiments.definitions import paper
 from remote_experiments.definitions import list_suites
 from remote_experiments.definitions.paper import (
   build_e0, build_e1, build_e2, build_e3, build_e4, build_e5, build_e6, build_e7,
+  build_screening,
 )
 
 
@@ -16,8 +17,20 @@ def test_paper_suites_are_registered():
     "paper-e0-pilot", "paper-e1-quality-runtime", "paper-e2-scalability",
     "paper-e3-topology", "paper-e4-robustness", "paper-e5-dynamics",
     "paper-e6-ablation", "paper-e7-tradeoffs", "paper-e8-spatial-latency",
+    "paper-a-screening",
   }
   assert expected <= set(list_suites())
+
+
+def test_screening_count_algorithms_and_no_centralized():
+  experiments = build_screening()
+  assert len(experiments) == 260                      # 13 algos x {50,100}x{2,4} x 5 seeds
+  algos = {e.algorithm for e in experiments}
+  assert "centralized" not in algos
+  assert "hierarchical-madea" in algos                # reference for obj_best
+  assert algos == set(paper.SCREENING_CANDIDATES) | {"hierarchical-madea"}
+  assert {e.config["limits"]["Nn"]["min"] for e in experiments} == {50, 100}
+  assert len({e.id for e in experiments}) == 260
 
 
 def test_e0_default_count():

@@ -121,6 +121,24 @@ def build_e0(
   ]
 
 
+@register_suite("paper-a-screening")
+def build_screening(
+    seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
+    algorithms: tuple[str, ...] = SCREENING_CANDIDATES + ("hierarchical-madea",),
+  ) -> list[Experiment]:
+  suite = "paper-a-screening"
+  return [
+    _experiment(
+      suite, f"n{nodes}-f{functions}-planar3", algorithm, seed,
+      _new_config(nodes, functions, _euclidean_planar()),
+    )
+    for nodes in (50, 100)
+    for functions in (2, 4)
+    for algorithm in algorithms
+    for seed in seeds
+  ]
+
+
 @register_suite("paper-e1-quality-runtime")
 def build_e1(
     seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
