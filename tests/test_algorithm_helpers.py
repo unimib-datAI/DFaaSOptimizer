@@ -110,6 +110,53 @@ def test_faasmadea_stopping_capacity_utility_and_bid_helpers():
   assert rho[1] == 1.0
 
 
+def test_evaluate_bids_eta_schedule_and_scalar_and_n_auctions_guard():
+  data = _auction_data()
+  x = np.array([[1.0, 2.0], [0.0, 0.0]])
+  y = np.zeros((2, 2, 2))
+  y[0, 1, 0] = 2.0
+  r = np.array([[1.0, 1.0], [1.0, 1.0]])
+  cap, residual, ell = run_faasmadea.compute_residual_capacity(x, y, r, data)
+  bids = pd.DataFrame({
+    "i": [0, 0],
+    "j": [1, 1],
+    "f": [0, 0],
+    "d": [2.0, 3.0],
+    "b": [4.0, 3.0],
+  })
+  p = np.ones((2, 2))
+  blackboard = np.array([[0.0, 0.0], [4.0, 0.0]])
+  # scalar eta still works (backward compatible)
+  _, p_scalar = run_faasmadea.evaluate_bids(
+    bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
+    capacity = cap, u0 = np.zeros((2, 2)),
+    auction_options = {"eta": 0.5, "zeta": 0.1},
+  )
+  # a per-iteration eta schedule: it=0 must use eta[0]
+  _, p_it0 = run_faasmadea.evaluate_bids(
+    bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
+    capacity = cap, u0 = np.zeros((2, 2)),
+    auction_options = {"eta": [0.5, 0.3, 0.15], "zeta": 0.1}, it = 0,
+  )
+  assert p_it0[1, 0] == pytest.approx(p_scalar[1, 0])
+  # it beyond the schedule length clamps to the last value, no IndexError
+  _, p_it_over = run_faasmadea.evaluate_bids(
+    bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
+    capacity = cap, u0 = np.zeros((2, 2)),
+    auction_options = {"eta": [0.5, 0.3, 0.15], "zeta": 0.1}, it = 99,
+  )
+  assert p_it_over[1, 0] != pytest.approx(p_it0[1, 0])
+  # n_auctions == 0 (no potential sellers) must not raise ZeroDivisionError
+  y_empty, _, _, n_auctions = run_faasmadea.evaluate_bids(
+    pd.DataFrame(columns = ["i", "j", "f", "d", "b"]),
+    blackboard = np.zeros((2, 2)), data = data, last_y = np.zeros((2, 2, 2)),
+    ell = ell, p = p.copy(), capacity = cap, u0 = np.zeros((2, 2)),
+    auction_options = {"eta": 0.5, "zeta": 0.1},
+  )
+  assert n_auctions == 0
+  assert 1.0 / max(n_auctions, 1) == 1.0  # would raise ZeroDivisionError pre-fix
+
+
 def test_decentralized_auction_bid_definition_and_helpers():
   data = _auction_data()
   omega = np.array([[4.0, 0.0], [0.0, 0.0]])

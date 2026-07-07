@@ -343,7 +343,8 @@ def evaluate_bids(
     auction_options: dict = None,
     initial_rho: np.array = None,
     r: np.array = None,
-    tentatively_start_replicas: bool = None
+    tentatively_start_replicas: bool = None,
+    it: int = 0
   ) -> np.array:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
@@ -369,6 +370,10 @@ def evaluate_bids(
     r = np.zeros((Nn,Nf))
   if tentatively_start_replicas is None:
     tentatively_start_replicas = False
+  # eta may be a per-iteration schedule (e.g. [0.5, 0.3, 0.15]); clamp to the
+  # last value once the schedule is exhausted, accept a plain scalar too
+  eta = auction_options["eta"]
+  eta = eta[min(it, len(eta) - 1)] if isinstance(eta, (list, tuple)) else eta
   # loop over agents and functions
   potential_sellers, functions_to_share = np.nonzero(blackboard)
   if tentatively_start_replicas:
@@ -451,7 +456,7 @@ def evaluate_bids(
     # compute utilization and update prices
     if len(bids_for_j) > 0:
       u = (ell[j,f] + y[:,j,f].sum()) / capacity[j,f]
-      p[j,f] = min_b + auction_options["eta"] * (u - u0[j,f])
+      p[j,f] = min_b + eta * (u - u0[j,f])
     else:
       p[j,f] *= (1 - auction_options["zeta"])
   if extended_return:
@@ -673,14 +678,14 @@ def run(
       rt = (e - s).total_seconds()
       if verbose > 1:
         print(
-          f"        define_bids: DONE; runtime = {rt/n_auctions}; "
-          f"n_auctions = {n_auctions}; tot runtime = {rt})", 
-          file = log_stream, 
+          f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
+          f"n_auctions = {n_auctions}; tot runtime = {rt})",
+          file = log_stream,
           flush = True
         )
         if verbose > 2:
           print(bids, file = log_stream, flush = True)
-      total_runtime += (rt/n_auctions)
+      total_runtime += (rt/max(n_auctions, 1))
       # sellers accept/reject bids
       rmp_omega = np.zeros((Nn,Nf))
       additional_replicas = np.zeros((Nn,Nf))
@@ -698,18 +703,19 @@ def run(
           auction_options,
           sp_rho,
           sp_r,
-          tentatively_start_replicas = (len(memory_bids) == 0)
+          tentatively_start_replicas = (len(memory_bids) == 0),
+          it = it
         )
         e = datetime.now()
         rt = (e - s).total_seconds()
         if verbose > 1:
           print(
-           f"        evaluate_bids: DONE; runtime = {rt/n_auctions}; "
-           f"n_auctions = {n_auctions}; tot runtime = {rt})", 
-           file = log_stream, 
+           f"        evaluate_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
+           f"n_auctions = {n_auctions}; tot runtime = {rt})",
+           file = log_stream,
            flush = True
           )
-        total_runtime += (rt/n_auctions)
+        total_runtime += (rt/max(n_auctions, 1))
         # update effective load, number of replicas and fairness matrix
         y += auction_y
         for n in range(Nn):
