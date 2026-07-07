@@ -47,6 +47,22 @@ METHOD_RESULT_MODELS = {
   "plasma": ("LSPc", "Plasma"),
 }
 
+# The centralized run saves its solution under the model's own name, which
+# depends on config["model_variant"] (see run_centralized_model): "tight" ->
+# TightLoadManagementModel, otherwise LoadManagementModel. Postprocessing keeps
+# the canonical baseline label "LoadManagementModel" (mname) but must locate the
+# on-disk files by the actual saved name, so it probes the folder. This also
+# works when re-postprocessing solution_folders loaded from an earlier run whose
+# variant the current config no longer reflects.
+CENTRALIZED_MODEL_KEYS = ("LoadManagementModel", "TightLoadManagementModel")
+
+
+def resolve_centralized_model_key(folder: str, default: str) -> str:
+  for key in CENTRALIZED_MODEL_KEYS:
+    if os.path.exists(os.path.join(folder, f"{key}_solution.csv")):
+      return key
+  return default
+
 
 def parse_arguments() -> argparse.Namespace:
   """
@@ -318,6 +334,8 @@ def results_postprocessing(
         # -- load results
         # ---- local_count, fwd_count, rej_count, replicas, ping_pong
         mkey, mname = METHOD_RESULT_MODELS[method]
+        if method == "centralized":
+          mkey = resolve_centralized_model_key(abs_folders[-1], mkey)
         results.append(load_models_results(abs_folders[-1], [mkey], [mname]))
         # -- check ping-pong problems
         if len(results[-1][-1][mname]) > 0:
