@@ -10,7 +10,7 @@ The `paper.py` campaign is **12,630 experiments** across 9 suites, run on **3 VM
 
 ## Goal
 
-Cut the campaign to the minimum runs that still answer the research questions, and launch it with a **single command**. Achieve this with a **screen-then-confirm** design: cheaply rank all candidate algorithms by optimality gap vs the centralized optimum, promote the best 4, then run the confirmatory suites only on those 4 plus the two anchors.
+Cut the campaign to the minimum runs that still answer the research questions, and launch it with a **single command**. Achieve this with a **screen-then-confirm** design: cheaply rank all candidate algorithms by objective deficit relative to the best method on each instance (at mid-scale, where centralized no longer scales), promote the best 4, then run the confirmatory suites only on those 4 plus the two anchors.
 
 Locked decisions (from brainstorming):
 - Screening metric: **relative-to-best objective** on a mid-scale grid, runtime as tie-break. Centralized is *not* run in screening (it does not scale past n≈20 within the 120s Gurobi limit, so it cannot provide an optimal baseline at screening sizes).
