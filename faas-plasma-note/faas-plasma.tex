@@ -7,23 +7,158 @@
 \label{sec:plasma}
 
 \subsection{Problem statement}
-% FRALB/DiFRALB instance as in the other notes; neighbor-only communication.
+PLASMA addresses decentralized function-replica allocation and request
+routing on an undirected neighborhood graph $G=(V,E)$.  Node $i$ observes
+only its arrivals $\lambda_{if}$, local resource state, and heartbeats from
+$j\in\mathcal{N}_i$.  For function $f$, a local completion yields utility
+$\alpha_{if}$, forwarding from $i$ to $j$ yields $\beta_{ijf}$, and rejection
+incurs penalty $\gamma_{if}$.  The local replica vector $r_i$ must satisfy
+$\sum_f m_f r_{if}\leq M_i$, while $r_{if}u_{if}^{\max}W$ is the request
+capacity in a routing window of duration $W$.  PLASMA separates the problem
+into a fast routing layer and a slower replica-allocation layer.  Both layers
+are node-local; no coordinator or global state is introduced.
 
-\subsection{Layer A: Physarum conductance routing}
-% Per-request categorical routing on gated conductances; window update
-% D <- (1-mu) D + mu g(phi) reward; capacity and spare-capacity gates.
+\subsection{Layer A: conductance routing}
+For each $(i,f)$, node $i$ maintains a conductance vector $D_{ifc}$ over the
+local, rejection, and neighbor channels.  This state is inspired by Physarum
+transport dynamics \citep{bonifaci2012physarum}, but its reinforcement signal
+is the realized application utility rather than physical tube flow.  If
+$\phi_{ifc}(t)$ requests succeed on channel $c$ during window $t$, the update
+is
+\begin{equation}
+ D_{ifc}(t+1)=\operatorname{clip}_{[D_{\min},D_{\max}]}
+ \left((1-\mu)D_{ifc}(t)+\mu\phi_{ifc}(t)^{\kappa}q_{ifc}\right),
+ \label{eq:plasma-conductance}
+\end{equation}
+where $q_{ifc}$ is $\alpha_{if}$ locally, a small rejection floor on the
+rejection channel, and $\beta_{ijf}$ on neighbor $j$'s channel.  Routing
+probabilities are normalized gated conductances.  The local gate closes when
+local capacity is exhausted; a neighbor advertising no spare capacity keeps
+only an $\epsilon$ exploration weight.  A stale neighbor advertises zero
+spare capacity, so its conductance decays without a separate failure detector.
 
-\subsection{Layer B: discrete simulated bifurcation for replicas}
-% Binary spin encoding, node-local Hamiltonian (field + RAM penalty +
-% capacity chance-constraint + churn), dSB integrator, hysteresis,
-% randomized commit (p_commit) under the shared round barrier.
+The implemented policy also performs reward-aware admission before sampling:
+when $\beta_{ijf}>\alpha_{if}$ and $j$ advertises spare capacity, requests are
+offered to the highest-reward eligible neighbors first.  Remaining overflow is
+sampled from the conductance distribution.  A negative acknowledgement is
+retried locally when capacity remains and is rejected otherwise.  This retry
+is important: it turns outdated spare-capacity advertisements into a local
+loss rather than a conservation error.  Low-rate functions may optionally use
+an unsplittable argmax route, although the default remains categorical
+sampling.
 
-\subsection{Round-barrier formulation}
-% Single synchronous execution mode; SB pass every k_sb rounds.
+\subsection{Layer B: discrete allocation}
+Each node estimates arrivals by an exponentially weighted mean
+$\widehat{\lambda}_{if}$ and sums the offload pressure advertised by its
+neighbors, $p_{if}^{\mathrm{in}}$.  The provisioning target is therefore
+$d_{if}=\widehat{\lambda}_{if}+p_{if}^{\mathrm{in}}$.  For a candidate local
+replica vector $r_i$, the current Hamiltonian is
+\begin{align}
+ H_i(r_i)={}&-\sum_f \alpha_{if}
+ \min\{r_{if}u_{if}^{\max}W,d_{if}\}
+ +A\left[\sum_fm_fr_{if}-M_i\right]_+^2 \notag\\
+ &+B\sum_f\left[\widehat{\lambda}_{if}
+ +z_\delta\sqrt{\widehat{\lambda}_{if}}
+ -r_{if}u_{if}^{\max}W\right]_+^2
+ +C c_{\mathrm{sw}}\lVert r_i-r_i^{\mathrm{prev}}\rVert_1 .
+ \label{eq:plasma-hamiltonian}
+\end{align}
+The first term is a concave served-demand field: extra replicas cease to earn
+utility after meeting estimated demand.  This measured Hamiltonian v2
+supersedes the linear field in the original design specification, Section
+4.2, because the linear field rewarded idle capacity and ignored per-replica
+throughput.  The remaining terms penalize RAM overflow, capacity shortfall
+with a configurable safety margin, and churn.
 
-\subsection{Acceptance criteria and results}
-% LP-convergence band, dSB vs brute force, gap vs MILP (populate from M3).
+Replica levels are binary encoded as spins and can be minimized with discrete
+simulated bifurcation (dSB) \citep{goto2021high}.  The dSB implementation runs
+multiple oscillator trajectories and retains the lowest-energy state.  The
+operational default uses an exact multiple-choice knapsack dynamic program
+for positive integer RAM costs; this is an exact solver for the same node-local
+Hamiltonian and avoids stochastic variance in evaluation.  dSB remains the
+scalable alternative when the exact solver's assumptions or state space cease
+to be appropriate.  Every proposal is repaired to RAM feasibility, must
+improve the Hamiltonian by at least $\epsilon_{\mathrm{commit}}$, persist for
+$n_{\mathrm{hyst}}$ consecutive slow ticks, and pass an independent commit
+coin with probability $p_{\mathrm{commit}}$.
 
-\subsection{Privacy comparison vs FaaS-MADeA}
-% Heartbeat carries only spare/alpha/pull: strictly less disclosure than
-% MADeA's bid exchange.
+\subsection{Round barrier and protocol}
+PLASMA has one synchronous execution mode.  A shared barrier advances windows
+of duration $W$; routing runs every window and Layer B runs every $k_{\mathrm{SB}}$
+windows.  Heartbeat deliveries scheduled for a round are applied before that
+round's routing callback.  Randomized commits are therefore mandatory rather
+than an asynchronous-mode option: with $p_{\mathrm{commit}}=1$, adjacent nodes
+may update simultaneously in a Jacobi-like oscillation, whereas hysteresis and
+the default $p_{\mathrm{commit}}=0.5$ break phase locking.
+
+The complete control-plane heartbeat is
+$\langle i,\mathrm{seq},\mathrm{spare}_{if},\alpha_{if},p_{if}\rangle_f$.
+Messages carry no arrival trace, replica vector, conductance, spin state, or
+global topology.  Sequence numbers reject stale replacements; after a fixed
+staleness horizon, cached spare capacity and pull pressure are treated as
+zero.  Data-plane forwards and their acknowledgements are counted separately
+from heartbeats in the reported message rate.
+
+\subsection{Acceptance criteria and measured results}
+The implementation passed traffic conservation, RAM feasibility, heartbeat
+locality, dead-neighbor decay, phase-lock mitigation, runner integration, and
+baseline-wiring checks.  On the stationary two-node acceptance instance,
+conductance routing converged within a 1.35\% band of the LP routing split.
+dSB found the brute-force ground state in at least 95\% of 200 random
+eight-spin Hamiltonians.  GCD scaling of the exact dynamic program preserved
+the optimum while reducing its measured cost by $73\times$; the corresponding
+end-to-end step runtime fell from 44.9~s to 0.30~s in the quality experiment.
+The complete regression suite contained 570 passing tests at the recorded
+checkpoint.
+
+The M5 target of at most 10\% stationary gap to the centralized MILP was not
+met.  On the real-instance long horizon, the steady gap fell from 30.1\% to
+22.7\% after provisioning from arrivals rather than accepted traffic.  On the
+20-node, $\beta$-dominant benchmark, reward-aware admission raised forwarding
+from 12\% to 25\% and reduced the gap from 35.3\% to 32.2\%, but rejection rose
+from 15\% to 20\%.  The residual mechanism is over-subscription of attractive
+high-$\beta$ receivers.  Static fair-share rationing by advertised spare
+capacity divided by degree regressed the gap to 35.2\% by throttling preferred
+forwards, and was reverted; NACK followed by local retry performed better.
+
+\begin{table}[t]
+\centering
+\caption{Recorded M6 failure experiment with node 3 unavailable during
+$t\in[80,90)$.  Lower gap is better.}
+\label{tab:plasma-m6}
+\begin{tabular}{lcc}
+\toprule
+Method & Mean gap (\%) & Observation \\
+\midrule
+PLASMA & 28.8 & $+2$ points during failure, then recovery \\
+Stale MILP & 10.1 & Sawtooth between re-solves \\
+Greedy & 5.6 & Recomputed from instantaneous global loads \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The M6 comparison is deliberately qualified: both baselines read the true
+instantaneous global load, while PLASMA is neighbor-only.  PLASMA's adaptation
+lag is undefined in this run because its pre-failure gap already exceeds the
+10\% recovery threshold.  In the M7 low-rate ablation, sampled routing
+obtained a 36.6\% gap and unsplittable routing 37.9\%; hence the unsplittable
+mode provided no benefit on that instance.
+
+\subsection{Privacy comparison and limitations}
+FaaS-MADeA exchanges bids that directly expose utility-bearing allocation
+intent.  PLASMA exposes only per-function spare capacity, local reward
+$\alpha$, and aggregate pull pressure to immediate neighbors.  This is a
+strictly smaller operational view than bid exchange, although it is not a
+formal privacy guarantee: repeated heartbeats can still reveal load and
+capacity trends.
+
+The next M5 mechanism is adaptive claim sizing.  Rather than reinstating the
+failed static fair share, a sender should size preferred-forward claims from
+its conductance share or from the receiver-specific NACK rate.  This directly
+targets receiver over-subscription while retaining reward-aware admission.
+The remaining non-blocking implementation debt is limited to documenting the
+$W$/floor convention in the routing LP helper, guarding adaptation lag against
+a negative oracle, and reducing the runtime and random-stream sensitivity of
+the dSB quality test.  The reported numbers are single recorded benchmark
+outcomes, not confidence intervals; multi-seed evaluation is required before
+making population-level performance claims.
