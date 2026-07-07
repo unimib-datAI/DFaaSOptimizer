@@ -55,6 +55,19 @@ def cmd_run(args: argparse.Namespace) -> None:
     print("nothing selected, exiting")
     return
 
+  completed = execute_batch(batch, manifest, manifest_path, selected, args)
+  if not completed:
+    print("stopped — rerun the same command to resume")
+  else:
+    unsuccessful = sum(manifest.status(e.id) != SUCCEEDED for e in selected)
+    if unsuccessful:
+      label = "experiment" if unsuccessful == 1 else "experiments"
+      print(f"batch finished with {unsuccessful} unsuccessful {label}")
+    else:
+      print("batch complete")
+
+
+def execute_batch(batch, manifest, manifest_path, selected, args) -> bool:
   inventory = Inventory.from_yaml(args.inventory)
   secrets = ()
   if args.gurobi_license:
@@ -80,16 +93,12 @@ def cmd_run(args: argparse.Namespace) -> None:
   with Dispatcher(inventory, project, results_dir=args.results_dir) as dispatcher:
     start = time.monotonic()
     with live_view(batch, manifest, inventory, start_time=start) as on_tick:
-      completed = run_batch(dispatcher, jobs, manifest, on_tick)
-  if not completed:
-    print("stopped — rerun the same command to resume")
-  else:
-    unsuccessful = sum(manifest.status(e.id) != SUCCEEDED for e in selected)
-    if unsuccessful:
-      label = "experiment" if unsuccessful == 1 else "experiments"
-      print(f"batch finished with {unsuccessful} unsuccessful {label}")
-    else:
-      print("batch complete")
+      return run_batch(dispatcher, jobs, manifest, on_tick)
+
+
+def cmd_campaign(args: argparse.Namespace) -> None:
+  from .campaign import run_campaign
+  run_campaign(args)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -121,6 +130,18 @@ def build_parser() -> argparse.ArgumentParser:
   run_p.add_argument("--uv-version", default="0.11.25")
   run_p.add_argument("--yes", action="store_true", help="Run all pending without prompting")
   run_p.set_defaults(func=cmd_run)
+
+  campaign_p = sub.add_parser(
+    "campaign", help="Run the full two-phase campaign (screen->select->confirm)",
+  )
+  campaign_p.add_argument("--inventory", required=True)
+  campaign_p.add_argument("--project-path", default=".")
+  campaign_p.add_argument("--results-dir", default="./results")
+  campaign_p.add_argument("--instances", default="remote_experiments/instances")
+  campaign_p.add_argument("--gurobi-license", default=None)
+  campaign_p.add_argument("--python-version", default="3.10.19")
+  campaign_p.add_argument("--uv-version", default="0.11.25")
+  campaign_p.set_defaults(func=cmd_campaign)
 
   return parser
 
