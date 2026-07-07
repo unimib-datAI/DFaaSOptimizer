@@ -104,25 +104,34 @@ class _FakeDispatcher:
     return {"e1": "10.0.0.10"}
 
 
-def test_cmd_run_wires_dispatcher_into_manifest(tmp_path, monkeypatch):
+def _write_smoke_batch(tmp_path):
+  """Save a single-experiment batch (id 'e1') and materialize its instances."""
   source = build_e0(seeds=(42,), algorithms=("centralized",))[0]
   config = dict(source.config, base_solution_folder="solutions/e1")
   experiment = replace(source, id="e1", config=config)
   batch = Batch(suite=source.suite, experiments=(experiment,))
   batch_path = tmp_path / "b.json"
   batch.save(batch_path)
-  instances_root = tmp_path / "instances"
-  materialize_batch(batch, instances_root)
+  materialize_batch(batch, tmp_path / "instances")
+  return batch_path
 
+
+def _write_inventory(tmp_path):
   inventory_path = tmp_path / "inventory.yaml"
   inventory_path.write_text("hosts:\n  - host: 10.0.0.10\n    user: ubuntu\n    slots: 1\n")
+  return inventory_path
+
+
+def test_cmd_run_wires_dispatcher_into_manifest(tmp_path, monkeypatch):
+  batch_path = _write_smoke_batch(tmp_path)
+  inventory_path = _write_inventory(tmp_path)
 
   monkeypatch.setattr("remote_experiments.cli.Dispatcher", _FakeDispatcher)
   monkeypatch.setattr("builtins.input", lambda prompt: "all")
 
   args = build_parser().parse_args([
     "run", str(batch_path), "--inventory", str(inventory_path),
-    "--instances", str(instances_root),
+    "--instances", str(tmp_path / "instances"),
   ])
   cmd_run(args)
 
@@ -131,27 +140,33 @@ def test_cmd_run_wires_dispatcher_into_manifest(tmp_path, monkeypatch):
   assert manifest.host("e1") == "10.0.0.10"
 
 
+def test_cmd_run_yes_skips_prompt(tmp_path, monkeypatch):
+  batch = _write_smoke_batch(tmp_path)
+  monkeypatch.setattr("remote_experiments.cli.Dispatcher", _FakeDispatcher)
+  monkeypatch.setattr(
+    "builtins.input",
+    lambda prompt: (_ for _ in ()).throw(AssertionError("prompt must not be called")),
+  )
+  args = build_parser().parse_args([
+    "run", str(batch), "--inventory", str(_write_inventory(tmp_path)), "--yes",
+    "--instances", str(tmp_path / "instances"),
+  ])
+  cmd_run(args)  # must not raise
+
+
 def test_cmd_run_reports_terminal_failures(tmp_path, monkeypatch, capsys):
   class _FailedDispatcher(_FakeDispatcher):
     def __init__(self, *_args, **_kwargs):
       self._sequences = {"e1": [JobStatus.FAILED]}
 
-  source = build_e0(seeds=(42,), algorithms=("centralized",))[0]
-  config = dict(source.config, base_solution_folder="solutions/e1")
-  experiment = replace(source, id="e1", config=config)
-  batch_path = tmp_path / "b.json"
-  batch = Batch(suite=source.suite, experiments=(experiment,))
-  batch.save(batch_path)
-  instances_root = tmp_path / "instances"
-  materialize_batch(batch, instances_root)
-  inventory_path = tmp_path / "inventory.yaml"
-  inventory_path.write_text("hosts:\n  - host: 10.0.0.10\n    user: ubuntu\n    slots: 1\n")
+  batch_path = _write_smoke_batch(tmp_path)
+  inventory_path = _write_inventory(tmp_path)
 
   monkeypatch.setattr("remote_experiments.cli.Dispatcher", _FailedDispatcher)
   monkeypatch.setattr("builtins.input", lambda prompt: "all")
   args = build_parser().parse_args([
     "run", str(batch_path), "--inventory", str(inventory_path),
-    "--instances", str(instances_root),
+    "--instances", str(tmp_path / "instances"),
   ])
   cmd_run(args)
 

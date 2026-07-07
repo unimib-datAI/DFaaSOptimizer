@@ -45,8 +45,11 @@ def cmd_run(args: argparse.Namespace) -> None:
   print(f"{len(batch.experiments)} experiments in batch, {len(default_idx)} pending")
   for i, e in enumerate(batch.experiments):
     print(f"  [{i}] {e.id} ({manifest.status(e.id)})")
-  raw = input(f"Select to run [default: {len(default_idx)} pending] (indices/ranges/'all'): ")
-  selected_idx = parse_selection(raw, len(batch.experiments)) if raw.strip() else default_idx
+  if args.yes:
+    selected_idx = default_idx
+  else:
+    raw = input(f"Select to run [default: {len(default_idx)} pending] (indices/ranges/'all'): ")
+    selected_idx = parse_selection(raw, len(batch.experiments)) if raw.strip() else default_idx
   selected = [batch.experiments[i] for i in selected_idx]
   if not selected:
     print("nothing selected, exiting")
@@ -116,6 +119,7 @@ def build_parser() -> argparse.ArgumentParser:
   run_p.add_argument("--gurobi-license", default=None)
   run_p.add_argument("--python-version", default="3.10.19")
   run_p.add_argument("--uv-version", default="0.11.25")
+  run_p.add_argument("--yes", action="store_true", help="Run all pending without prompting")
   run_p.set_defaults(func=cmd_run)
 
   return parser
