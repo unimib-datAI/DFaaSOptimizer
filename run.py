@@ -257,7 +257,8 @@ def merge_sol_dict(results_list: list, methods_names: list) -> pd.DataFrame:
     columns = {"tot": f"tot_{methods_names[0]}"}
   )
   for r,m in zip(results_list[1:], methods_names[1:]):
-    res = res.join(r["tot"], rsuffix = f"_{m}")
+    if "tot" in r:
+      res = res.join(r["tot"], rsuffix = f"_{m}")
   res["time"] = "tot"
   for key in results_list[0]:
     if key != "tot":
@@ -266,7 +267,11 @@ def merge_sol_dict(results_list: list, methods_names: list) -> pd.DataFrame:
         columns = {key: f"{key}_{methods_names[0]}"}
       )
       for r,m in zip(results_list[1:], methods_names[1:]):
-        df = df.join(r[key], rsuffix = f"_{m}")
+        # methods may cover different timestep ranges (e.g. a baseline folder
+        # from an earlier run with a different horizon); skip a method that has
+        # no data for this timestep instead of crashing the postprocessing
+        if key in r:
+          df = df.join(r[key], rsuffix = f"_{m}")
       df["time"] = time
       res = pd.concat([res, df])
   return res
