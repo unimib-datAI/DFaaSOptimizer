@@ -317,7 +317,7 @@ def run(
           raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
-          y, rmp_omega, parallelism, sp_x
+          y, rmp_omega, parallelism
         )
         total_runtime += spr_runtime
         sp_x, _, _, _, sp_r, sp_rho = spr_sol
