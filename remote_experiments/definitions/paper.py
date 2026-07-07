@@ -32,13 +32,6 @@ SCREENING_CANDIDATES = (
 )
 
 NON_CENTRALIZED_ALGORITHMS = tuple(a for a in ALL_ALGORITHMS if a != "centralized")
-# ponytail: kept for build_e3/e4/e5/e7/e8 defaults; Task 4 rewires those to _survivors()/_tunable() and removes these.
-REPRESENTATIVE_ALGORITHMS = (
-  "hierarchical-madea", "faas-macro", "faas-madea", "faas-diffuse", "faas-powd", "faas-br-o",
-)
-TRADEOFF_ALGORITHMS = (
-  "hierarchical-madea", "faas-madea", "faas-diffuse", "faas-powd",
-)
 
 
 def _survivors() -> tuple[str, ...]:
@@ -142,9 +135,10 @@ def build_screening(
 @register_suite("paper-e1-quality-runtime")
 def build_e1(
     seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
-    algorithms: tuple[str, ...] = ALL_ALGORITHMS,
+    algorithms: tuple[str, ...] = (),
   ) -> list[Experiment]:
   suite = "paper-e1-quality-runtime"
+  algorithms = algorithms or _final_algorithms()
   return [
     _experiment(
       suite, f"n{nodes}-f{functions}-planar3", algorithm, seed,
@@ -162,11 +156,10 @@ def build_e2(
     seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
   ) -> list[Experiment]:
   suite = "paper-e2-scalability"
+  scalable = ("hierarchical-madea",) + _survivors()
   experiments = []
-  for nodes in (10, 20, 50, 100, 200):
-    algorithms = NON_CENTRALIZED_ALGORITHMS + (
-      ("centralized",) if nodes <= 20 else ()
-    )
+  for nodes in (10, 20, 50, 100, 200, 500):
+    algorithms = scalable + (("centralized",) if nodes <= 20 else ())
     for functions in (2, 4, 8):
       for algorithm in algorithms:
         for seed in seeds:
@@ -180,9 +173,10 @@ def build_e2(
 @register_suite("paper-e3-topology")
 def build_e3(
     seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
-    algorithms: tuple[str, ...] = REPRESENTATIVE_ALGORITHMS,
+    algorithms: tuple[str, ...] = (),
   ) -> list[Experiment]:
   suite = "paper-e3-topology"
+  algorithms = algorithms or _final_algorithms()
   topologies = (
     ("planar3", _euclidean_planar(3)),
     ("planar5", _euclidean_planar(5)),
@@ -224,9 +218,10 @@ def _apply_robustness_condition(config: dict, condition: str) -> None:
 @register_suite("paper-e4-robustness")
 def build_e4(
     seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
-    algorithms: tuple[str, ...] = REPRESENTATIVE_ALGORITHMS,
+    algorithms: tuple[str, ...] = (),
   ) -> list[Experiment]:
   suite = "paper-e4-robustness"
+  algorithms = algorithms or _final_algorithms()
   conditions = (
     "baseline", "load-low", "load-high", "memory-scarce", "memory-ample",
     "nodes-homogeneous", "nodes-heterogeneous",
@@ -244,9 +239,10 @@ def build_e4(
 @register_suite("paper-e5-dynamics")
 def build_e5(
     seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
-    algorithms: tuple[str, ...] = REPRESENTATIVE_ALGORITHMS,
+    algorithms: tuple[str, ...] = (),
   ) -> list[Experiment]:
   suite = "paper-e5-dynamics"
+  algorithms = algorithms or _final_algorithms()
   experiments = []
   for trace_type in ("sinusoidal", "clipped", "fixed_sum_minmax"):
     for algorithm in algorithms:
@@ -288,7 +284,7 @@ def build_e6(
   )
   experiments = []
   for variant in variants:
-    for nodes in (20, 50):
+    for nodes in (50,):
       for topology_name, topology in topologies:
         for seed in seeds:
           config = _new_config(nodes, 4, topology)
@@ -303,9 +299,10 @@ def build_e6(
 @register_suite("paper-e7-tradeoffs")
 def build_e7(
     seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
-    algorithms: tuple[str, ...] = TRADEOFF_ALGORITHMS,
+    algorithms: tuple[str, ...] = (),
   ) -> list[Experiment]:
   suite = "paper-e7-tradeoffs"
+  algorithms = algorithms or _tunable(_final_algorithms())
   weights = (
     ("l0-f0", 0, 0), ("l025-f0", 0.25, 0), ("l1-f0", 1, 0),
     ("l0-f025", 0, 0.25), ("l0-f1", 0, 1),
@@ -321,10 +318,7 @@ def build_e7(
       for algorithm in algorithms:
         for seed in seeds:
           config = _new_config(50, 4, topology)
-          section = {
-            "hierarchical-madea": "auction", "faas-madea": "auction",
-            "faas-diffuse": "diffusion", "faas-powd": "powerd",
-          }[algorithm]
+          section = WEIGHT_TUNABLE[algorithm]
           options = config["solver_options"][section]
           options["latency_weight"] = latency_weight
           options["fairness_weight"] = fairness_weight
@@ -337,9 +331,10 @@ def build_e7(
 @register_suite("paper-e8-spatial-latency")
 def build_e8(
     seeds: tuple[int, ...] = CONFIRMATORY_SEEDS,
-    algorithms: tuple[str, ...] = TRADEOFF_ALGORITHMS,
+    algorithms: tuple[str, ...] = (),
   ) -> list[Experiment]:
   suite = "paper-e8-spatial-latency"
+  algorithms = algorithms or _tunable(_final_algorithms())
   experiments = []
   for nodes in (20, 50, 100):
     for mode in ("euclidean", "euclidean_permuted"):
@@ -352,10 +347,7 @@ def build_e8(
             "distance_factor": 1.0,
             "jitter": {"min": 0.0, "max": 0.1},
           }
-          section = {
-            "hierarchical-madea": "auction", "faas-madea": "auction",
-            "faas-diffuse": "diffusion", "faas-powd": "powerd",
-          }[algorithm]
+          section = WEIGHT_TUNABLE[algorithm]
           config["solver_options"][section]["latency_weight"] = 0.25
           experiments.append(_experiment(
             suite, f"n{nodes}-{mode.replace('_', '-')}", algorithm, seed, config,

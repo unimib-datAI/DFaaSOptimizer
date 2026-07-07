@@ -39,10 +39,9 @@ def test_e0_default_count():
 
 def test_e1_default_count_and_unique_ids():
   experiments = build_e1()
-  assert len(experiments) == 1800
-  assert len({e.id for e in experiments}) == 1800
-  assert "hierarchical-madea" in {e.algorithm for e in experiments}
-  assert "hierarchical" not in {e.algorithm for e in experiments}
+  assert len(experiments) == 180                    # 3 nodes x 2 funcs x 6 algos x 5 seeds
+  assert len({e.id for e in experiments}) == 180
+  assert set(e.algorithm for e in experiments) == set(paper._final_algorithms())
 
 
 def test_e1_expands_function_vectors_and_output_folder():
@@ -58,16 +57,17 @@ def test_e1_expands_function_vectors_and_output_folder():
 
 def test_e2_count_and_centralized_size_limit():
   experiments = build_e2()
-  assert len(experiments) == 4230
+  assert len(experiments) == 480
   centralized_sizes = {
     e.config["limits"]["Nn"]["min"]
     for e in experiments if e.algorithm == "centralized"
   }
   assert centralized_sizes == {10, 20}
+  assert {e.config["limits"]["Nn"]["min"] for e in experiments} == {10, 20, 50, 100, 200, 500}
 
 
 def test_e3_count_and_topology_coverage():
-  assert len(build_e3()) == 1080
+  assert len(build_e3()) == 180
   experiments = build_e3(seeds=(1001,))
   topologies = {
     tuple(sorted(e.config["limits"]["neighborhood"].items()))
@@ -81,12 +81,12 @@ def test_e3_count_and_topology_coverage():
 
 
 def test_e4_count_and_conditions():
-  experiments = build_e4(seeds=(1001,))
+  experiments = build_e4()
   conditions = {
     "baseline", "load-low", "load-high", "memory-scarce", "memory-ample",
     "nodes-homogeneous", "nodes-heterogeneous",
   }
-  assert len(experiments) == 7 * 6
+  assert len(experiments) == 7 * 6 * 5
   assert {
     next(condition for condition in conditions if f"-{condition}-" in e.id)
     for e in experiments
@@ -94,8 +94,8 @@ def test_e4_count_and_conditions():
 
 
 def test_e5_count_trace_coverage_and_steps():
-  experiments = build_e5(seeds=(1001,))
-  assert len(experiments) == 3 * 6
+  experiments = build_e5()
+  assert len(experiments) == 3 * 6 * 5
   assert {e.config["limits"]["load"]["trace_type"] for e in experiments} == {
     "sinusoidal", "clipped", "fixed_sum_minmax",
   }
@@ -104,13 +104,14 @@ def test_e5_count_trace_coverage_and_steps():
 
 def test_e6_default_count_and_hierarchical_only():
   experiments = build_e6()
-  assert len(experiments) == 1200
+  assert len(experiments) == 100                    # 10 variants x 1 node x 2 topo x 5
   assert {e.algorithm for e in experiments} == {"hierarchical-madea"}
+  assert {e.config["limits"]["Nn"]["min"] for e in experiments} == {50}
 
 
 def test_e7_default_count_and_weight_pairs():
   experiments = build_e7()
-  assert len(experiments) == 1680
+  assert len(experiments) == 7 * 2 * 4 * 5          # 4 = tunable subset of FINAL
   sections = {
     "hierarchical-madea": "auction", "faas-madea": "auction",
     "faas-diffuse": "diffusion", "faas-powd": "powerd",
@@ -135,7 +136,7 @@ def test_e8_default_count_and_spatial_latency_coverage():
     "faas-diffuse": "diffusion", "faas-powd": "powerd",
   }
 
-  assert len(experiments) == 720
+  assert len(experiments) == 3 * 2 * 4 * 5
   assert {e.config["limits"]["Nn"]["min"] for e in experiments} == {20, 50, 100}
   assert {
     e.config["limits"]["weights"]["edge_network_latency"]["mode"]
