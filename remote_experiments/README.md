@@ -65,35 +65,25 @@ Every selected job transfers only its own materialized instance. Use
 Add a file to `remote_experiments/definitions/` with a function decorated
 `@register_suite("name")` returning a `list[Experiment]` (see `smoke.py`).
 
-## Paper experiment batches
+## Run the two-phase paper campaign
 
-Generate the journal-study batches independently so each research question has
-its own manifest and can be resumed separately:
-
-```bash
-for suite in \
-  paper-e0-pilot \
-  paper-e1-quality-runtime \
-  paper-e2-scalability \
-  paper-e3-topology \
-  paper-e4-robustness \
-  paper-e5-dynamics \
-  paper-e6-ablation \
-  paper-e7-tradeoffs \
-  paper-e8-spatial-latency
-do
-  uv run -m remote_experiments define "$suite" -o "batches/$suite.json"
-done
-```
-
-Materialize each batch before running it:
+One command runs screening, auto-selects the 4 survivor algorithms, then runs
+the confirmatory suites on survivors + anchors (centralized, hierarchical-madea):
 
 ```bash
-for batch in batches/paper-*.json; do
-  uv run -m remote_experiments materialize "$batch"
-done
+uv run -m remote_experiments campaign --inventory my-inventory.yaml \
+  --gurobi-license ~/gurobi.lic
 ```
+
+Progress is checkpointed in `batches/campaign-state.json` and each suite has its
+own `batches/<suite>.manifest.json`, so re-running `campaign` resumes where it
+stopped. Survivors are written to `batches/survivors.json`; delete it (and reset
+the state file to `{"stage":"screening","done_suites":[]}`) to re-screen.
 
 Generated suite directories are ignored by Git. For archival, create a ZIP only
 after materialization and retain its external SHA-256 checksum; ZIP files are
 not used directly by the runners.
+
+To inspect a single suite without the orchestrator, the old
+`define`/`materialize`/`run` commands above still work (add `--yes` to `run`
+to skip the prompt).
