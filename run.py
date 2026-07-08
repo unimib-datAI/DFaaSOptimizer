@@ -506,6 +506,16 @@ def results_postprocessing(
     for mname, af in zip(found_methods, abs_folders):
       if os.path.exists(os.path.join(af, "runtime.csv")):
         runtimes[mname] = pd.read_csv(os.path.join(af, "runtime.csv"))
+        if (
+            mname == "LoadManagementModel"
+            and mname not in runtimes[mname].columns
+            and runtimes[mname].shape[1] == 1
+          ):
+          # the centralized runtime.csv stores the model name as its single
+          # column, which is "TightLoadManagementModel" under
+          # model_variant="tight"; normalize it to the canonical baseline label
+          # so the runtime comparison below finds it regardless of variant
+          runtimes[mname].columns = [mname]
       else:
         if mname != "LoadManagementModel":
           logs_df, _ = parse_log_file(
