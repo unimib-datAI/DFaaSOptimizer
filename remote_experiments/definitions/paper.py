@@ -14,10 +14,6 @@ _BASE_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config_files" / "eval
 PILOT_SEEDS = tuple(range(1, 11))
 CONFIRMATORY_SEEDS = tuple(range(1001, 1006))
 
-ALL_ALGORITHMS = (
-  "centralized", "faas-macro", "faas-macro-v0", "faas-madea", "hierarchical-madea",
-  "faas-diffuse", "faas-powd", "faas-br-s", "faas-br-r", "faas-br-o",
-)
 ANCHORS = ("centralized", "hierarchical-madea")
 DEFAULT_SURVIVORS = ("faas-madea", "faas-diffuse", "faas-powd", "faas-br-o")
 WEIGHT_TUNABLE = {
@@ -31,12 +27,13 @@ SCREENING_CANDIDATES = (
   "faas-br-s", "faas-br-r", "faas-br-o", "faas-pg-s", "faas-pg-r", "faas-gcaa", "plasma",
 )
 
-NON_CENTRALIZED_ALGORITHMS = tuple(a for a in ALL_ALGORITHMS if a != "centralized")
-
 
 def _survivors() -> tuple[str, ...]:
   if SURVIVORS_PATH.exists():
-    return tuple(json.loads(SURVIVORS_PATH.read_text())["survivors"])
+    try:
+      return tuple(json.loads(SURVIVORS_PATH.read_text())["survivors"])
+    except (json.JSONDecodeError, KeyError, TypeError):
+      return DEFAULT_SURVIVORS
   return DEFAULT_SURVIVORS
 
 

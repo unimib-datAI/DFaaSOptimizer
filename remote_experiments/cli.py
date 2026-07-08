@@ -93,7 +93,7 @@ def execute_batch(batch, manifest, manifest_path, selected, args) -> bool:
   with Dispatcher(inventory, project, results_dir=args.results_dir) as dispatcher:
     start = time.monotonic()
     with live_view(batch, manifest, inventory, start_time=start) as on_tick:
-      return run_batch(dispatcher, jobs, manifest, on_tick)
+      return run_batch(dispatcher, jobs, manifest, on_tick, batch_id=batch.suite)
 
 
 def cmd_campaign(args: argparse.Namespace) -> None:

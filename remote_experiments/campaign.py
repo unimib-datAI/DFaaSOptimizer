@@ -50,7 +50,7 @@ def _define_and_materialize(suite: str, instances_root: str) -> Batch:
   return batch
 
 
-def _run_suite(suite: str, args, state: dict) -> None:
+def _run_suite(suite: str, args, state: dict) -> bool:
   # imported lazily to avoid a cli<->campaign import cycle
   from .cli import execute_batch
   batch = _define_and_materialize(suite, args.instances)
@@ -58,15 +58,18 @@ def _run_suite(suite: str, args, state: dict) -> None:
   manifest = Manifest(manifest_path)
   selected_idx = default_selection([e.id for e in batch.experiments], manifest)
   selected = [batch.experiments[i] for i in selected_idx]
-  if selected:
-    execute_batch(batch, manifest, manifest_path, selected, args)
+  if not selected:
+    return True
+  return execute_batch(batch, manifest, manifest_path, selected, args)
 
 
 def run_campaign(args) -> None:
   state = _load_state()
 
   if state["stage"] == "screening":
-    _run_suite(SCREENING_SUITE, args, state)
+    if not _run_suite(SCREENING_SUITE, args, state):
+      print("screening interrupted — rerun campaign to resume")
+      return
     state["stage"] = "select"
     _save_state(state)
 
@@ -74,7 +77,7 @@ def run_campaign(args) -> None:
     # rebuild the (deterministic) screening batch rather than reading it back
     # from disk — keeps `select` independent of `_run_suite`'s side effects.
     batch = Batch(suite=SCREENING_SUITE, experiments=tuple(get_suite(SCREENING_SUITE)()))
-    survivors = select_survivors(batch, Path(args.results_dir))
+    survivors = select_survivors(batch, Path(args.results_dir) / SCREENING_SUITE)
     write_survivors(SURVIVORS_PATH, survivors)
     print(f"survivors: {survivors}")
     state["stage"] = "confirm"
@@ -84,7 +87,9 @@ def run_campaign(args) -> None:
     for suite in CONFIRMATORY_SUITES:
       if suite in state["done_suites"]:
         continue
-      _run_suite(suite, args, state)
+      if not _run_suite(suite, args, state):
+        print(f"{suite} interrupted — rerun campaign to resume")
+        return
       state["done_suites"].append(suite)
       _save_state(state)
   print("campaign complete")

@@ -20,6 +20,7 @@ def run_batch(
     manifest: Manifest,
     on_tick: Callable[[dict[str, str]], None],
     *,
+    batch_id: str | None = None,
     poll_interval_s: float = 1.0,
     sleep: Callable[[float], None] = time.sleep,
     now: Callable[[], float] = time.monotonic,
@@ -31,7 +32,7 @@ def run_batch(
   state, so a later run_batch() call on the same experiment ids resumes
   from there.
   """
-  handles: list[JobHandle] = dispatcher.submit(jobs)
+  handles: list[JobHandle] = dispatcher.submit(jobs, batch_id=batch_id)
   started_at = {h.job_id: now() for h in handles}
   last_known_host: dict[str, str] = {}
   for handle in handles:

@@ -9,8 +9,10 @@ class FakeDispatcher:
     self._sequences = {k: list(v) for k, v in status_sequences.items()}
     self._hosts = hosts or {}
     self.cancelled: list[str] = []
+    self.submitted_batch_id = None
 
-  def submit(self, jobs):
+  def submit(self, jobs, *, batch_id=None):
+    self.submitted_batch_id = batch_id
     return [JobHandle(batch_id="b1", job_id=j.id, token=j.id) for j in jobs]
 
   def status(self, handle):
@@ -68,6 +70,16 @@ def test_run_batch_stops_and_cancels_on_keyboard_interrupt(tmp_path):
   assert completed is False
   assert "e1" in dispatcher.cancelled
   assert manifest.status("e1") == "cancelled"
+
+
+def test_run_batch_forwards_batch_id_to_submit(tmp_path):
+  dispatcher = FakeDispatcher({"e1": [JobStatus.SUCCEEDED]})
+  manifest = Manifest(tmp_path / "m.json")
+  run_batch(
+    dispatcher, _jobs("e1"), manifest, on_tick=lambda h: None, sleep=lambda s: None,
+    batch_id="paper-e1-quality-runtime",
+  )
+  assert dispatcher.submitted_batch_id == "paper-e1-quality-runtime"
 
 
 def test_run_batch_preserves_host_after_lease_released_before_terminal_is_observed(tmp_path):

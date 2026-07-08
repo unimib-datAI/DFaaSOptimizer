@@ -46,6 +46,31 @@ def test_runtime_breaks_ties(tmp_path):
   assert select_survivors(batch, tmp_path, n=1) == ["faas-powd"]
 
 
+def _write_real_layout_result(root, suite, exp, obj, runtime=0.1):
+  # real ray_dispatcher output tree: <root>/<suite>/<e.id>/outputs/<e.id>/<ts>/obj.csv
+  run = root / suite / exp.id / "outputs" / exp.id / "2026-07-06_00-00-00.000000"
+  run.mkdir(parents=True)
+  (run / "obj.csv").write_text(f"Model\n{obj}\n")
+  (run / "runtime.csv").write_text(f"tot\n{runtime}\n")
+
+
+def test_selects_survivors_from_real_nested_ray_dispatcher_layout(tmp_path):
+  suite = "paper-a-screening"
+  objs = {
+    "hierarchical-madea": 100.0,
+    "faas-madea": 99.0, "faas-diffuse": 98.0, "faas-powd": 97.0,
+    "faas-br-o": 96.0, "faas-gcaa": 50.0,
+  }
+  exps = [_exp(a, 50, 1) for a in objs]
+  batch = Batch(suite=suite, experiments=tuple(exps))
+  for e in exps:
+    _write_real_layout_result(tmp_path, suite, e, objs[e.algorithm])
+
+  survivors = select_survivors(batch, tmp_path / suite, n=4)
+  assert survivors == ["faas-madea", "faas-diffuse", "faas-powd", "faas-br-o"]
+  assert "hierarchical-madea" not in survivors
+
+
 def test_guard_trips_on_too_many_failures(tmp_path):
   exps = [_exp("faas-madea", 50, 1), _exp("faas-powd", 50, 1)]
   batch = Batch(suite="paper-a-screening", experiments=tuple(exps))

@@ -90,7 +90,7 @@ class _FakeDispatcher:
   def __exit__(self, *exc_info):
     return False
 
-  def submit(self, jobs):
+  def submit(self, jobs, *, batch_id=None):
     return [JobHandle(batch_id="b1", job_id=j.id, token=j.id) for j in jobs]
 
   def status(self, handle):

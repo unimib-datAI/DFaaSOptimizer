@@ -183,6 +183,13 @@ def test_survivors_read_from_file(tmp_path, monkeypatch):
   assert paper._survivors() == ("faas-gcaa", "faas-pg-s", "faas-powd", "faas-diffuse")
 
 
+def test_survivors_fallback_on_malformed_json(tmp_path, monkeypatch):
+  path = tmp_path / "survivors.json"
+  path.write_text("{ not json")
+  monkeypatch.setattr(paper, "SURVIVORS_PATH", path)
+  assert paper._survivors() == paper.DEFAULT_SURVIVORS
+
+
 def test_confirmatory_seeds_are_five():
   assert len(paper.CONFIRMATORY_SEEDS) == 5
 
