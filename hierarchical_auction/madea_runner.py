@@ -77,12 +77,18 @@ def bids_for_stopping(
 
 def parse_arguments() -> argparse.Namespace:
   parser = argparse.ArgumentParser(
-    description="Hierarchical auction extending production FaaS-MADeA",
-    formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    description = "Hierarchical auction extending production FaaS-MADeA",
+    formatter_class = argparse.ArgumentDefaultsHelpFormatter,
   )
-  parser.add_argument("-c", "--config", default="config_files/manual_config.json")
-  parser.add_argument("-j", "--parallelism", type=int, default=-1)
-  parser.add_argument("--disable_plotting", action="store_true")
+  parser.add_argument(
+    "-c", "--config", default="config_files/manual_config.json"
+  )
+  parser.add_argument(
+    "-j", "--parallelism", type=int, default=-1
+  )
+  parser.add_argument(
+    "--disable_plotting", action="store_true"
+  )
   return parser.parse_known_args()[0]
 
 
@@ -412,8 +418,15 @@ def run(
 
 if __name__ == "__main__":
   args = parse_arguments()
+  config_file = args.config
+  parallelism = args.parallelism
+  disable_plotting = args.disable_plotting
+  # load configuration file
+  config = load_configuration(config_file)
+  # run
   run(
-    load_configuration(args.config),
-    parallelism=args.parallelism,
-    disable_plotting=args.disable_plotting,
+    config,
+    parallelism = parallelism, 
+    log_on_file = False, 
+    disable_plotting=disable_plotting,
   )
