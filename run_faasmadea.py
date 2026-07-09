@@ -343,15 +343,11 @@ def evaluate_bids(
     auction_options: dict = None,
     initial_rho: np.array = None,
     r: np.array = None,
-    tentatively_start_replicas: bool = None,
+    tentatively_start_replicas: bool = False,
     it: int = 0
   ) -> np.array:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
-  extended_return = (
-    last_y is not None or initial_rho is not None or
-      r is not None or tentatively_start_replicas is not None
-  )
   if last_y is None:
     last_y = np.zeros((Nn,Nn,Nf))
   if ell is None:
@@ -368,8 +364,6 @@ def evaluate_bids(
     initial_rho = np.zeros((Nn,))
   if r is None:
     r = np.zeros((Nn,Nf))
-  if tentatively_start_replicas is None:
-    tentatively_start_replicas = False
   # eta may be a per-iteration schedule (e.g. [0.5, 0.3, 0.15]); clamp to the
   # last value once the schedule is exhausted, accept a plain scalar too
   eta = auction_options["eta"]
@@ -485,9 +479,7 @@ def evaluate_bids(
       p[j,f] = min_b + eta * (u - u0[j,f])
     else:
       p[j,f] *= (1 - auction_options["zeta"])
-  if extended_return:
-    return y, p, additional_replicas, len(potential_sellers)
-  return y, p
+  return y, p, additional_replicas, len(potential_sellers)
 
 
 def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:

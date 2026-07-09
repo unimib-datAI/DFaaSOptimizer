@@ -84,7 +84,7 @@ def test_faasmadea_stopping_capacity_utility_and_bid_helpers():
     "b": [4.0, 3.0],
   })
   p = np.ones((2, 2))
-  y_eval, p_eval = run_faasmadea.evaluate_bids(
+  y_eval, p_eval, _, _ = run_faasmadea.evaluate_bids(
     bids,
     blackboard = np.array([[0.0, 0.0], [4.0, 0.0]]),
     data = data,
@@ -127,20 +127,20 @@ def test_evaluate_bids_eta_schedule_and_scalar_and_n_auctions_guard():
   p = np.ones((2, 2))
   blackboard = np.array([[0.0, 0.0], [4.0, 0.0]])
   # scalar eta still works (backward compatible)
-  _, p_scalar = run_faasmadea.evaluate_bids(
+  _, p_scalar, _, _ = run_faasmadea.evaluate_bids(
     bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
     capacity = cap, u0 = np.zeros((2, 2)),
     auction_options = {"eta": 0.5, "zeta": 0.1},
   )
   # a per-iteration eta schedule: it=0 must use eta[0]
-  _, p_it0 = run_faasmadea.evaluate_bids(
+  _, p_it0, _, _ = run_faasmadea.evaluate_bids(
     bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
     capacity = cap, u0 = np.zeros((2, 2)),
     auction_options = {"eta": [0.5, 0.3, 0.15], "zeta": 0.1}, it = 0,
   )
   assert p_it0[1, 0] == pytest.approx(p_scalar[1, 0])
   # it beyond the schedule length clamps to the last value, no IndexError
-  _, p_it_over = run_faasmadea.evaluate_bids(
+  _, p_it_over, _, _ = run_faasmadea.evaluate_bids(
     bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
     capacity = cap, u0 = np.zeros((2, 2)),
     auction_options = {"eta": [0.5, 0.3, 0.15], "zeta": 0.1}, it = 99,
