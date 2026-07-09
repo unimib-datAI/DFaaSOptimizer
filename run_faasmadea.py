@@ -51,7 +51,7 @@ def parse_arguments() -> argparse.Namespace:
     "-c", "--config",
     help = "Configuration file",
     type = str,
-    default = "manual_config.json"
+    default = "config_files/manual_config.json"
   )
   parser.add_argument(
     "-j", "--parallelism",
@@ -335,7 +335,7 @@ def evaluate_bids(
     bids: pd.DataFrame, 
     blackboard: np.array, 
     data: dict, 
-    last_y: np.array = None,
+    previous_y: np.array = None,
     ell: np.array = None, 
     p: np.array = None, 
     capacity: np.array = None, 
@@ -348,8 +348,7 @@ def evaluate_bids(
   ) -> np.array:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
-  if last_y is None:
-    last_y = np.zeros((Nn,Nn,Nf))
+  last_y = np.zeros((Nn,Nn,Nf)) if previous_y is None else previous_y.copy()
   if ell is None:
     ell = np.zeros((Nn,Nf))
   if p is None:
@@ -386,100 +385,125 @@ def evaluate_bids(
   y = np.zeros((Nn,Nn,Nf))
   additional_replicas = np.zeros((Nn,Nf))
   rho = deepcopy(initial_rho)
-  for j,f in zip(potential_sellers,functions_to_share):
+  unique_potential_sellers = np.unique(potential_sellers)
+  for j in unique_potential_sellers:
     # extract bids for the current node
-    bids_for_j = bids[(bids["j"] == j) & (bids["f"] == f)].sort_values(
+    all_bids_for_j = bids[(bids["j"] == j)].sort_values(
       by = "b", ascending = False
     )
-    remaining_capacity = int(blackboard[j,f])
+    remaining_capacities = blackboard[j,:].astype(int).copy()
+    all_min_b = all_bids_for_j.groupby("f")["b"].max()
     next_bid_idx = 0
-    min_b = bids_for_j["b"].max()
     # loop over bids until there is remaining capacity
-    while next_bid_idx < len(bids_for_j) and remaining_capacity > 0:
-      bid = bids_for_j.iloc[next_bid_idx]
+    while next_bid_idx < len(all_bids_for_j) and \
+        (remaining_capacities > 0).any():
+      bid = all_bids_for_j.iloc[next_bid_idx]
       i = int(bid["i"])
+      f = int(bid["f"])
       next_bid_idx += 1
       if receiving[i,f] or sending[j,f]:
         continue
-      q = min(remaining_capacity, bid["d"])
-      y[i,j,f] += q
-      remaining_capacity -= q
-      min_b = min(min_b, bid["b"])
-      sending[i,f] = True
-      receiving[j,f] = True
+      if remaining_capacities[f] > 0:
+        q = min(remaining_capacities[f], bid["d"])
+        y[i,j,f] += q
+        remaining_capacities[f] -= q
+        all_min_b[f] = min(all_min_b[f], bid["b"])
+        sending[i,f] = True
+        receiving[j,f] = True
     # if computational capacity is exhausted and there are still bids, 
     # consider starting new replicas
-    if remaining_capacity == 0 and (
-        next_bid_idx > 0 or (next_bid_idx == 0 and len(bids_for_j) > 0)
+    if (remaining_capacities == 0).all() and (
+        (0 < next_bid_idx < len(all_bids_for_j)) or (
+          next_bid_idx == 0 and len(all_bids_for_j) > 0
+        )
       ):
-      max_a = 0
+      max_a = np.zeros((Nf,1))
       if tentatively_start_replicas:
-        max_a = int(rho[j] / data[None]["memory_requirement"][f+1])
-        if max_a > 0:
-          a = 1
-          while next_bid_idx < len(bids_for_j) and a <= max_a:
-            i = int(bids_for_j.iloc[next_bid_idx]["i"])
+        max_a = np.array([
+          int(rho[j]/data[None]["memory_requirement"][f+1]) for f in range(Nf)
+        ])
+        if (max_a > 0).any():
+          a = np.ones((Nf,1))
+          while next_bid_idx < len(all_bids_for_j) and (a <= max_a).any():
+            i = int(all_bids_for_j.iloc[next_bid_idx]["i"])
+            f = int(all_bids_for_j.iloc[next_bid_idx]["f"])
             if receiving[i,f] or sending[j,f]:
               next_bid_idx += 1
               continue
-            # -- check utilization with one more replica
-            q = bids_for_j.iloc[next_bid_idx]["d"]
-            u = data[None]["demand"][(j+1,f+1)] * (
-              ell[j,f] + y[:,j,f].sum() + q
-            ) / (r[j,f] + a)
-            if u <= data[None]["max_utilization"][f+1]:
-              # -- if possible, accomodate one more bid...
-              y[i,j,f] += q
-              min_b = min(min_b, bids_for_j.iloc[next_bid_idx]["b"])
-              next_bid_idx += 1
-              additional_replicas[j,f] = a
-              # -- and update the remaining memory capacity
-              rho[j] -= (a * data[None]["memory_requirement"][f+1])
-              sending[i,f] = True
-              receiving[j,f] = True
+            if a[f] <= max_a[f]:
+              # -- check utilization with one more replica
+              q = all_bids_for_j.iloc[next_bid_idx]["d"]
+              u = data[None]["demand"][(j+1,f+1)] * (
+                ell[j,f] + y[:,j,f].sum() + q
+              ) / (r[j,f] + a[f])
+              if u <= data[None]["max_utilization"][f+1]:
+                # -- if possible, accomodate one more bid...
+                y[i,j,f] += q
+                all_min_b[f] = min(
+                  all_min_b[f], all_bids_for_j.iloc[next_bid_idx]["b"]
+                )
+                next_bid_idx += 1
+                sending[i,f] = True
+                receiving[j,f] = True
+                # -- and update the remaining memory capacity
+                if additional_replicas[j,f] < a[f]:
+                  additional_replicas[j,f] = a[f]
+                  rho[j] -= (a[f] * data[None]["memory_requirement"][f+1])
+              else:
+                # -- ...otherwhise, try to increase replicas
+                a[f] += 1
             else:
-              # -- ...otherwhise, try to increase replicas
-              a += 1
-      if not tentatively_start_replicas or max_a == 0:
+              next_bid_idx += 1
+      if not tentatively_start_replicas or (max_a == 0).all():
         # if no additional replicas can start, replace existing assignments
         # -- check who previously won the assignment to j
-        i_arr, d_arr, b_arr = bids_for_j[["i","d","b"]].to_numpy().T
-        previous_buyers = np.nonzero(last_y[:,j,f])[0]
-        pbidx = 0
-        while next_bid_idx < len(i_arr) and pbidx < len(previous_buyers):
-          i = int(i_arr[next_bid_idx])
-          if (
-              previous_buyers[pbidx] != i and b_arr[next_bid_idx] > p[j,f]
-              and not receiving[i,f] and not sending[j,f]
-            ):
-            max_to_remove = last_y[previous_buyers[pbidx],j,f]
-            nbi = next_bid_idx
-            swapped = 0
-            while (
-                nbi < len(i_arr) and
-                  i_arr[nbi] == i and
-                    swapped < max_to_remove
+        i_arr, d_arr, b_arr, f_arr = all_bids_for_j[[
+          "i", "d", "b", "f"
+        ]].to_numpy().T
+        while next_bid_idx < len(f_arr):
+          f = int(f_arr[next_bid_idx])
+          previous_buyers = np.nonzero(last_y[:,j,f])[0]
+          pbidx = 0
+          nbi = -1
+          while pbidx < len(previous_buyers) and next_bid_idx < len(i_arr):
+            i = int(i_arr[next_bid_idx])
+            if (
+                previous_buyers[pbidx] != i and b_arr[next_bid_idx] > p[j,f]
+                and not receiving[i,f] and not sending[j,f]
               ):
-              # cap at what the incumbent still holds: removing the full bid
-              # quantity would over-subtract y (negative) and exceed j capacity
-              q = min(d_arr[nbi], max_to_remove - swapped)
-              y[previous_buyers[pbidx],j,f] -= q
-              y[i,j,f] += q
-              swapped += q
-              min_b = min(min_b, b_arr[nbi])
-              nbi += 1
-            if swapped > 0:
-              sending[i,f] = True
-              receiving[j,f] = True
-            next_bid_idx += (nbi if nbi > 0 else 1)
-          pbidx += 1
+              max_to_remove = last_y[previous_buyers[pbidx],j,f]
+              nbi = next_bid_idx
+              swapped = 0
+              while (
+                  nbi < len(i_arr) and
+                    i_arr[nbi] == i and
+                      swapped < max_to_remove
+                ):
+                # cap at what the incumbent still holds: removing the full bid
+                # quantity would over-subtract y (negative) and exceed j capacity
+                q = min(d_arr[nbi], max_to_remove - swapped)
+                y[previous_buyers[pbidx],j,f] -= q
+                y[i,j,f] += q
+                swapped += q
+                all_min_b[f] = min(all_min_b[f], b_arr[nbi])
+                nbi += 1
+              if swapped > 0:
+                sending[i,f] = True
+                receiving[j,f] = True
+                last_y[previous_buyers[pbidx],j,f] -= swapped
+              next_bid_idx += (nbi if nbi > 0 else 1)
+            pbidx += 1
+          if len(previous_buyers) == 0 or (
+              nbi < 0 and pbidx == len(previous_buyers)
+            ):
+            next_bid_idx += 1
     # compute utilization and update prices
-    if len(bids_for_j) > 0:
+    for f,b in all_min_b.items():
       u = (ell[j,f] + y[:,j,f].sum()) / capacity[j,f]
-      p[j,f] = min_b + eta * (u - u0[j,f])
-    else:
+      p[j,f] = b + eta * (u - u0[j,f])
+    for f in set(functions_to_share) - set(all_min_b.index):
       p[j,f] *= (1 - auction_options["zeta"])
-  return y, p, additional_replicas, len(potential_sellers)
+  return y, p, additional_replicas, len(unique_potential_sellers)
 
 
 def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
