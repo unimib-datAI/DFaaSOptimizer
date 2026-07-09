@@ -272,6 +272,7 @@ class LSPr(LSPr_v0):
     ###########################################################################
     # Constraints
     ###########################################################################
+    self.model.del_component(self.model.no_traffic_loss_v0)
     self.model.no_traffic_loss = pyo.Constraint(
       self.model.F, rule = self.no_traffic_loss
     )
@@ -325,6 +326,7 @@ class LSPr_x(LSPr_v0):
     ###########################################################################
     # Constraints
     ###########################################################################
+    self.model.del_component(self.model.no_traffic_loss_v0)
     self.model.no_traffic_loss = pyo.Constraint(
       self.model.F, rule = self.no_traffic_loss
     )
