@@ -76,7 +76,7 @@ def parse_arguments() -> argparse.Namespace:
   )
   parser.add_argument(
     "--v0",
-    help = "Use the v0 (non-accelerated) FaaS-MACrO iteration variant",
+    help = "Use the v0 FaaS-MACrO iteration variant",
     default = False,
     action = "store_true"
   )
