@@ -477,7 +477,8 @@ def evaluate_bids(
               while (
                   nbi < len(i_arr) and
                     i_arr[nbi] == i and
-                      swapped < max_to_remove
+                      f_arr[nbi] == f and
+                        swapped < max_to_remove
                 ):
                 # cap at what the incumbent still holds: removing the full bid
                 # quantity would over-subtract y (negative) and exceed j capacity
