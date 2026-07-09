@@ -417,44 +417,41 @@ def evaluate_bids(
           next_bid_idx == 0 and len(all_bids_for_j) > 0
         )
       ):
-      max_a = np.zeros((Nf,1))
-      if tentatively_start_replicas:
-        max_a = np.array([
-          int(rho[j]/data[None]["memory_requirement"][f+1]) for f in range(Nf)
-        ])
-        if (max_a > 0).any():
-          a = np.ones((Nf,1))
-          while next_bid_idx < len(all_bids_for_j) and (a <= max_a).any():
-            i = int(all_bids_for_j.iloc[next_bid_idx]["i"])
-            f = int(all_bids_for_j.iloc[next_bid_idx]["f"])
-            if receiving[i,f] or sending[j,f]:
-              next_bid_idx += 1
-              continue
-            if a[f] <= max_a[f]:
+      if tentatively_start_replicas and rho[j] > 0:
+        while next_bid_idx < len(all_bids_for_j) and rho[j] > 0:
+          i = int(all_bids_for_j.iloc[next_bid_idx]["i"])
+          f = int(all_bids_for_j.iloc[next_bid_idx]["f"])
+          max_a = int(rho[j]/data[None]["memory_requirement"][f+1])
+          if max_a > 0 and not (receiving[i,f] or sending[j,f]):
+            a = int(additional_replicas[j,f] + 1)
+            managed = False
+            while a <= max_a and not managed:
               # -- check utilization with one more replica
               q = all_bids_for_j.iloc[next_bid_idx]["d"]
               u = data[None]["demand"][(j+1,f+1)] * (
                 ell[j,f] + y[:,j,f].sum() + q
-              ) / (r[j,f] + a[f])
+              ) / (r[j,f] + a)
               if u <= data[None]["max_utilization"][f+1]:
                 # -- if possible, accomodate one more bid...
                 y[i,j,f] += q
                 all_min_b[f] = min(
                   all_min_b[f], all_bids_for_j.iloc[next_bid_idx]["b"]
                 )
-                next_bid_idx += 1
                 sending[i,f] = True
                 receiving[j,f] = True
+                managed = True
                 # -- and update the remaining memory capacity
-                if additional_replicas[j,f] < a[f]:
-                  additional_replicas[j,f] = a[f]
-                  rho[j] -= (a[f] * data[None]["memory_requirement"][f+1])
+                if additional_replicas[j,f] < a:
+                  additional_replicas[j,f] = a
+                  rho[j] -= (a * data[None]["memory_requirement"][f+1])
               else:
                 # -- ...otherwhise, try to increase replicas
-                a[f] += 1
+                a += 1
             else:
               next_bid_idx += 1
-      if not tentatively_start_replicas or (max_a == 0).all():
+      if not tentatively_start_replicas or (
+          tentatively_start_replicas and rho[j] <= 0
+        ):
         # if no additional replicas can start, replace existing assignments
         # -- check who previously won the assignment to j
         i_arr, d_arr, b_arr, f_arr = all_bids_for_j[[
