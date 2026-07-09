@@ -52,7 +52,17 @@ def parse_arguments() -> argparse.Namespace:
     "--models",
     help = "List of model names",
     nargs = "*",
-    default = ["LoadManagementModel", "FaaS-MACrO", "FaaS-MADeA", "HierarchicalMADeA", "FaaS-MADiG", "FaaS-MAPoD", "FaaS-MABR-S", "FaaS-MABR-R", "FaaS-MABR-O"]
+    default = [
+      "LoadManagementModel", 
+      "FaaS-MACrO", 
+      "FaaS-MADeA", 
+      "HierarchicalMADeA", 
+      "FaaS-MADiG", 
+      "FaaS-MAPoD", 
+      "FaaS-MABR-S", 
+      "FaaS-MABR-R", 
+      "FaaS-MABR-O"
+    ]
   )
   parser.add_argument(
   "--filter_by",
@@ -750,7 +760,7 @@ def dev_barplot_by_key(
   rgroup = runtime.groupby(key)
   ridx = 0
   for model in models:
-    if model.startswith("FaaS-"):
+    if model != "LoadManagementModel":
       data = pd.DataFrame({
         key: list(ogroup.groups.keys()),
         "avg": ogroup.mean()[f"dev_{model}"].values.tolist(),
