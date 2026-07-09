@@ -793,7 +793,7 @@ def run(
             flush = True
           )
         # -- update solution
-        sp_x, _, _, _, sp_r, sp_rho = spr_sol
+        _, _, _, _, sp_r, sp_rho = spr_sol
         for i in range(Nn):
           for f in range(Nf):
             omega[i,f] = sp_omega[i,f] - rmp_omega[i,f]
