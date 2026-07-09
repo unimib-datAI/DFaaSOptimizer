@@ -140,6 +140,7 @@ def run(
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
     started_at = time.monotonic()
+    total_runtime = 0
     loadt = get_current_load(traces, agents, t)
     sp_data = deepcopy(base_data)
     sp_data[None]["incoming_load"] = loadt
@@ -157,6 +158,7 @@ def run(
         file = log_stream, 
         flush = True
       )
+    total_runtime += sp_runtime['tot']
     u0 = np.ones((Nn, Nf)) * 0.8
     p = np.zeros((Nn, Nf))
     y = np.zeros((Nn, Nn, Nf))
@@ -189,6 +191,7 @@ def run(
         and all(value == accepted_queue[0] for value in accepted_queue)
       )
       e = time.monotonic()
+      total_runtime += (e - s)
       if verbose > 1:
         print(
           f"        compute_residual_capacity: DONE ",
@@ -206,9 +209,10 @@ def run(
       )
       e = time.monotonic()
       rt = (e - s)
+      total_runtime += rt/max(n_auctions, 1)
       if verbose > 1:
         print(
-          f"        define_bids: DONE; runtime = {rt/n_auctions}; "
+          f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
           f"n_auctions = {n_auctions}; tot runtime = {rt})", 
           file = log_stream, 
           flush = True
@@ -225,9 +229,10 @@ def run(
         )
         e = time.monotonic()
         rt = (e - s)
+        total_runtime += rt/max(n_auctions, 1)
         if verbose > 1:
           print(
-           f"        evaluate_bids: DONE; runtime = {rt/n_auctions}; "
+           f"        evaluate_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
            f"n_auctions = {n_auctions}; tot runtime = {rt})", 
            file = log_stream, 
            flush = True
@@ -241,6 +246,7 @@ def run(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism, sp_x
         )
+        total_runtime += spr_runtime
         if verbose > 1:
           print(
             f"        solve 'restricted problem': DONE ({spr_tc}; "
@@ -268,6 +274,7 @@ def run(
         )
         sp_r += additional_replicas
         e = time.monotonic()
+        total_runtime += (e - s)
         if verbose > 1:
           print(
             f"        additional replicas started: DONE "
@@ -291,6 +298,7 @@ def run(
       y = result.y
       rmp_omega = compute_offloaded_demand(y)
       e = time.monotonic()
+      total_runtime += (e - s)
       if verbose > 1:
         print(
           f"        higher-level auction: DONE (y = {y.tolist()}; "
@@ -306,6 +314,7 @@ def run(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism, sp_x
         )
+        total_runtime += spr_runtime
         _, _, _, _, sp_r, sp_rho = spr_sol
         if verbose > 1:
           print(
@@ -334,6 +343,7 @@ def run(
         best_it = it
 
       elapsed = time.monotonic() - started_at
+      s = time.monotonic()
       stop, reason = check_stopping_criteria(
         it=it,
         max_iterations=max_iterations,
@@ -344,9 +354,20 @@ def run(
         bids=bids_for_stopping(bids, len(result.accepted_allocations)),
         memory_bids=memory_bids,
         tolerance=tolerance,
-        total_runtime=elapsed,
+        total_runtime=total_runtime,
         time_limit=time_limit,
       )
+      e = time.monotonic()
+      if verbose > 1:
+        print(
+          f"        check_stopping_criteria: DONE "
+          f"(runtime = {(e - s)}; "
+          f"total runtime = {total_runtime}; "
+          f"wallclock: {elapsed}) "
+          f"--> stop? {stop} ({reason})", 
+          file = log_stream, 
+          flush = True
+        )
       if stop:
         complete_solution, _, objective = decode_solutions(
           sp_data, best_solution, complete_solution, None,
@@ -354,11 +375,20 @@ def run(
         objectives.append(objective)
         termination_conditions.append(
           f"{reason} (it: {it}; obj. deviation: None; best it: {best_it}; "
-          f"best centralized it: {best_it}; total runtime: {elapsed})"
+          f"best centralized it: {best_it}; total runtime: {total_runtime})"
         )
-        runtimes.append(elapsed)
+        runtimes.append(total_runtime)
         if t % checkpoint_interval == 0 or t == max_steps - 1:
-          save_checkpoint(complete_solution, os.path.join(solution_folder, "LSPc"), t)
+          save_checkpoint(
+            complete_solution, os.path.join(solution_folder, "LSPc"), t
+          )
+        if verbose > 0:
+          print(
+            f"    TOTAL RUNTIME [s] = {total_runtime} "
+            f"(wallclock: {elapsed})",
+            file = log_stream, 
+            flush = True
+          )
       else:
         it += 1
 
