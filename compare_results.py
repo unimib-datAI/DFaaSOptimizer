@@ -1024,13 +1024,18 @@ if __name__ == "__main__":
       )
     for postprocessing_folder in postprocessing_folders:
       print(postprocessing_folder)
-      compare_results(
-        os.path.join(postprocessing_folder, "postprocessing"),
-        loop_over,
-        loop_over_label,
-        models,
-        folder_parse_format = folder_parse_format
-      )
+      if os.path.exists(os.path.join(postprocessing_folder, "postprocessing")):
+        compare_results(
+          os.path.join(postprocessing_folder, "postprocessing"),
+          loop_over,
+          loop_over_label,
+          models,
+          folder_parse_format = folder_parse_format
+        )
+      else:
+        print(
+         f"\tSKIPPED: {postprocessing_folder} does not contain postprocessing/"
+        )
   elif what_to_do == "compare_across_folders":
     # for eef,
     # loop_over_label = "Edge-exposed fraction [%]"
