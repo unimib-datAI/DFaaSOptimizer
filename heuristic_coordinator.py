@@ -21,13 +21,15 @@ class HeuristicCoordinator(ABC):
       instance[None]["x_bar"], 
       y, 
       r, 
-      instance[None]["r_bar"]
+      instance[None]["r_bar"], 
+      instance[None]["z_bar"]
     )
     total_r = np.zeros(r.shape)
     for (n,f), load in instance[None]["incoming_load"].items():
       x = instance[None]["x_bar"][(n,f)]
+      previous_z = instance[None]["z_bar"][(n,f)]
       # no traffic loss
-      managed_load = x + z[n-1,f-1] + y[n-1,:,f-1].sum()
+      managed_load = x + z[n-1,f-1] + y[n-1,:,f-1].sum() + previous_z
       if abs(managed_load - load) > 1e-3:
         return False, f"no traffic loss: {abs(managed_load - load)} > 1e-3"
       # total number of function replicas
