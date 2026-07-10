@@ -21,8 +21,7 @@ class HeuristicCoordinator(ABC):
       instance[None]["x_bar"], 
       y, 
       r, 
-      instance[None]["r_bar"], 
-      instance[None]["z_bar"]
+      instance[None]["r_bar"]
     )
     total_r = np.zeros(r.shape)
     for (n,f), load in instance[None]["incoming_load"].items():
