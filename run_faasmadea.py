@@ -447,8 +447,9 @@ def evaluate_bids(
               else:
                 # -- ...otherwhise, try to increase replicas
                 a += 1
-            else:
-              next_bid_idx += 1
+            next_bid_idx += 1
+          else:
+            next_bid_idx += 1
       if not tentatively_start_replicas or (
           tentatively_start_replicas and rho[j] <= 0
         ):
@@ -489,6 +490,8 @@ def evaluate_bids(
                 sending[i,f] = True
                 receiving[j,f] = True
                 last_y[previous_buyers[pbidx],j,f] -= swapped
+                if last_y[previous_buyers[pbidx],j,f] <= 0:
+                  sending[previous_buyers[pbidx],f] = False
               next_bid_idx += (nbi if nbi > 0 else 1)
             pbidx += 1
           if len(previous_buyers) == 0 or (
