@@ -65,6 +65,12 @@ def parse_arguments() -> argparse.Namespace:
     ]
   )
   parser.add_argument(
+  "--baseline_model",
+  help = "Name of model to be used as baseline for deviations",
+  type = str,
+  default = None
+  )
+  parser.add_argument(
   "--filter_by",
   help = "Key to filter",
   type = str,
@@ -109,6 +115,14 @@ def get_loop_over_label(key: str) -> str:
   elif key == "eef":
     return "Edge-exposed fraction [%]"
   return None
+
+
+def get_baseline_name(key: str) -> str:
+  if key == "LoadManagementModel":
+    return "LMM"
+  elif key == "FaaS-MACrO(v0)":
+    return "LMM(s)"
+  return key
 
 
 def compare_across_folders(
@@ -211,7 +225,8 @@ def compare_results(
     key: str, 
     key_label: str,
     models: list,
-    folder_parse_format: str = None
+    folder_parse_format: str = None,
+    baseline_model: str = None
   ):
   key_values = {}
   if folder_parse_format is not None:
@@ -245,9 +260,19 @@ def compare_results(
     runtime.to_csv(os.path.join(postprocessing_folder, "runtime.csv"))
   helper_dev_cols = {"obj": [], "runtime": [], "rej": []}
   for model in models:
-    if model != "LoadManagementModel" and "dev" in obj and f"dev_{model}" not in obj:
+    if (
+        model != "LoadManagementModel" and 
+          "dev" in obj and f"dev_{model}" not in obj
+      ):
       obj[f"dev_{model}"] = obj["dev"]
       helper_dev_cols["obj"].append(f"dev_{model}")
+    if (
+        baseline_model is not None and model != baseline_model
+      ):
+      obj[f"dev_{model}-vs-{baseline_model}"] = (
+        obj[model] - obj[baseline_model]
+      ) / obj[baseline_model] * 100
+      helper_dev_cols["obj"].append(f"dev_{model}-vs-{baseline_model}")
     if (
         model != "LoadManagementModel" and "dev" in runtime and
           f"dev_{model}" not in runtime
@@ -255,16 +280,44 @@ def compare_results(
       runtime[f"dev_{model}"] = runtime["dev"]
       helper_dev_cols["runtime"].append(f"dev_{model}")
     if (
+        baseline_model is not None and model != baseline_model
+      ):
+      runtime[f"dev_{model}-vs-{baseline_model}"] = (
+        runtime[model] / runtime[baseline_model]
+      )
+      helper_dev_cols["runtime"].append(f"dev_{model}-vs-{baseline_model}")
+    if (
         rej is not None and model != "LoadManagementModel" and "dev" in rej and
           f"dev_{model}" not in rej
       ):
       rej[f"dev_{model}"] = rej["dev"]
       helper_dev_cols["rej"].append(f"dev_{model}")
+    if (
+        baseline_model is not None and model != baseline_model
+      ):
+      rej[f"dev_{model}-vs-{baseline_model}"] = (
+        rej[model] - rej[baseline_model]
+      )
+      helper_dev_cols["rej"].append(f"dev_{model}-vs-{baseline_model}")
   dev_plot_by_key(
-    obj, runtime, rej, key, key_label, postprocessing_folder, models
+    obj, 
+    runtime, 
+    rej, 
+    key, 
+    key_label, 
+    postprocessing_folder, 
+    models,
+    baseline_model if baseline_model is not None else "LoadManagementModel"
   )
   dev_barplot_by_key(
-    obj, runtime, rej, key, key_label, postprocessing_folder, models
+    obj, 
+    runtime, 
+    rej, 
+    key, 
+    key_label, 
+    postprocessing_folder, 
+    models,
+    baseline_model if baseline_model is not None else "LoadManagementModel"
   )
   plot_by_key(
     obj, 
@@ -399,8 +452,13 @@ def dev_plot_by_key(
     key: str,
     label: str,
     plot_folder: str,
-    models: list
+    models: list,
+    baseline_model: str
   ):
+  sfx = (
+    f"-vs-{baseline_model}" if baseline_model != "LoadManagementModel" else ""
+  )
+  bmn = get_baseline_name(baseline_model)
   nrows = 3 if rej is not None else 2
   ncols = max(1, len(models) - 1)
   f1, axs = plt.subplots(
@@ -424,8 +482,8 @@ def dev_plot_by_key(
       ax2 = ax2.T
   cidx = 0
   for model in models:
-    if "FaaS-" in model or "dev" in obj.columns:
-      colname = f"dev_{model}" if "FaaS-" in model else "dev"
+    if model != baseline_model:
+      colname = f"dev_{model}{sfx}"
       bplots = [None] * nrows
       fontsize = 21
       bplots[0] = (
@@ -471,15 +529,15 @@ def dev_plot_by_key(
       # axis properties
       # -- y
       ylabel = "Objective deviation"
-      if "FaaS-" in model:
-        ylabel += f"\n(({model} - LMM) / LMM) [%]"
+      if model != baseline_model:
+        ylabel += f"\n(({model} - {bmn}) / {bmn}) [%]"
       axs[0,cidx].set_ylabel(
         ylabel, fontsize = fontsize
       )
       axs[0,cidx].set_title(None)
       ylabel = "Runtime deviation"
-      if "FaaS-" in model:
-        ylabel += f"\n({model} / LMM) [x]"
+      if model != baseline_model:
+        ylabel += f"\n({model} / {bmn}) [x]"
       axs[1,cidx].set_ylabel(
         ylabel, fontsize = fontsize
       )
@@ -505,8 +563,8 @@ def dev_plot_by_key(
           color = "k"
         )
         ylabel = "Cloud offloading deviation"
-        if "FaaS-" in model:
-          ylabel += f"\n({model} - LMM) [%]"
+        if model != baseline_model:
+          ylabel += f"\n({model} - {bmn}) [%]"
         axs[2,cidx].set_ylabel(
           ylabel, fontsize = fontsize
         )
@@ -572,14 +630,14 @@ def dev_plot_by_key(
           mean.set_markeredgecolor(mcolors.TABLEAU_COLORS["tab:red"])
       cidx += 1
   f1.savefig(
-    os.path.join(plot_folder, "box.png"),
+    os.path.join(plot_folder, f"box{sfx}.png"),
     dpi = 300,
     format = "png",
     bbox_inches = "tight"
   )
   if f2 is not None:
     f2.savefig(
-      os.path.join(plot_folder, "box_iterations.png"),
+      os.path.join(plot_folder, f"box_iterations{sfx}.png"),
       dpi = 300,
       format = "png",
       bbox_inches = "tight"
@@ -746,26 +804,31 @@ def dev_barplot_by_key(
     key: str,
     label: str,
     plot_folder: str,
-    models: list
+    models: list,
+    baseline_model: str
   ):
   nrows = len(models) - 1
   ncols = 3 if rej is not None else 2
   fontsize = 21
   f2, axs2 = plt.subplots(
-    nrows = nrows, ncols = ncols, figsize = (12 * ncols, 7 * nrows), 
+    nrows = nrows, ncols = ncols, figsize = (12 * ncols, 8 * nrows), 
     gridspec_kw = {"wspace": 0.2}
   )
   axs2 = np.atleast_2d(axs2)
   ogroup = obj.groupby(key)
   rgroup = runtime.groupby(key)
   ridx = 0
+  sfx = (
+    f"-vs-{baseline_model}" if baseline_model != "LoadManagementModel" else ""
+  )
+  bmn = get_baseline_name(baseline_model)
   for model in models:
-    if model != "LoadManagementModel":
+    if model != baseline_model:
       data = pd.DataFrame({
         key: list(ogroup.groups.keys()),
-        "avg": ogroup.mean()[f"dev_{model}"].values.tolist(),
-        "min": ogroup.min()[f"dev_{model}"].values.tolist(),
-        "max": ogroup.max()[f"dev_{model}"].values.tolist()
+        "avg": ogroup.mean()[f"dev_{model}{sfx}"].values.tolist(),
+        "min": ogroup.min()[f"dev_{model}{sfx}"].values.tolist(),
+        "max": ogroup.max()[f"dev_{model}{sfx}"].values.tolist()
       })
       data.plot.bar(
         x = key,
@@ -776,9 +839,9 @@ def dev_barplot_by_key(
       )
       data = pd.DataFrame({
         key: list(rgroup.groups.keys()),
-        "avg": rgroup.mean()[f"dev_{model}"].values.tolist(),
-        "min": rgroup.min()[f"dev_{model}"].values.tolist(),
-        "max": rgroup.max()[f"dev_{model}"].values.tolist()
+        "avg": rgroup.mean()[f"dev_{model}{sfx}"].values.tolist(),
+        "min": rgroup.min()[f"dev_{model}{sfx}"].values.tolist(),
+        "max": rgroup.max()[f"dev_{model}{sfx}"].values.tolist()
       })
       data.plot.bar(
         x = key,
@@ -792,9 +855,9 @@ def dev_barplot_by_key(
         group = rej.groupby(key)
         data = pd.DataFrame({
           key: list(group.groups.keys()),
-          "avg": group.mean()[f"dev_{model}"].values.tolist(),
-          "min": group.min()[f"dev_{model}"].values.tolist(),
-          "max": group.max()[f"dev_{model}"].values.tolist()
+          "avg": group.mean()[f"dev_{model}{sfx}"].values.tolist(),
+          "min": group.min()[f"dev_{model}{sfx}"].values.tolist(),
+          "max": group.max()[f"dev_{model}{sfx}"].values.tolist()
         })
         data.plot.bar(
           x = key,
@@ -819,11 +882,11 @@ def dev_barplot_by_key(
       # axis properties
       # -- y
       axs2[ridx,0].set_ylabel(
-        f"Objective deviation\n(({model} - LMM) / LMM) [%]",
+        f"Objective deviation\n(({model} - {bmn}) / {bmn}) [%]",
         fontsize = fontsize
       )
       axs2[ridx,1].set_ylabel(
-        f"Runtime deviation\n({model} / LMM) [x]",
+        f"Runtime deviation\n({model} / {bmn}) [x]",
         fontsize = fontsize
       )
       if rej is not None:
@@ -834,7 +897,7 @@ def dev_barplot_by_key(
           color = "k"
         )
         axs2[ridx,2].set_ylabel(
-          f"Cloud offloading deviation\n({model} - LMM) [%]",
+          f"Cloud offloading deviation\n({model} - {bmn}) [%]",
           fontsize = fontsize
         )
       # -- common properties
@@ -847,7 +910,7 @@ def dev_barplot_by_key(
         axs2[ridx,idx].legend(fontsize = fontsize)
       ridx += 1
   f2.savefig(
-    os.path.join(plot_folder, "bars.png"),
+    os.path.join(plot_folder, f"bars{sfx}.png"),
     dpi = 300,
     format = "png",
     bbox_inches = "tight"
@@ -1010,6 +1073,7 @@ if __name__ == "__main__":
   loop_over = args.loop_over
   loop_over_label = args.loop_over_label
   models = args.models
+  baseline_model = args.baseline_model
   filter_by = args.filter_by
   keep_only = args.keep_only
   drop_value = args.drop_value
@@ -1040,7 +1104,8 @@ if __name__ == "__main__":
           loop_over,
           loop_over_label,
           models,
-          folder_parse_format = folder_parse_format
+          folder_parse_format = folder_parse_format,
+          baseline_model = baseline_model
         )
       else:
         print(
