@@ -901,13 +901,13 @@ def run(
           sp_complete_solution, 
           None
         )
-        spc_complete_solution, _, _ = decode_solutions(
+        spc_complete_solution, _, objc = decode_solutions(
           sp_data, 
           best_centralized_solution, 
           spc_complete_solution, 
           None
         )
-        obj_dict["LSPr_final"].append(objf)
+        obj_dict["LSPr_final"].append(objc)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} "
           f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
