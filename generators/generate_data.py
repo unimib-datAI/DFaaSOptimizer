@@ -204,18 +204,17 @@ def generate_neighborhood(
   neighborhood = np.zeros((Nn, Nn))
   graph = None
   neighborhood_limits = limits["neighborhood"]
-  if (
-      neighborhood_limits.get("type") in {"planar", "euclidean_planar"}
-      or neighborhood_limits.get("shape") == "planar"
-    ):
+  if neighborhood_limits.get("shape") == "euclidean_planar":
     mean_degree = neighborhood_limits.get(
       "mean_degree",
       neighborhood_limits.get("degree", neighborhood_limits.get("k")),
     )
     density = neighborhood_limits.get("density", 1.0)
     if Nn < 3 or density <= 0 or mean_degree is None:
-      raise ValueError("connected Euclidean planar neighborhood requires Nn >= 3, "
-                       "positive density, and mean_degree")
+      raise ValueError(
+        "connected Euclidean planar neighborhood requires Nn >= 3, "
+        "positive density, and mean_degree"
+      )
     side = np.sqrt(Nn / density)
     points = rng.uniform(0, side, size=(Nn, 2))
     candidate = nx.Graph()
@@ -239,6 +238,10 @@ def generate_neighborhood(
       u, v = remaining[index]
       graph.add_edge(u, v, **candidate.edges[u, v])
     neighborhood = nx.to_numpy_array(graph, dtype=int)
+  elif neighborhood_limits.get("shape") == "planar":
+    raise NotImplementedError(
+      "Get implementation from main branch; meanwhile use `euclidean_planar`"
+    )
   elif "p" in limits["neighborhood"]:
     for _ in range(1000):
       neighborhood = np.zeros((Nn, Nn))
