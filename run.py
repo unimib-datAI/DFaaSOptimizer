@@ -31,6 +31,7 @@ logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 METHOD_RESULT_MODELS = {
   "centralized": ("LoadManagementModel", "LoadManagementModel"),
+  "selfish-centralized": ("LSP", "Selfish-LMM"),
   "faas-macro": ("LSP", "FaaS-MACrO"),
   "faas-macro-v0": ("LSP", "FaaS-MACrO(v0)"),
   "faas-madea": ("LSPc", "FaaS-MADeA"),
@@ -90,6 +91,7 @@ def parse_arguments() -> argparse.Namespace:
     nargs = "+",
     choices = [
       "centralized", 
+      "selfish-centralized", 
       "faas-macro-v0", 
       "faas-macro", 
       "faas-madea",
@@ -930,6 +932,7 @@ def run(
   solution_folders = {
     "experiments_list": [],
     "centralized": [],
+    "selfish-centralized": [],
     "faas-macro": [],
     "faas-macro-v0": [],
     "faas-madea": [],
@@ -955,6 +958,7 @@ def run(
   for exp_value, seed in tqdm(experiments_list):
     # check if the experiment is still to run
     run_c = False # -- centralized
+    run_sc = False # -- selfish-centralized
     run_i = False # -- faasmacro
     run_i_v0 = False # -- faasmacro (v0)
     run_a = False # -- faasmadea
@@ -980,6 +984,12 @@ def run(
           solution_folders["centralized"][experiment_idx] is None
         )):
         run_c = True
+      if (not generate_only and "selfish-centralized" in methods) and ((
+          len(solution_folders["selfish-centralized"]) <= experiment_idx
+        ) or (
+          solution_folders["selfish-centralized"][experiment_idx] is None
+        )):
+        run_sc = True
       if (not generate_only and "faas-macro" in methods) and ((
           len(solution_folders["faas-macro"]) <= experiment_idx
         ) or (
@@ -1066,6 +1076,7 @@ def run(
         run_pl = True
     except ValueError:
       run_c = "centralized" in methods
+      run_sc = "selfish-centralized" in methods
       run_i = "faas-macro" in methods
       run_i_v0 = "faas-macro-v0" in methods
       run_a = "faas-madea" in methods
@@ -1081,7 +1092,10 @@ def run(
       run_g = "faas-gcaa" in methods
       run_pl = "plasma" in methods
     # if the experiment is still to run...
-    if run_c or run_i or run_i_v0 or run_a or run_h or run_hm or run_d or run_p or run_brs or run_brr or run_bro or run_pgs or run_pgr or run_g or run_pl or generate_only:
+    if (run_c or run_sc or run_i or run_i_v0 or run_a or run_h or run_hm or \
+        run_d or run_p or run_brs or run_brr or run_bro or run_pgs or \
+          run_pgr or run_g or run_pl or generate_only
+      ):
       # -- update configuration
       config = deepcopy(base_config)
       if loop_over in config["limits"]:
@@ -1105,6 +1119,10 @@ def run(
               old_exp_idx
             ]
             c_folder = old_exp_path
+          elif "selfish-centralized" in old_instance_paths:
+            old_exp_path = old_instance_paths["selfish-centralized"][
+              old_exp_idx
+            ]
           elif "faas-macro" in old_instance_paths:
             old_exp_path = old_instance_paths["faas-macro"][
               old_exp_idx
@@ -1136,6 +1154,24 @@ def run(
       else:
         if c_folder is None and experiment_idx is not None:
           c_folder = solution_folders["centralized"][experiment_idx]
+      # -- solve "selfish" centralized model
+      if run_sc:
+        sc_config = deepcopy(config)
+        sc_config["max_iterations"] = 1
+        if "coordinator" not in sc_config["solver_options"]:
+          sc_config["solver_options"]["coordinator"] = {"MIPGap": 1e-3}
+        elif "sorting_rule" in sc_config["solver_options"]["coordinator"]:
+          sc_config["solver_options"]["coordinator"].pop("sorting_rule")
+          sc_config["solver_options"]["coordinator"]["MIPGap"] = 1e-3
+        sc_folder = run_iterations(
+          sc_config, 
+          sp_parallelism,
+          log_on_file = log_on_file, 
+          disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "selfish-centralized", experiment_idx, sc_folder
+        )
       # -- solve iterative model (v0)
       if fix_r:
         config["opt_solution_folder"] = c_folder
