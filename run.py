@@ -111,6 +111,12 @@ def parse_arguments() -> argparse.Namespace:
     required = True
   )
   parser.add_argument(
+    "--reference_method",
+    help = "Reference method to be used for comparison",
+    type = str,
+    default = "centralized"
+  )
+  parser.add_argument(
     "--postprocessing_only",
     default = False,
     action = "store_true"
@@ -293,9 +299,11 @@ def results_postprocessing(
     solution_folders: dict, 
     base_folder: str,
     loop_over: str,
-    methods: list
+    methods: list,
+    reference_method: str
   ):
   methods = [m for m in methods if m != "generate_only"]
+  reference_method_name = METHOD_RESULT_MODELS[reference_method][-1]
   # prepare folder to store plots
   plot_folder = os.path.join(base_folder, "postprocessing")
   os.makedirs(plot_folder, exist_ok = True)
@@ -402,14 +410,14 @@ def results_postprocessing(
       )
       plt.close()
       # compute deviation
-      if "LoadManagementModel" in found_methods and len(found_methods) > 1:
+      if reference_method_name in found_methods and len(found_methods) > 1:
         for mname in found_methods:
-          if mname != "LoadManagementModel":
+          if mname != reference_method_name:
             obj[f"dev_{mname}"] = (
-              obj[mname] - obj["LoadManagementModel"]
-            ) / obj["LoadManagementModel"] * 100
+              obj[mname] - obj[reference_method_name]
+            ) / obj[reference_method_name] * 100
             all_rej[f"dev_{mname}"] = (
-              all_rej[mname] - all_rej["LoadManagementModel"]
+              all_rej[mname] - all_rej[reference_method_name]
             )
         # -- plot deviation
         _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
@@ -421,7 +429,7 @@ def results_postprocessing(
         )
         # -- add average deviation line(s)
         for mname, method_color in zip(found_methods, method_colors):
-          if mname != "LoadManagementModel":
+          if mname != reference_method_name:
             axs[0].axhline(
               y = obj[f"dev_{mname}"].mean(), 
               color = method_color,
@@ -435,13 +443,17 @@ def results_postprocessing(
         axs[0].set_xlabel("Control time period $t$")
         axs[1].set_xlabel("Control time period $t$")
         axs[0].set_ylabel(
-          "Objective function deviation ((other - LMM) / LMM )[%]"
+          f"Objective function deviation ((other - {reference_method_name}) "
+          f"/ {reference_method_name} )[%]"
         )
         axs[1].set_ylabel(
-          "Percentage rejections deviation (other - LMM) [%]"
+          f"Percentage rej. deviation (other - {reference_method_name}) [%]"
         )
         plt.savefig(
-          os.path.join(exp_plot_folder, "obj_deviation.png"),
+          os.path.join(
+            exp_plot_folder, 
+            f"obj_deviation-vs_{reference_method}.png"
+          ),
           dpi = 300,
           format = "png",
           bbox_inches = "tight"
@@ -538,14 +550,15 @@ def results_postprocessing(
         os.path.join(exp_plot_folder, f"runtime_{mname}.csv")
       )
     # plot runtime comparison
-    if "LoadManagementModel" in found_methods and len(runtimes) > 1:
+    if reference_method_name in found_methods and len(runtimes) > 1:
+      key_col = reference_method_name if reference_method == "centralized" else "tot"
       runtime_comparison = {
-        "LoadManagementModel": runtimes[
-          "LoadManagementModel"
-        ]["LoadManagementModel"].tolist()
+        reference_method_name: runtimes[
+          reference_method_name
+        ][key_col].tolist()
       }
       for mname in found_methods:
-        if mname != "LoadManagementModel":
+        if mname != reference_method_name:
           runtime_comparison[mname] = runtimes[mname]["tot"].tolist()
           runtime_comparison[f"iteration_{mname}"] = all_tc[
             (
@@ -568,9 +581,9 @@ def results_postprocessing(
       runtime_comparison = pd.DataFrame(runtime_comparison)
       # -- compute deviation
       for mname in found_methods:
-        if mname != "LoadManagementModel":
+        if mname != reference_method_name:
           runtime_comparison[f"dev_{mname}"] = (
-              runtime_comparison[mname] / runtime_comparison["LoadManagementModel"]
+              runtime_comparison[mname] / runtime_comparison[reference_method_name]
             )
       # -- plot
       _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (12,8))
@@ -583,7 +596,7 @@ def results_postprocessing(
         grid = True, marker = ".", ax = axs[1], color = method_colors[1:]
       )
       for mname, method_color in zip(found_methods, method_colors):
-        if mname != "LoadManagementModel":
+        if mname != reference_method_name:
           axs[1].axhline(
             y = runtime_comparison[f"dev_{mname}"].mean(),
             color = method_color
@@ -591,7 +604,9 @@ def results_postprocessing(
       axs[0].set_ylabel("Runtime [s]", fontsize = 14)
       axs[1].set_ylabel("Runtime deviation [x]", fontsize = 14)
       plt.savefig(
-        os.path.join(exp_plot_folder, "runtime_comparison.png"),
+        os.path.join(
+          exp_plot_folder, f"runtime_comparison-vs_{reference_method}.png"
+        ),
         dpi = 300,
         format = "png",
         bbox_inches = "tight"
@@ -639,7 +654,7 @@ def results_postprocessing(
         rtv = rtvs[rtvs["seed"] == seed]
         # deviation
         for mname, method_color in zip(found_methods, method_colors):
-          if mname != "LoadManagementModel":
+          if mname != reference_method_name:
             obj.plot(
               x = "time", 
               y = f"dev_{mname}", 
@@ -748,7 +763,7 @@ def results_postprocessing(
       avg_rtv = rtvs.groupby("time").mean(numeric_only = True)
       # -- deviation
       for mname, method_color in zip(found_methods, method_colors):
-        if mname != "LoadManagementModel":
+        if mname != reference_method_name:
           avg.plot(
             y = f"dev_{mname}",
             ax = axs[0,1],
@@ -756,7 +771,7 @@ def results_postprocessing(
             linewidth = 2,
             marker = ".", 
             grid = True,
-            label = f"Average deviation (({mname} - LMM) / LMM) [%]"
+            label = f"Average deviation (({mname} - {reference_method_name}) / {reference_method_name}) [%]"
           )
           avg_rej.plot(
             y = f"dev_{mname}",
@@ -765,7 +780,7 @@ def results_postprocessing(
             linewidth = 2,
             marker = ".", 
             grid = True,
-            label = f"Average deviation ({mname} - LMM) [%]"
+            label = f"Average deviation ({mname} - {reference_method_name}) [%]"
           )
           if "dev" in avg_rtv:
             avg_rtv.plot(
@@ -775,7 +790,7 @@ def results_postprocessing(
               linewidth = 2,
               marker = ".", 
               grid = True,
-              label = f"Average deviation ({mname} / LMM) [x]"
+              label = f"Average deviation ({mname} / {reference_method_name}) [x]"
             )
           if f"best_iteration_{mname}" in avg_rtv:
             avg_rtv.plot(
@@ -850,14 +865,20 @@ def results_postprocessing(
       axs3[0].set_ylabel("Runtime [s]")
       axs3[1].set_ylabel("Runtime deviation [x]")
       fig.savefig(
-        os.path.join(plot_folder, f"obj-{loop_over}_{exp_value}.png"),
+        os.path.join(
+          plot_folder, 
+          f"obj-{loop_over}_{exp_value}-vs_{reference_method}.png"
+        ),
         dpi = 300,
         format = "png",
         bbox_inches = "tight"
       )
       plt.close(fig)
       fig2.savefig(
-        os.path.join(plot_folder, f"runtime-{loop_over}_{exp_value}.png"),
+        os.path.join(
+          plot_folder, 
+          f"runtime-{loop_over}_{exp_value}-vs_{reference_method}.png"
+        ),
         dpi = 300,
         format = "png",
         bbox_inches = "tight"
@@ -865,7 +886,8 @@ def results_postprocessing(
       plt.close(fig2)
       fig3.savefig(
         os.path.join(
-          plot_folder, f"linear_runtime-{loop_over}_{exp_value}.png"
+          plot_folder, 
+          f"linear_runtime-{loop_over}_{exp_value}-vs_{reference_method}.png"
         ),
         dpi = 300,
         format = "png",
@@ -878,7 +900,10 @@ def results_postprocessing(
         grid = True
       )
       plt.savefig(
-        os.path.join(plot_folder, f"i_tc-{loop_over}_{exp_value}.png"),
+        os.path.join(
+          plot_folder, 
+          f"i_tc-{loop_over}_{exp_value}-vs_{reference_method}.png"
+        ),
         dpi = 300,
         format = "png",
         bbox_inches = "tight"
@@ -913,6 +938,7 @@ def run(
     base_solution_folder: str, 
     n_experiments: int, 
     methods: list,
+    reference_method: str,
     fix_r: bool,
     sp_parallelism: int,
     enable_plotting: bool,
@@ -1107,7 +1133,7 @@ def run(
         config["limits"]["neighborhood"][loop_over] = exp_value
       config["seed"] = seed
       # -- look for old instance path (if required)
-      c_folder = None
+      ref_method_folder = None
       if "experiments_list" in old_instance_paths:
         try:
           old_exp_idx = old_instance_paths["experiments_list"].index(
@@ -1118,7 +1144,6 @@ def run(
             old_exp_path = old_instance_paths["centralized"][
               old_exp_idx
             ]
-            c_folder = old_exp_path
           elif "selfish-centralized" in old_instance_paths:
             old_exp_path = old_instance_paths["selfish-centralized"][
               old_exp_idx
@@ -1140,6 +1165,9 @@ def run(
             config["limits"]["load"]["path"] = old_exp_path
         except Exception:
           pass
+      # -- get solution of reference method (if it exists)
+      if ref_method_folder is None and experiment_idx is not None:
+        ref_method_folder = solution_folders[reference_method][experiment_idx]
       # -- solve centralized model
       if run_c or generate_only:
         c_folder = run_centralized(
@@ -1151,9 +1179,6 @@ def run(
         set_solution_folder(
           solution_folders, "centralized", experiment_idx, c_folder
         )
-      else:
-        if c_folder is None and experiment_idx is not None:
-          c_folder = solution_folders["centralized"][experiment_idx]
       # -- solve "selfish" centralized model
       if run_sc:
         sc_config = deepcopy(config)
@@ -1174,7 +1199,7 @@ def run(
         )
       # -- solve iterative model (v0)
       if fix_r:
-        config["opt_solution_folder"] = c_folder
+        config["opt_solution_folder"] = ref_method_folder
       if run_i_v0:
         i_folder_v0 = run_iterations(
           config, 
@@ -1325,7 +1350,11 @@ def run(
         ost.write(json.dumps(solution_folders, indent = 2))
   # immediate postprocessing
   results_postprocessing(
-    solution_folders, base_solution_folder, loop_over, methods
+    solution_folders, 
+    base_solution_folder, 
+    loop_over, 
+    methods, 
+    reference_method
   )
 
 
@@ -1334,6 +1363,7 @@ if __name__ == "__main__":
   config_file = args.config
   n_experiments = args.n_experiments
   methods = args.methods
+  reference_method = args.reference_method
   postprocessing_only = args.postprocessing_only
   postprocessing_list = args.postprocessing_list
   fix_r = args.fix_r
@@ -1354,6 +1384,7 @@ if __name__ == "__main__":
       base_solution_folder, 
       n_experiments, 
       methods,
+      reference_method,
       fix_r,
       sp_parallelism,
       enable_plotting,
@@ -1367,7 +1398,11 @@ if __name__ == "__main__":
       ) as ist:
         solution_folders = json.load(ist)
       results_postprocessing(
-        solution_folders, base_solution_folder, loop_over, methods
+        solution_folders, 
+        base_solution_folder, 
+        loop_over, 
+        methods,
+        reference_method
       )
     else:
       for foldername in os.listdir(base_solution_folder):
@@ -1382,4 +1417,10 @@ if __name__ == "__main__":
             os.path.join(bsf, "experiments.json"), "r"
           ) as ist:
             solution_folders = json.load(ist)
-          results_postprocessing(solution_folders, bsf, loop_over, methods)
+          results_postprocessing(
+            solution_folders, 
+            bsf, 
+            loop_over, 
+            methods,
+            reference_method
+          )
