@@ -113,6 +113,7 @@ def check_stopping_criteria(
     blackboard: np.array,
     omega: np.array = None,
     rmp_omega: np.array = None,
+    odev_queue: deque = None,
     a: np.array = None,
     bids: pd.DataFrame = None,
     memory_bids: pd.DataFrame = None,
@@ -158,6 +159,14 @@ def check_stopping_criteria(
     ):
     stop = True
     why_stopping = "feasible solution found"
+  if not stop and len(odev_queue) >= odev_queue.maxlen:
+    stop = True
+    why_stopping = "UB/LB diff < tol"
+    for odev in odev_queue:
+      if odev >= tolerance:
+        stop = False
+        why_stopping = None
+        break
   return stop, why_stopping
 
 
@@ -680,6 +689,7 @@ def run(
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn,Nf))
     n_accepted_queue = deque(maxlen = patience)
+    odev_queue = deque(maxlen = patience)
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
@@ -840,7 +850,12 @@ def run(
         csol["sp"]["r"], csol["sp"]["U"], sp_data
       )
       e = datetime.now()
-      print(f"        check_feasibility: DONE ({feas[0]}; {feas[1]}; runtime = {(e-s).total_seconds()})", file = log_stream, flush = True)
+      print(
+        f"        check_feasibility: DONE ({feas[0]}; {feas[1]}; "
+        f"runtime = {(e-s).total_seconds()})", 
+        file = log_stream, 
+        flush = True
+      )
       assert feas[0],feas[1]
       # update best solution so far
       if spr_obj < best_cost_so_far or it == 0:
@@ -853,6 +868,7 @@ def run(
             file = log_stream,
             flush = True
           )
+      prev_cobj = best_centralized_cost
       if cobj > best_centralized_cost:
         best_centralized_cost = cobj
         best_centralized_solution = deepcopy(csol)
@@ -863,6 +879,9 @@ def run(
             file = log_stream,
             flush = True
           )
+      odev_queue.append(
+        abs(best_centralized_cost - prev_cobj) / best_centralized_cost
+      )
       # check termination criteria
       s = datetime.now()
       stop_searching, why_stop_searching = check_stopping_criteria(
@@ -871,6 +890,7 @@ def run(
         blackboard,
         omega,
         rmp_omega,
+        odev_queue,
         additional_replicas,
         bids,
         memory_bids,
@@ -910,7 +930,8 @@ def run(
         obj_dict["LSPr_final"].append(objc)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} "
-          f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
+          f"(it: {it}; obj. deviation: {odev_queue[-1]}; "
+          f"best it: {best_it_so_far}; "
           f"best centralized it: {best_centralized_it}; "
           f"total runtime: {total_runtime})"
         )

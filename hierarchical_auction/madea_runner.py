@@ -171,6 +171,7 @@ def run(
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn, Nf))
     accepted_queue = deque(maxlen=patience)
+    odev_queue = deque(maxlen = patience)
     best_solution = None
     best_cost = -np.inf
     best_it = -1
@@ -343,10 +344,15 @@ def run(
       cost = compute_centralized_objective(
         sp_data, combined["sp"]["x"], combined["sp"]["y"], combined["sp"]["z"],
       )
+      prev_cobj = best_cost
       if cost > best_cost:
         best_cost = cost
         best_solution = deepcopy(combined)
         best_it = it
+      
+      odev_queue.append(
+        abs(best_cost - prev_cobj) / best_cost
+      )
 
       elapsed = time.monotonic() - started_at
       s = time.monotonic()
@@ -356,6 +362,7 @@ def run(
         blackboard=final_residual,
         omega=omega,
         rmp_omega=rmp_omega,
+        odev_queue=odev_queue,
         a=additional_replicas,
         bids=bids_for_stopping(bids, len(result.accepted_allocations)),
         memory_bids=memory_bids,
