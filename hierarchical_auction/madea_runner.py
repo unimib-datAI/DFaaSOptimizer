@@ -349,6 +349,12 @@ def run(
         best_cost = cost
         best_solution = deepcopy(combined)
         best_it = it
+        if verbose > 0:
+          print(
+            f"        best centralized solution updated; obj = {cost}",
+            file = log_stream,
+            flush = True
+          )
       
       odev_queue.append(
         abs(best_cost - prev_cobj) / best_cost
