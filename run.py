@@ -313,6 +313,7 @@ def results_postprocessing(
   all_tc = pd.DataFrame()
   ping_pong_list = []
   # loop over experiments
+  all_found_methods = set()
   for exp_idx, exp_description_tuple in enumerate(
       solution_folders["experiments_list"]
     ):
@@ -619,6 +620,8 @@ def results_postprocessing(
       all_runtime_values = pd.concat(
         [all_runtime_values, runtime_comparison], ignore_index = True
       )
+    for m in found_methods:
+      all_found_methods.add(m)
   # cumulative plot
   if len(all_obj_values) > 0 and len(all_runtime_values) > 0:
     # -- save
@@ -653,7 +656,7 @@ def results_postprocessing(
         rej = rejs[rejs["seed"] == seed]
         rtv = rtvs[rtvs["seed"] == seed]
         # deviation
-        for mname, method_color in zip(found_methods, method_colors):
+        for mname, method_color in zip(all_found_methods, method_colors):
           if mname != reference_method_name:
             obj.plot(
               x = "time", 
@@ -740,7 +743,7 @@ def results_postprocessing(
         gridspec_kw = {"hspace": 0.02}
       )
       rtvs["idx"] = rtvs.index
-      for mname, method_color in zip(found_methods, method_colors):
+      for mname, method_color in zip(all_found_methods, method_colors):
         rtvs.plot.scatter(
           x = "idx",
           y = mname,
@@ -762,7 +765,7 @@ def results_postprocessing(
       avg_rej = rejs.groupby("time").mean(numeric_only = True)
       avg_rtv = rtvs.groupby("time").mean(numeric_only = True)
       # -- deviation
-      for mname, method_color in zip(found_methods, method_colors):
+      for mname, method_color in zip(all_found_methods, method_colors):
         if mname != reference_method_name:
           avg.plot(
             y = f"dev_{mname}",
