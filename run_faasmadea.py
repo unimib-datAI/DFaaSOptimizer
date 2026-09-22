@@ -499,7 +499,17 @@ def evaluate_bids(
                 sending[i,f] = True
                 receiving[j,f] = True
                 last_y[previous_buyers[pbidx],j,f] -= swapped
-                if last_y[previous_buyers[pbidx],j,f] <= 0:
+                if previous_y is not None and (
+                    (
+                      previous_y[previous_buyers[pbidx],:,f].sum() +
+                      y[previous_buyers[pbidx],:,f]
+                    ).sum() <= 0
+                  ):
+                  sending[previous_buyers[pbidx],f] = False
+                elif previous_y is None and (
+                    last_y[previous_buyers[pbidx],:,f].sum() <= 0 and
+                    y[previous_buyers[pbidx],:,f].sum() <= 0
+                  ).sum():
                   sending[previous_buyers[pbidx],f] = False
               next_bid_idx += (nbi if nbi > 0 else 1)
             pbidx += 1
@@ -1015,10 +1025,13 @@ def run(
 
 
 if __name__ == "__main__":
-  args = parse_arguments()
-  config_file = args.config
-  parallelism = args.parallelism
-  disable_plotting = args.disable_plotting
+  # args = parse_arguments()
+  # config_file = args.config
+  # parallelism = args.parallelism
+  # disable_plotting = args.disable_plotting
+  config_file = "config_files/manual_config.json"
+  parallelism = 0
+  disable_plotting = True
   # load configuration file
   config = load_configuration(config_file)
   # run
