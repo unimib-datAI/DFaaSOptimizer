@@ -1025,13 +1025,10 @@ def run(
 
 
 if __name__ == "__main__":
-  # args = parse_arguments()
-  # config_file = args.config
-  # parallelism = args.parallelism
-  # disable_plotting = args.disable_plotting
-  config_file = "config_files/manual_config.json"
-  parallelism = 0
-  disable_plotting = True
+  args = parse_arguments()
+  config_file = args.config
+  parallelism = args.parallelism
+  disable_plotting = args.disable_plotting
   # load configuration file
   config = load_configuration(config_file)
   # run
