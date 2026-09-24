@@ -7,7 +7,6 @@ from scipy.optimize import linprog
 
 from generators.generate_data import update_data
 from models.model import LoadManagementModel
-from plasma.runner import objective_load
 from run_centralized_model import solve_instance
 from utils.centralized import get_current_load
 from utils.faasmacro import compute_centralized_objective
@@ -118,10 +117,7 @@ def stale_objectives(
       for n in range(x.shape[0])
     ])
     x_eff, y_eff, z_eff = shed_overflow(x, y, lam)
-    score_data = update_data(
-      data, {"incoming_load": objective_load(loadt)}
-    )
     objs.append(
-      compute_centralized_objective(score_data, x_eff, y_eff, z_eff)
+      compute_centralized_objective(data, x_eff, y_eff, z_eff)
     )
   return objs

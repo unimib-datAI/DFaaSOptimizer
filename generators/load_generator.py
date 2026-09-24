@@ -13,6 +13,8 @@ def rescale(
   Rescale value from the original interval [in_min, in_max] to the new 
   range [out_min, out_max]
   """
+  if in_min == in_max:
+    return out_min
   return out_min + (val - in_min) * ((out_max - out_min) / (in_max - in_min))
 
 
@@ -35,9 +37,9 @@ class LoadGenerator:
       self, total_workload, input_requests: dict
     ) -> dict:
     # convert base input requests dict into a matrix
-    base_signals = np.array([
+    base_signals = np.maximum(0, np.array([
       input_requests[agent] for agent in input_requests
-    ])
+    ]))
     num_agents, num_timesteps = base_signals.shape
     # if a single value of total_workload is provided, it is the same at all
     # time steps
@@ -46,16 +48,25 @@ class LoadGenerator:
     # normalize so that at each timestep, sum of all agents' 
     # workloads == total_workload[t]
     workloads = np.zeros_like(base_signals)
+    integer_load = np.issubdtype(workloads.dtype, np.integer)
     for t in range(num_timesteps):
       total = np.sum(base_signals[:, t])
+      # Integer traces preserve the nearest integer total using largest remainders.
+      target = round(total_workload[t]) if integer_load else total_workload[t]
       if total == 0:
-        workloads[:, t] = round(total_workload[t] / num_agents, 3)
+        shares = np.full(num_agents, target / num_agents)
       else:
-        workloads[:, t] = [
-          round(w, 3) for w in base_signals[:, t] / total * total_workload[t]
-        ]
+        shares = base_signals[:, t] / total * target
+      if integer_load:
+        allocations = np.floor(shares).astype(workloads.dtype)
+        remainder = int(target - allocations.sum())
+        order = np.argsort(-(shares - allocations), kind="stable")
+        allocations[order[:remainder]] += 1
+        workloads[:, t] = allocations
+      else:
+        workloads[:, t] = np.round(shares, 3)
     # extract dictionary
-    workloads_dict = {agent: workloads[agent] for agent in input_requests}
+    workloads_dict = {agent: workloads[i] for i, agent in enumerate(input_requests)}
     return workloads_dict
   
   def _synthetic_sinusoidal_input_requests(
@@ -84,7 +95,7 @@ class LoadGenerator:
       # (max_steps = 288). We first generate the periods and expand the array
       # to match the max_steps. If max_steps is not a multiple of 96, some
       # elements must be appended at the end, hence the resize call.
-      repeats = max_steps // self.unique_periods
+      repeats = max(1, max_steps // self.unique_periods)
       periods = rng.uniform(15, high = 100, size = self.unique_periods)
       periods = np.repeat(periods, repeats)  # Expand the single values.
       periods = np.resize(periods, periods.size + max_steps - periods.size)

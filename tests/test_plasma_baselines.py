@@ -152,12 +152,11 @@ def _scenario_config(tmp_path, Nn=3, max_steps=6):
   }
 
 
-def _solver_available(name="gurobi"):
-  try:
-    from pyomo.environ import SolverFactory
-    return SolverFactory(name).available(exception_flag=False)
-  except Exception:
-    return False
+from solver_support import gurobi_unavailable_reason
+
+
+def _solver_available():
+  return gurobi_unavailable_reason() is None
 
 
 def test_sweep_driver_runs_grid(tmp_path):

@@ -109,7 +109,7 @@ class PlasmaNode:
         continue
       preferred = 0
       remaining = n
-      if deg:
+      if deg and self._xi[f] == 0:
         candidates = [
           k for k in range(deg)
           if nbr_spare[k, f] > 0 and self._recv_from_last[k, f] == 0
@@ -136,6 +136,10 @@ class PlasmaNode:
       self._pull[f] += preferred
       if overflow == 0:
         continue
+      if self._xi[f] > 0:
+        self._z[f] += overflow
+        self._pull[f] += overflow
+        continue
       weights = target_weights(
         self.D[f], False, nbr_spare[:, f], self.opts.eps_explore
       )
@@ -161,7 +165,7 @@ class PlasmaNode:
     return desired
 
   def accept_forwards(self, f: int, n: int, sender: int) -> int:
-    if not self.alive:
+    if not self.alive or self._y[:, f].sum() > 0:
       return 0
     remaining = self._capacity_units(f) - int(self._admitted[f])
     k = max(0, min(n, remaining))

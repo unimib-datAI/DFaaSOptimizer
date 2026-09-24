@@ -147,9 +147,11 @@ class HierarchicalAuctionEngine:
       )
 
       level_accepted: list[AcceptedAllocation] = []
+      # Buyer demand is shared across overlapping structures and sellers.
+      remaining_demand = current_omega.copy()
       for k in range(self._num_nodes):
         for f in range(self._num_functions):
-          accepted = token_manager.resolve_node_function(k, f)
+          accepted = token_manager.resolve_node_function(k, f, remaining_demand)
           if accepted:
             token_manager.commit(accepted)
             level_accepted.extend(accepted)

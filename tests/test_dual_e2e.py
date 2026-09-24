@@ -8,10 +8,7 @@ import pytest
 from decentralized_dual import _capacity_state, run as run_dual
 
 
-def _require_gurobi() -> None:
-  solver = pyo.SolverFactory("gurobi")
-  if not solver.available(exception_flag=False):
-    pytest.skip("Gurobi solver is not available")
+from solver_support import require_gurobi as _require_gurobi
 
 
 def _dual_e2e_config(base_solution_folder: Path) -> dict:

@@ -122,6 +122,8 @@ def sample_assignments(
       else:
         j_star = int(max(sample, key=lambda k: (score[int(k)], -int(k))))
       if unit_bids:
+        if omega[i, f] - assigned < 1:
+          break
         q = 1
       else:
         q = VAR_TYPE(min(remaining[j_star], omega[i, f] - assigned))
@@ -361,8 +363,8 @@ def run(
         best_centralized_it = it
       stop_searching, why_stop_searching = check_stopping_criteria(
         it, max_iterations, blackboard, omega, rmp_omega,
-        additional_replicas, bids, memory_bids,
-        tolerance, total_runtime, time_limit
+        a=additional_replicas, bids=bids, memory_bids=memory_bids,
+        tolerance=tolerance, total_runtime=total_runtime, time_limit=time_limit,
       )
       if not stop_searching:
         it += 1

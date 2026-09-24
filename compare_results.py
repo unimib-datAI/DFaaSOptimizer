@@ -296,7 +296,7 @@ def compare_results(
       rej[f"dev_{model}"] = rej["dev"]
       helper_dev_cols["rej"].append(f"dev_{model}")
     if (
-        baseline_model is not None and model != baseline_model
+        rej is not None and baseline_model is not None and model != baseline_model
       ):
       rej[f"dev_{model}-vs-{baseline_model}"] = (
         rej[model] - rej[baseline_model]

@@ -122,11 +122,12 @@ def test_find_best_iterations_faas_macro(tmp_path):
     ],
   )
 
-  sw, cobj = what_if_analysis.find_best_iterations(str(tmp_path))
+  sw, cobj, logs = what_if_analysis.find_best_iterations(str(tmp_path))
 
   assert len(sw) > 0
   assert len(cobj) > 0
   assert sw.loc[0, "method"] == "faas-macro"
+  assert logs.loc[0, "method"] == "faas-macro"
 
 
 def test_get_faasmacro_runtime_handles_missing_columns():

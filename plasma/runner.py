@@ -50,12 +50,6 @@ def build_nodes(base_instance_data: dict, opts: PlasmaOptions, seed: int):
   return nodes
 
 
-def objective_load(incoming_load: dict) -> dict:
-  # a zero-load (n, f) contributes x = y = z = 0 to the objective; floor the
-  # divisor to 1 so its contribution is exactly 0 instead of 0/0 = nan
-  return {k: max(int(v), 1) for k, v in incoming_load.items()}
-
-
 def run(
     config: dict, parallelism: int, log_on_file: bool = False,
     disable_plotting: bool = False
@@ -128,11 +122,8 @@ def run(
     feasible, why = check_feasibility(res.x, omega, res.z, res.r, U, data)
     assert feasible, why
     cs = decode_solution(res.x, res.y, res.z, res.r, res.xi, rho, U, cs)
-    obj_data = update_data(
-      data, {"incoming_load": objective_load(data[None]["incoming_load"])}
-    )
     obj_list.append(
-      compute_centralized_objective(obj_data, res.x, res.y, res.z)
+      compute_centralized_objective(data, res.x, res.y, res.z)
     )
     runtime_list.append(elapsed)
     seconds = opts.rounds_per_step * opts.W

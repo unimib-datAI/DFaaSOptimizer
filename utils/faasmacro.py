@@ -1,4 +1,15 @@
+from math import isfinite
+
 import numpy as np
+
+
+def relative_objective_gap(value: float, reference: float) -> float:
+  """Return a nonnegative gap; an undefined comparison cannot mean convergence."""
+  if not isfinite(value) or not isfinite(reference):
+    return float("inf")
+  if reference == 0:
+    return 0.0 if value == 0 else float("inf")
+  return abs(value - reference) / abs(reference)
 
 
 def compute_centralized_objective(
@@ -20,7 +31,9 @@ def compute_centralized_objective(
   tot = 0.0
   for n1 in range(Nn):
     for f in range(Nf):
-      load = sp_data[None]["incoming_load"][(n1+1,f+1)]
+      # A zero-load source has no local, outbound or rejected traffic. Keep
+      # every positive load unchanged, including fractional arrival rates.
+      load = sp_data[None]["incoming_load"][(n1+1,f+1)] or 1
       tot += alpha[n1,f] * sp_x[n1,f] / load
       tot -= gamma[n1,f] * sp_z[n1,f] / load
       for n2 in range(Nn):

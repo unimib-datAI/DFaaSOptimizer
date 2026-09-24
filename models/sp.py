@@ -111,10 +111,10 @@ class LSP_v0(SPAbstractModel):
         (
           model.alpha[model.whoami,f] * model.x[f] + 
           model.delta[model.whoami,f] * model.omega[f]
-        ) / model.incoming_load[model.whoami,f] for f in model.F
+        ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
       )
     ) + sum(
-      model.pi[f] * model.omega[f] / model.incoming_load[model.whoami,f] for f in model.F
+      model.pi[f] * model.omega[f] / (model.incoming_load[model.whoami,f] or 1) for f in model.F
     )
 
 class LSP(LSP_v0):
@@ -168,10 +168,10 @@ class LSP(LSP_v0):
           model.alpha[model.whoami,f] * model.x[f] + 
           model.delta[model.whoami,f] * model.omega[f] -
           model.gamma[model.whoami,f] * model.z[f]
-        ) / model.incoming_load[model.whoami,f] for f in model.F
+        ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
       )
     ) + sum(
-      model.pi[f] * model.omega[f] / model.incoming_load[model.whoami,f] for f in model.F
+      model.pi[f] * model.omega[f] / (model.incoming_load[model.whoami,f] or 1) for f in model.F
     )
 
 
@@ -246,7 +246,7 @@ class LSPr_v0(SPAbstractModel):
         (
           model.alpha[model.whoami,f] * model.x[f] + 
           model.delta[model.whoami,f] * model.omega_bar[model.whoami,f]
-        ) / model.incoming_load[model.whoami,f] for f in model.F
+        ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
       )
     )
 
@@ -267,7 +267,7 @@ class LSPr(LSPr_v0):
     # number of rejected requests
     self.model.z = pyo.Var(
       self.model.F, 
-      domain = PYO_VAR_TYPE
+      domain = PYO_PARAM_TYPE
     )
     ###########################################################################
     # Constraints
@@ -285,7 +285,7 @@ class LSPr(LSPr_v0):
   def no_traffic_loss(model, f):
     return (
       model.x[f] + model.omega_bar[model.whoami,f] + model.z[f]
-    ) <= model.incoming_load[model.whoami,f]
+    ) == model.incoming_load[model.whoami,f]
   
   @staticmethod
   def minimize_processing_cost(model):
@@ -295,7 +295,7 @@ class LSPr(LSPr_v0):
           model.alpha[model.whoami,f] * model.x[f] + 
           model.delta[model.whoami,f] * model.omega_bar[model.whoami,f] -
           model.gamma[model.whoami,f] * model.z[f]
-        ) / model.incoming_load[model.whoami,f] for f in model.F
+        ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
       )
     )
 
@@ -321,7 +321,7 @@ class LSPr_x(LSPr_v0):
     # number of rejected requests
     self.model.z = pyo.Var(
       self.model.F, 
-      domain = PYO_VAR_TYPE
+      domain = PYO_PARAM_TYPE
     )
     ###########################################################################
     # Constraints
@@ -342,7 +342,7 @@ class LSPr_x(LSPr_v0):
   def no_traffic_loss(model, f):
     return (
       model.x[f] + model.omega_bar[model.whoami,f] + model.z[f]
-    ) <= model.incoming_load[model.whoami,f]
+    ) == model.incoming_load[model.whoami,f]
   
   @staticmethod
   def temp_fix_x(model, f):
@@ -358,7 +358,7 @@ class LSPr_x(LSPr_v0):
           model.alpha[model.whoami,f] * model.x[f] + 
           model.delta[model.whoami,f] * model.omega_bar[model.whoami,f] -
           model.gamma[model.whoami,f] * model.z[f]
-        ) / model.incoming_load[model.whoami,f] for f in model.F
+        ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
       )
     )
 

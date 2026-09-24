@@ -8,10 +8,7 @@ import pytest
 from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
 
 
-def _require_gurobi() -> None:
-  solver = pyo.SolverFactory("gurobi")
-  if not solver.available(exception_flag=False):
-    pytest.skip("Gurobi solver is not available")
+from solver_support import require_gurobi as _require_gurobi
 
 
 def _e2e_config(base_solution_folder: Path) -> dict:

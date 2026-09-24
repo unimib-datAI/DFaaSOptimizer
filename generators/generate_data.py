@@ -204,7 +204,8 @@ def generate_neighborhood(
   neighborhood = np.zeros((Nn, Nn))
   graph = None
   neighborhood_limits = limits["neighborhood"]
-  if neighborhood_limits.get("shape") == "euclidean_planar":
+  shape = neighborhood_limits.get("type", neighborhood_limits.get("shape"))
+  if shape == "euclidean_planar":
     mean_degree = neighborhood_limits.get(
       "mean_degree",
       neighborhood_limits.get("degree", neighborhood_limits.get("k")),
@@ -238,10 +239,27 @@ def generate_neighborhood(
       u, v = remaining[index]
       graph.add_edge(u, v, **candidate.edges[u, v])
     neighborhood = nx.to_numpy_array(graph, dtype=int)
-  elif neighborhood_limits.get("shape") == "planar":
-    raise NotImplementedError(
-      "Get implementation from main branch; meanwhile use `euclidean_planar`"
-    )
+  elif shape == "planar":
+    degree = neighborhood_limits.get("degree", neighborhood_limits.get("k", 3))
+    if degree != 3 or Nn < 4 or Nn % 2:
+      raise ValueError("planar regular neighborhoods require degree=3 and even Nn >= 4")
+    # Replacing a cubic vertex with a triangle preserves planarity and degree.
+    # ponytail: samples the vertex-expansion family, not uniformly all cubic
+    # planar graphs; use a dedicated sampler if unbiased graph sampling is needed.
+    graph = nx.complete_graph(4)
+    while graph.number_of_nodes() < Nn:
+      node = int(rng.choice(list(graph.nodes())))
+      neighbors = list(graph.neighbors(node))
+      new_nodes = [node, graph.number_of_nodes(), graph.number_of_nodes() + 1]
+      graph.remove_node(node)
+      graph.add_edges_from(combinations(new_nodes, 2))
+      graph.add_edges_from(zip(neighbors, rng.permutation(new_nodes)))
+    graph = nx.relabel_nodes(graph, dict(zip(range(Nn), rng.permutation(Nn))))
+    ordered_graph = nx.Graph()
+    ordered_graph.add_nodes_from(range(Nn))
+    ordered_graph.add_edges_from(graph.edges())
+    graph = ordered_graph
+    neighborhood = nx.to_numpy_array(graph, nodelist=range(Nn), dtype=int)
   elif "p" in limits["neighborhood"]:
     for _ in range(1000):
       neighborhood = np.zeros((Nn, Nn))
@@ -284,6 +302,8 @@ def generate_neighborhood(
         "could not generate a connected regular neighborhood in 1000 attempts"
       )
     neighborhood = nx.adjacency_matrix(graph).toarray()
+  if graph is None:
+    raise ValueError(f"unsupported neighborhood configuration: {neighborhood_limits}")
   # -- add network latency (if available)
   graph = add_network_latency(graph, limits, rng)
   return neighborhood, graph

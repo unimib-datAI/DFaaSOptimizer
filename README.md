@@ -70,6 +70,16 @@ uv run --locked pytest -q
 The pre-push hooks run Ruff and mypy using the versions in `uv.lock`. Install
 them with `uv run pre-commit install --hook-type pre-push`.
 
+The environment also includes the RL training dependencies: Ray/RLlib 2.40,
+PyTorch, and a pinned RL4CC commit. The former RL4CC branch reference is no
+longer available; `uv.lock` records the replacement revision. TensorFlow is
+optional and is not needed for the provided Torch training configuration.
+
+Tests that require Gurobi check an actual solve before running and skip with
+an explicit reason if the package or license is unavailable. Numerical
+regression tests can use the system GLPK executable (`glpsol`); these skip
+explicitly if GLPK is absent. See [the regression map](tests/REGRESSIONS.md).
+
 > [!NOTE]
 > The provided code was tested under Python versions 3.10.15 and 3.12.3
 
@@ -81,7 +91,12 @@ them with `uv run pre-commit install --hook-type pre-push`.
 > `.venv/lib/python3.10/site-packages/pyomo/opt/base/solvers.py` (method 
 > `OptSolver.solve`, after calling `_model.solutions.load_from`)
 
-### Install with conda (required for planar graphs generation)
+### Install with conda (optional)
+
+Planar graph generation no longer requires Sage. The degree-three sampler
+generates connected cubic planar graphs by vertex expansion; it is not a
+uniform sampler over all such graphs. The Euclidean planar generator is a
+separate topology family controlled by mean degree.
 
 ```
 conda create -n sage_venv -c conda-forge sage

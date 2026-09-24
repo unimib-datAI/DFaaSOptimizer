@@ -14,10 +14,7 @@ from hierarchical_auction.runner import run as run_hierarchical
 from run_faasmacro import run as run_faasmacro
 
 
-def _require_gurobi() -> None:
-  solver = pyo.SolverFactory("gurobi")
-  if not solver.available(exception_flag=False):
-    pytest.skip("Gurobi solver is not available")
+from solver_support import require_gurobi as _require_gurobi
 
 
 def _planar_e2e_config(base_solution_folder: Path) -> dict:

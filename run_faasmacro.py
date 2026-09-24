@@ -11,7 +11,7 @@ from run_centralized_model import (
   save_checkpoint
 )
 from utils.centralized import check_feasibility, validate_centralized_solution
-from utils.faasmacro import compute_centralized_objective
+from utils.faasmacro import compute_centralized_objective, relative_objective_gap
 from utils.common import load_configuration
 from generators.generate_data import update_data
 from postprocessing import load_solution, plot_history
@@ -32,6 +32,7 @@ import multiprocessing as mpp
 from datetime import datetime
 from collections import deque
 from copy import deepcopy
+from functools import partial
 from typing import Tuple
 import pandas as pd
 import numpy as np
@@ -529,11 +530,16 @@ def solve_master_problem(
   )
 
 
-def solve_single_agent(agent: int):
+def solve_single_agent(agent: int, detailed_pi=None):
   """Function run in each worker, uses the global data initialized above."""
   # Make a local copy of sp_data to modify safely
   local_data = _sp_data.copy()
+  local_data[None] = _sp_data[None].copy()
   local_data[None]["whoami"] = {None: agent + 1}
+  if detailed_pi is not None:
+    local_data[None]["pi"] = {
+      f+1: price for f, price in enumerate(detailed_pi[agent])
+    }
   sp_instance = _sp.generate_instance(local_data)
   result = _sp.solve(sp_instance, _solver_options, _solver_name)
   return agent, result
@@ -567,15 +573,17 @@ def solve_subproblem(
         initializer = init_parallel_worker,
         initargs = (sp_data, solver_options, solver_name, sp),
       ) as pool:
-      results = pool.map(solve_single_agent, agents)
+      results = pool.map(partial(solve_single_agent, detailed_pi=detailed_pi), agents)
     agents_sol = {agent: sol for agent, sol in results}
   else:
     for agent in agents:
       # generate instance
-      sp_data[None]["whoami"] = {None: agent + 1}
+      agent_data = sp_data.copy()
+      agent_data[None] = sp_data[None].copy()
+      agent_data[None]["whoami"] = {None: agent + 1}
       if detailed_pi is not None:
-        sp_data[None]["pi"] = {f+1: detailed_pi[agent,f] for f in range(Nf)}
-      sp_instance = sp.generate_instance(sp_data)
+        agent_data[None]["pi"] = {f+1: detailed_pi[agent,f] for f in range(Nf)}
+      sp_instance = sp.generate_instance(agent_data)
       # solve
       agents_sol[agent] = sp.solve(
         sp_instance, solver_options, solver_name
@@ -763,7 +771,7 @@ def run(
     best_solution_so_far = None
     best_centralized_solution = None
     best_cost_so_far = np.inf
-    best_centralized_cost = 0.0
+    best_centralized_cost = -np.inf
     best_it_so_far = -1
     best_centralized_it = -1
     total_runtime = 0
@@ -935,7 +943,7 @@ def run(
           flush = True
         )
       # compute price deviation
-      odev = abs((spr_obj - obj_dict["LSP"][it][-1]) / obj_dict["LSP"][it][-1])
+      odev = relative_objective_gap(spr_obj, obj_dict["LSP"][it][-1])
       x_cost = 0
       for n in range(sp_x.shape[0]):
         x_cost_n = 0

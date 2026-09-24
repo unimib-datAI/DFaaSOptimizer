@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import networkx as nx
 import numpy as np
@@ -82,7 +83,7 @@ def materialize_instance(experiment: Experiment, path: str | Path) -> Path:
       raise ValueError(f"generation specification mismatch for {instance_path}")
     return instance_path
 
-  instance_path.mkdir(parents=True)
+  instance_path.parent.mkdir(parents=True, exist_ok=True)
   spec = generation_spec(experiment)
   limits = spec["limits"]
   rng = np.random.default_rng(seed=spec["generation_seed"])
@@ -97,28 +98,34 @@ def materialize_instance(experiment: Experiment, path: str | Path) -> Path:
     enable_plotting=False,
   )
 
-  (instance_path / "base_instance_data.json").write_text(json.dumps(
-    delete_tuples(base_data), indent=2, cls=NpEncoder,
-  ))
-  (instance_path / "load_limits.json").write_text(json.dumps(
-    load_limits, indent=2, cls=NpEncoder,
-  ))
-  (instance_path / "input_requests_traces.json").write_text(json.dumps(
-    traces, indent=2, cls=NpEncoder,
-  ))
-  (instance_path / "graph.json").write_text(json.dumps(
-    nx.node_link_data(graph, edges="edges"), indent=2, cls=NpEncoder,
-  ))
-  metadata = {
-    "schema_version": 1,
-    "instance_id": instance_id(experiment),
-    "suite": experiment.suite,
-    "generation": spec,
-    "files": {
-      filename: _sha256(instance_path / filename) for filename in PAYLOAD_FILES
-    },
-  }
-  (instance_path / "metadata.json").write_text(json.dumps(metadata, indent=2))
+  # Publish only a complete directory; interruption leaves no final instance,
+  # and an existing nonempty directory cannot be overwritten by rename.
+  with TemporaryDirectory(prefix=f".{instance_path.name}-", dir=instance_path.parent) as temporary:
+    draft = Path(temporary) / "instance"
+    draft.mkdir()
+    (draft / "base_instance_data.json").write_text(json.dumps(
+      delete_tuples(base_data), indent=2, cls=NpEncoder,
+    ))
+    (draft / "load_limits.json").write_text(json.dumps(
+      load_limits, indent=2, cls=NpEncoder,
+    ))
+    (draft / "input_requests_traces.json").write_text(json.dumps(
+      traces, indent=2, cls=NpEncoder,
+    ))
+    (draft / "graph.json").write_text(json.dumps(
+      nx.node_link_data(graph, edges="edges"), indent=2, cls=NpEncoder,
+    ))
+    metadata = {
+      "schema_version": 1,
+      "instance_id": instance_id(experiment),
+      "suite": experiment.suite,
+      "generation": spec,
+      "files": {
+        filename: _sha256(draft / filename) for filename in PAYLOAD_FILES
+      },
+    }
+    (draft / "metadata.json").write_text(json.dumps(metadata, indent=2))
+    draft.rename(instance_path)
   return instance_path
 
 

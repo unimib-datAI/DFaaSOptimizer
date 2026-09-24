@@ -9,7 +9,7 @@ from .batch import Batch
 from .definitions import get_suite
 from .definitions.paper import SURVIVORS_PATH
 from .instances import materialize_batch
-from .manifest import Manifest
+from .manifest import Manifest, SUCCEEDED
 from .selection import default_selection
 from .survivors import select_survivors
 
@@ -45,6 +45,7 @@ def _batch_path(suite: str) -> Path:
 def _define_and_materialize(suite: str, instances_root: str) -> Batch:
   batch = Batch(suite=suite, experiments=tuple(get_suite(suite)()))
   path = _batch_path(suite)
+  path.parent.mkdir(parents=True, exist_ok=True)
   batch.save(path)
   materialize_batch(batch, instances_root)
   return batch
@@ -60,15 +61,36 @@ def _run_suite(suite: str, args, state: dict) -> bool:
   selected = [batch.experiments[i] for i in selected_idx]
   if not selected:
     return True
-  return execute_batch(batch, manifest, manifest_path, selected, args)
+  completed = execute_batch(batch, manifest, manifest_path, selected, args)
+  return completed and all(
+    manifest.status(e.id) == SUCCEEDED for e in batch.experiments
+  )
+
+
+def _suite_has_pending(suite: str) -> bool:
+  path = _batch_path(suite)
+  manifest_path = path.with_suffix(".manifest.json")
+  if not path.exists() or not manifest_path.exists():
+    return False
+  batch = Batch.load(path)
+  return bool(Manifest(manifest_path).pending_ids([e.id for e in batch.experiments]))
 
 
 def run_campaign(args) -> None:
   state = _load_state()
+  # Recover checkpoints written by older versions that confused terminal jobs
+  # with successful jobs. Preserve completed suites with no pending entries.
+  if state["stage"] == "select" and _suite_has_pending(SCREENING_SUITE):
+    state["stage"] = "screening"
+    _save_state(state)
+  done_suites = [suite for suite in state["done_suites"] if not _suite_has_pending(suite)]
+  if done_suites != state["done_suites"]:
+    state["done_suites"] = done_suites
+    _save_state(state)
 
   if state["stage"] == "screening":
     if not _run_suite(SCREENING_SUITE, args, state):
-      print("screening interrupted — rerun campaign to resume")
+      print("screening interrupted or failed — rerun campaign to resume")
       return
     state["stage"] = "select"
     _save_state(state)
@@ -88,7 +110,7 @@ def run_campaign(args) -> None:
       if suite in state["done_suites"]:
         continue
       if not _run_suite(suite, args, state):
-        print(f"{suite} interrupted — rerun campaign to resume")
+        print(f"{suite} interrupted or failed — rerun campaign to resume")
         return
       state["done_suites"].append(suite)
       _save_state(state)

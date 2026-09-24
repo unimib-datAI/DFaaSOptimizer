@@ -52,6 +52,7 @@ class BaseAbstractModel():
     if solver is None:
       solver = pyo.SolverFactory(solver_name)
       _SOLVER_CACHE[solver_name] = solver
+    solver.options.clear()
     for k, v in solver_options.items():
       solver.options[_solver_option_name(solver_name, k)] = v
     # provide initial solution (if any)
@@ -297,11 +298,11 @@ class LoadManagementModel(BaseCentralizedModel):
   def maximize_processing(model):
     return sum(
       sum(
-        model.alpha[n,f] * model.x[n,f] / model.incoming_load[n,f] + sum(
+        model.alpha[n,f] * model.x[n,f] / (model.incoming_load[n,f] or 1) + sum(
           model.beta[n,m,f] * model.y[n,m,f] for m in model.N
-        ) / model.incoming_load[n,f] - (
+        ) / (model.incoming_load[n,f] or 1) - (
           model.gamma[n,f] * model.z[n,f]
-        ) / model.incoming_load[n,f] for f in model.F
+        ) / (model.incoming_load[n,f] or 1) for f in model.F
       ) for n in model.N
     )
 
@@ -398,38 +399,26 @@ class SortOfKnapsack(BaseCentralizedModel):
   def maximize_processing(model):
     return sum(
       sum(
-        model.alpha[n,f] * model.x[n,f] / model.incoming_load[n,f] + sum(
+        model.alpha[n,f] * model.x[n,f] / (model.incoming_load[n,f] or 1) + sum(
           model.beta[n,m,f] * model.y[n,m,f] for m in model.N
-        ) / model.incoming_load[n,f] - (
+        ) / (model.incoming_load[n,f] or 1) - (
           model.gamma[n,f] * model.z[n,f]
-        ) / model.incoming_load[n,f] for f in model.F
+        ) / (model.incoming_load[n,f] or 1) for f in model.F
       ) for n in model.N
     )
 
 
 class TightLoadManagementModel(LoadManagementModel):
   """
-  Same problem as LoadManagementModel, reformulated for solve speed:
-  - no_ping_pong2 big-M restricted to neighbors (tighter LP relaxation);
-  - utilization_equilibrium2 replaced by a tiny -r_penalty * sum(r) term in
-    the objective, which keeps r minimal without |N|*|F| extra constraints.
-  Same variables, so solution extraction is unchanged.
+  Same objective and replica bounds as LoadManagementModel, with the
+  no_ping_pong2 big-M restricted to neighbors for a tighter LP relaxation.
   """
   def __init__(self):
     super().__init__()
     self.name = "TightLoadManagementModel"
-    # ponytail: r_penalty must stay << min marginal gain of serving one
-    # request (~beta/incoming_load); raise only if r inflates in solutions
-    self.model.r_penalty = pyo.Param(
-      within = pyo.NonNegativeReals, default = 1e-4, mutable = True
-    )
-    self.model.del_component(self.model.utilization_equilibrium2)
     self.model.del_component(self.model.no_ping_pong2)
     self.model.no_ping_pong2 = pyo.Constraint(
       self.model.N, self.model.F, rule = self.no_ping_pong2_tight
-    )
-    self.set_objective(
-      rule = self.maximize_processing_penalized, sense = pyo.maximize
     )
   
   @staticmethod
@@ -439,11 +428,3 @@ class TightLoadManagementModel(LoadManagementModel):
     ) <= sum(
       model.incoming_load[m,f] * model.neighborhood[m,n] for m in model.N
     ) * model.i_receives_f[n,f]
-  
-  @staticmethod
-  def maximize_processing_penalized(model):
-    return LoadManagementModel.maximize_processing(model) - (
-      model.r_penalty * sum(
-        model.r[n,f] for n in model.N for f in model.F
-      )
-    )

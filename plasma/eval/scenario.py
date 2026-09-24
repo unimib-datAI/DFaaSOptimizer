@@ -30,7 +30,7 @@ from plasma.baselines.milp_baseline import shed_overflow, solve_snapshot
 from plasma.core.types import PlasmaOptions
 from plasma.engine import PlasmaEngine
 from plasma.eval.regret import adaptation_lag, cumulative_regret
-from plasma.runner import build_nodes, objective_load
+from plasma.runner import build_nodes
 from run_centralized_model import init_problem
 from utils.centralized import get_current_load
 from utils.common import load_configuration
@@ -82,25 +82,17 @@ def run_scenario(
   held_stale = None
   rows = []
   for k, t in enumerate(range(min_run_time, ub, run_time_step)):
-    if dead_node is not None and t == t_kill:
-      engine.set_alive(dead_node, False)
-    if dead_node is not None and t == t_revive:
-      engine.set_alive(dead_node, True)
     currently_dead = (
       dead_node if dead_node is not None and t_kill <= t < t_revive else None
     )
-    raw_loadt = get_current_load(traces, agents, t)
-    raw_loadt = _zero_dead_row(raw_loadt, Nf, currently_dead)
-    # floor zero (dead-node) entries to 1 for the MILP-side methods: the
-    # model's own objective divides by incoming_load internally, so an
-    # unfloored 0 blows up solve_snapshot itself, not just
-    # compute_centralized_objective. Plasma's engine arrivals stay raw
-    # (0 forwarded packets for a dead node), only its scoring is floored.
-    loadt = objective_load(raw_loadt)
+    if dead_node is not None:
+      engine.set_alive(dead_node, currently_dead is None)
+    loadt = get_current_load(traces, agents, t)
+    loadt = _zero_dead_row(loadt, Nf, currently_dead)
 
     # -- plasma: drive the engine directly, mirroring plasma.runner.run --
     arrivals = np.array([
-      [int(round(raw_loadt[(n + 1, f + 1)] * opts.W)) for f in range(Nf)]
+      [int(round(loadt[(n + 1, f + 1)] * opts.W)) for f in range(Nf)]
       for n in range(Nn)
     ])
     msgs_before = engine.msg_count
@@ -108,36 +100,42 @@ def run_scenario(
     plasma_data = update_data(base_instance_data, {"incoming_load": {
       (n + 1, f + 1): arrivals[n, f] for n in range(Nn) for f in range(Nf)
     }})
-    plasma_obj_data = update_data(
-      plasma_data,
-      {"incoming_load": objective_load(plasma_data[None]["incoming_load"])},
-    )
     plasma_obj = compute_centralized_objective(
-      plasma_obj_data, res.x, res.y, res.z
+      plasma_data, res.x, res.y, res.z
     )
 
-    # -- shared true/floored load for the MILP-side methods --
+    # -- shared true load for the MILP-side methods --
     milp_data = update_data(base_instance_data, {"incoming_load": loadt})
-    score_data = milp_data  # loadt is already objective_load-floored above
+    if currently_dead is not None:
+      failed = currently_dead + 1
+      milp_data[None]["memory_capacity"][failed] = 0
+      for edge in milp_data[None]["neighborhood"]:
+        if failed in edge:
+          milp_data[None]["neighborhood"][edge] = 0
     lam = np.array([
       [loadt[(n + 1, f + 1)] for f in range(Nf)] for n in range(Nn)
     ])
 
     # -- dynamic oracle: fresh MILP solve every step on the true load --
     x_o, y_o, z_o, _, _ = solve_snapshot(milp_data, solver_name, solver_options)
-    oracle_obj = compute_centralized_objective(score_data, x_o, y_o, z_o)
+    oracle_obj = compute_centralized_objective(milp_data, x_o, y_o, z_o)
 
     # -- stale MILP: re-solve every resolve_every steps, held in between --
     if held_stale is None or k % resolve_every == 0:
       x_s, y_s, _, _, _ = solve_snapshot(milp_data, solver_name, solver_options)
       held_stale = (x_s, y_s)
     x_s, y_s = held_stale
+    if currently_dead is not None:
+      x_s, y_s = x_s.copy(), y_s.copy()
+      x_s[currently_dead, :] = 0
+      y_s[currently_dead, :, :] = 0
+      y_s[:, currently_dead, :] = 0
     x_eff, y_eff, z_eff = shed_overflow(x_s, y_s, lam)
-    stale_obj = compute_centralized_objective(score_data, x_eff, y_eff, z_eff)
+    stale_obj = compute_centralized_objective(milp_data, x_eff, y_eff, z_eff)
 
     # -- greedy: no-coordination lower baseline, re-solved every step --
     x_g, y_g, z_g, _ = greedy_solve(milp_data, solver_options)
-    greedy_obj = compute_centralized_objective(score_data, x_g, y_g, z_g)
+    greedy_obj = compute_centralized_objective(milp_data, x_g, y_g, z_g)
 
     seconds = opts.rounds_per_step * opts.W
     rows.append({

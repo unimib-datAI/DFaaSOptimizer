@@ -128,20 +128,29 @@ def test_runner_supports_w_not_one(tmp_path):
   assert 1.8 <= ratio <= 2.2, ratio
 
 
-from plasma.runner import objective_load
+from utils.faasmacro import compute_centralized_objective
 
 
-def test_objective_load_floors_zero_pairs_only():
-  load = {(1, 1): 0, (1, 2): 7}
-  assert objective_load(load) == {(1, 1): 1, (1, 2): 7}
+def test_objective_preserves_zero_and_positive_fractional_loads():
+  data = {None: {
+    "Nn": {None: 1}, "Nf": {None: 2},
+    "incoming_load": {(1, 1): 0, (1, 2): 0.5},
+    "alpha": {(1, 1): 1, (1, 2): 2},
+    "beta": {(1, 1, 1): 0, (1, 1, 2): 0},
+    "gamma": {(1, 1): 1, (1, 2): 1},
+  }}
+  objective = compute_centralized_objective(
+    data, np.array([[0, 0.5]]), np.zeros((1, 1, 2)), np.zeros((1, 2)),
+  )
+  assert objective == pytest.approx(2.0)
+  assert data[None]["incoming_load"] == {(1, 1): 0, (1, 2): 0.5}
 
 
-def _solver_available(name="gurobi"):
-  try:
-    from pyomo.environ import SolverFactory
-    return SolverFactory(name).available(exception_flag=False)
-  except Exception:
-    return False
+from solver_support import gurobi_unavailable_reason
+
+
+def _solver_available():
+  return gurobi_unavailable_reason() is None
 
 
 @pytest.mark.skipif(not _solver_available(), reason="no MILP solver")

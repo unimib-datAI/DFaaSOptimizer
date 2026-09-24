@@ -59,9 +59,9 @@ class CapacityTokenManager:
     self._pending[req.seller_node][req.function].append(req)
 
   def resolve_node_function(
-    self, node: int, function: int
+    self, node: int, function: int, remaining_demand: FloatArray | None = None,
   ) -> list[AcceptedAllocation]:
-    """Resolve pending requests for (node, function)."""
+    """Resolve requests, debiting the shared remaining demand when supplied."""
     pending = self._pending[node][function]
     if not pending:
       return []
@@ -77,6 +77,16 @@ class CapacityTokenManager:
           req.quantity,
           take * self._service_quantum[node, function],
         )
+        if remaining_demand is not None:
+          accepted_quantity = min(
+            accepted_quantity, remaining_demand[req.buyer_node, function],
+          )
+          if accepted_quantity <= 0:
+            continue
+          take = min(take, int(np.ceil(
+            accepted_quantity / self._service_quantum[node, function]
+          )))
+          remaining_demand[req.buyer_node, function] -= accepted_quantity
         accepted.append(AcceptedAllocation(
           level=req.level,
           buyer_structure=req.buyer_structure,

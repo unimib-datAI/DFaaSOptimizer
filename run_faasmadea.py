@@ -17,7 +17,7 @@ from run_faasmacro import (
   solve_subproblem
 )
 from utils.centralized import check_feasibility
-from utils.faasmacro import compute_centralized_objective
+from utils.faasmacro import compute_centralized_objective, relative_objective_gap
 from utils.common import load_configuration
 from models.sp import LSP, LSPr, LSP_fixedr, LSPr_x
 from models.model import PYO_VAR_TYPE
@@ -159,7 +159,7 @@ def check_stopping_criteria(
     ):
     stop = True
     why_stopping = "feasible solution found"
-  if not stop and len(odev_queue) >= odev_queue.maxlen:
+  if not stop and odev_queue is not None and len(odev_queue) >= odev_queue.maxlen:
     stop = True
     why_stopping = "UB/LB diff < tol"
     for odev in odev_queue:
@@ -427,13 +427,15 @@ def evaluate_bids(
         )
       ):
       if tentatively_start_replicas and rho[j] > 0:
-        while next_bid_idx < len(all_bids_for_j) and rho[j] > 0:
+        while next_bid_idx < len(all_bids_for_j):
           i = int(all_bids_for_j.iloc[next_bid_idx]["i"])
           f = int(all_bids_for_j.iloc[next_bid_idx]["f"])
-          max_a = int(rho[j]/data[None]["memory_requirement"][f+1])
+          current_a = int(additional_replicas[j,f])
+          max_a = current_a + int(rho[j]/data[None]["memory_requirement"][f+1])
+          managed = False
           if max_a > 0 and not (receiving[i,f] or sending[j,f]):
-            a = int(additional_replicas[j,f] + 1)
-            managed = False
+            # A previously started replica may still have spare processing capacity.
+            a = max(current_a, 1)
             while a <= max_a and not managed:
               # -- check utilization with one more replica
               q = all_bids_for_j.iloc[next_bid_idx]["d"]
@@ -451,14 +453,15 @@ def evaluate_bids(
                 managed = True
                 # -- and update the remaining memory capacity
                 if additional_replicas[j,f] < a:
+                  rho[j] -= ((a - current_a) * data[None]["memory_requirement"][f+1])
                   additional_replicas[j,f] = a
-                  rho[j] -= (a * data[None]["memory_requirement"][f+1])
               else:
                 # -- ...otherwhise, try to increase replicas
                 a += 1
-            next_bid_idx += 1
-          else:
-            next_bid_idx += 1
+          if not managed and rho[j] <= 0:
+            # Leave unserved bids for the reassignment phase below.
+            break
+          next_bid_idx += 1
       if not tentatively_start_replicas or (
           tentatively_start_replicas and rho[j] <= 0
         ):
@@ -692,7 +695,7 @@ def run(
     best_centralized_solution = None
     best_cost_so_far = np.inf
     spr_obj = np.inf
-    best_centralized_cost = 0.0
+    best_centralized_cost = -np.inf
     best_it_so_far = -1
     best_centralized_it = -1
     y = np.zeros((Nn,Nn,Nf))
@@ -890,7 +893,7 @@ def run(
             flush = True
           )
       odev_queue.append(
-        abs(best_centralized_cost - prev_cobj) / best_centralized_cost
+        relative_objective_gap(prev_cobj, best_centralized_cost)
       )
       # check termination criteria
       s = datetime.now()

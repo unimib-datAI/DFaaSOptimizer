@@ -345,6 +345,7 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
     reward = {}
     for agent in self.agents:
       n,f = _get_n_f(agent)
+      input_rate = self.info[agent]["input_rate"] or 1
       loc_utility, fwd_utility, cloud_penalty = 0.0, 0.0, 0.0
       # check if the solution is feasible
       if self.info[agent]["cpu_utilization"] <= self.instance_data[
@@ -353,7 +354,7 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
         # -- local processing
         loc_utility = (
           self.instance_data["alpha"][(n,f)] * self.info[agent]["loc"]
-        ) / self.info[agent]["input_rate"]
+        ) / input_rate
         self.info[agent]["loc_utility"] = float(loc_utility)
         # -- forwarding to neighbors
         for j in self.agent_neighbors[n]:
@@ -365,12 +366,12 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
               self.instance_data["beta"][(n,j,f)] * self.info[agent][
                 f"fwd_to_{neighbor}"
               ]
-            ) / self.info[agent]["input_rate"]
+            ) / input_rate
         self.info[agent]["fwd_utility"] = float(fwd_utility)
         # -- offloading to cloud
         cloud_penalty = (
           self.instance_data["gamma"][(n,f)] * self.info[agent]["rej"]
-        ) / self.info[agent]["input_rate"]
+        ) / input_rate
         self.info[agent]["cloud_penalty"] = - float(cloud_penalty)
       # reward
       reward[agent] = loc_utility + fwd_utility + cloud_penalty
@@ -648,7 +649,7 @@ class FaaSMARLEnvironment2(FaaSMARLEnvironment):
     # check centralized feasibility and compute centralized objective
     sp_data = {None: deepcopy(self.instance_data)}
     sp_data[None]["incoming_load"] = {
-      (int(agent),f): self.info[agent]["input_rate"] \
+      (int(agent),f): self.info[agent]["input_rate"][f-1] \
         for agent in self.agents for f in self.functions
     }
     # -- convert solution
@@ -685,6 +686,7 @@ class FaaSMARLEnvironment2(FaaSMARLEnvironment):
       n = int(agent)
       loc_utility, fwd_utility, cloud_penalty = 0.0, 0.0, 0.0
       for f in self.functions:
+        input_rate = self.info[agent]["input_rate"][f-1] or 1
         # check if the solution is feasible
         if self.info[agent]["cpu_utilization"][f-1] <= self.instance_data[
             "max_utilization"
@@ -692,7 +694,7 @@ class FaaSMARLEnvironment2(FaaSMARLEnvironment):
           # -- local processing
           loc_utility += (
             self.instance_data["alpha"][(n,f)] * self.info[agent]["loc"][f-1]
-          ) / self.info[agent]["input_rate"][f-1]
+          ) / input_rate
           # -- forwarding to neighbors
           for neighbor in self.agent_neighbors[agent]:
             j = int(neighbor)
@@ -705,13 +707,13 @@ class FaaSMARLEnvironment2(FaaSMARLEnvironment):
                 self.instance_data["beta"][(n,j,f)] * self.info[agent][
                   f"fwd_to_{neighbor}"
                 ][f-1]
-              ) / self.info[agent]["input_rate"][f-1]
+              ) / input_rate
           # -- offloading to cloud
           cloud_penalty = (
             self.instance_data["gamma"][(n,f)] * self.info[agent][
               "rej"
             ][f-1]
-          ) / self.info[agent]["input_rate"][f-1]
+          ) / input_rate
       self.info[agent]["loc_utility"] = float(loc_utility)
       self.info[agent]["fwd_utility"] = float(fwd_utility)
       self.info[agent]["cloud_penalty"] = - float(cloud_penalty)

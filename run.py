@@ -552,15 +552,11 @@ def results_postprocessing(
       )
     # plot runtime comparison
     if reference_method_name in found_methods and len(runtimes) > 1:
-      key_col = reference_method_name if reference_method == "centralized" else "tot"
-      runtime_comparison = {
-        reference_method_name: runtimes[
-          reference_method_name
-        ][key_col].tolist()
-      }
+      runtime_comparison = {}
       for mname in found_methods:
-        if mname != reference_method_name:
-          runtime_comparison[mname] = runtimes[mname]["tot"].tolist()
+        key_col = mname if mname == "LoadManagementModel" else "tot"
+        runtime_comparison[mname] = runtimes[mname][key_col].tolist()
+        if mname != "LoadManagementModel":
           runtime_comparison[f"iteration_{mname}"] = all_tc[
             (
               all_tc["method"] == mname
@@ -688,7 +684,7 @@ def results_postprocessing(
               grid = True,
               legend = False
             )
-            if not rtv[f"best_iteration_{mname}"].isnull().all():
+            if f"best_iteration_{mname}" in rtv and not rtv[f"best_iteration_{mname}"].isnull().all():
               rtv.plot(
                 x = "time", 
                 y = f"best_iteration_{mname}", 
@@ -699,17 +695,18 @@ def results_postprocessing(
                 grid = True,
                 legend = False
               )
-            rtv.plot(
-              x = "time", 
-              y = f"iteration_{mname}", 
-              ax = axs2[2], 
-              color = method_color, 
-              linewidth = 1, 
-              linestyle = "dashed",
-              marker = ".", 
-              grid = True,
-              legend = False
-            )
+            if f"iteration_{mname}" in rtv:
+              rtv.plot(
+                x = "time",
+                y = f"iteration_{mname}",
+                ax = axs2[2],
+                color = method_color,
+                linewidth = 1,
+                linestyle = "dashed",
+                marker = ".",
+                grid = True,
+                legend = False
+              )
           # method
           obj.plot(
             x = "time", 
@@ -805,16 +802,17 @@ def results_postprocessing(
               grid = True,
               label = "Best iteration"
             )
-          avg_rtv.plot(
-            y = f"iteration_{mname}",
-            ax = axs2[2],
-            color = method_color,
-            linewidth = 1,
-            linestyle = "dashed",
-            marker = ".", 
-            grid = True,
-            label = "# iterations"
-          )
+          if f"iteration_{mname}" in avg_rtv:
+            avg_rtv.plot(
+              y = f"iteration_{mname}",
+              ax = axs2[2],
+              color = method_color,
+              linewidth = 1,
+              linestyle = "dashed",
+              marker = ".",
+              grid = True,
+              label = "# iterations"
+            )
         # -- method
         avg.plot(
           y = mname,
@@ -1168,9 +1166,6 @@ def run(
             config["limits"]["load"]["path"] = old_exp_path
         except Exception:
           pass
-      # -- get solution of reference method (if it exists)
-      if ref_method_folder is None and experiment_idx is not None:
-        ref_method_folder = solution_folders[reference_method][experiment_idx]
       # -- solve centralized model
       if run_c or generate_only:
         c_folder = run_centralized(
@@ -1182,6 +1177,7 @@ def run(
         set_solution_folder(
           solution_folders, "centralized", experiment_idx, c_folder
         )
+        ref_method_folder = c_folder
       # -- solve "selfish" centralized model
       if run_sc:
         sc_config = deepcopy(config)
@@ -1202,6 +1198,14 @@ def run(
         )
       # -- solve iterative model (v0)
       if fix_r:
+        # Replica fixing consumes a centralized solution, independently of the
+        # method chosen as the reporting baseline.
+        if ref_method_folder is None and experiment_idx is not None:
+          centralized_folders = solution_folders.get("centralized", [])
+          if experiment_idx < len(centralized_folders):
+            ref_method_folder = centralized_folders[experiment_idx]
+        if ref_method_folder is None:
+          raise ValueError("--fix_r requires a centralized solution for this experiment")
         config["opt_solution_folder"] = ref_method_folder
       if run_i_v0:
         i_folder_v0 = run_iterations(

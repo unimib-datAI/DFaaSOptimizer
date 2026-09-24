@@ -26,7 +26,7 @@ class HeuristicCoordinator(ABC):
     total_r = np.zeros(r.shape)
     for (n,f), load in instance[None]["incoming_load"].items():
       x = instance[None]["x_bar"][(n,f)]
-      previous_z = instance[None]["z_bar"][(n,f)]
+      previous_z = instance[None].get("z_bar", {}).get((n,f), 0.0)
       # no traffic loss
       managed_load = x + z[n-1,f-1] + y[n-1,:,f-1].sum() + previous_z
       if abs(managed_load - load) > 1e-3:
@@ -75,11 +75,11 @@ class HeuristicCoordinator(ABC):
         for n2 in range(Nn):
           v += (beta[(n1+1,n2+1,f+1)] * y[n1,n2,f])
           ni += y[n1,n2,f]
-        plus += (v / incoming_load[(n1+1,f+1)])
+        plus += (v / (incoming_load[(n1+1,f+1)] or 1))
         minus += (
           gamma[(n1+1,f+1)] * max(
             0, omega[(n1+1,f+1)] - ni
-          ) / incoming_load[(n1+1,f+1)]
+          ) / (incoming_load[(n1+1,f+1)] or 1)
         )
     return plus - minus
 

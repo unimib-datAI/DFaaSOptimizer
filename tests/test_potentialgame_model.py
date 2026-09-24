@@ -3,10 +3,7 @@ import pyomo.environ as pyo
 import pytest
 
 
-def _require_gurobi() -> None:
-  solver = pyo.SolverFactory("gurobi")
-  if not solver.available(exception_flag=False):
-    pytest.skip("Gurobi solver is not available")
+from solver_support import require_gurobi as _require_gurobi
 
 
 def _tiny_pg_data():

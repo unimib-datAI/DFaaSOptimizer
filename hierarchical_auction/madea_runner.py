@@ -43,6 +43,7 @@ from run_faasmadea import (
   start_additional_replicas,
 )
 from utils.common import load_configuration
+from utils.faasmacro import relative_objective_gap
 
 
 def build_auction_options(config: dict[str, Any]) -> dict[str, Any]:
@@ -357,7 +358,7 @@ def run(
           )
       
       odev_queue.append(
-        abs(best_cost - prev_cobj) / best_cost
+        relative_objective_gap(prev_cobj, best_cost)
       )
 
       elapsed = time.monotonic() - started_at

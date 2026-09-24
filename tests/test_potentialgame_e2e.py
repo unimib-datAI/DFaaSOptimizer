@@ -10,10 +10,7 @@ from parse import parse
 from decentralized_potentialgame import run_pg_s, run_pg_r
 
 
-def _require_gurobi() -> None:
-  solver = pyo.SolverFactory("gurobi")
-  if not solver.available(exception_flag=False):
-    pytest.skip("Gurobi solver is not available")
+from solver_support import require_gurobi as _require_gurobi
 
 
 def _e2e_config(base_solution_folder: Path) -> dict:

@@ -8,10 +8,7 @@ import pytest
 from decentralized_diffusion import run as run_diffusion
 
 
-def _require_gurobi() -> None:
-  solver = pyo.SolverFactory("gurobi")
-  if not solver.available(exception_flag=False):
-    pytest.skip("Gurobi solver is not available")
+from solver_support import require_gurobi as _require_gurobi
 
 
 def _diffusion_e2e_config(base_solution_folder: Path) -> dict:

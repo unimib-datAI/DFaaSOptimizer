@@ -23,6 +23,9 @@ dependencies = [
   "python-dateutil==2.9.0.post0",
   "pyyaml>=6.0.2",
   "ray-dispatcher",
+  "ray[rllib]==2.40.0",
+  "RL4CC",
+  "torch==2.11.0",
   "rich>=13,<15",
   "pytz==2025.2",
   "scipy==1.14.1",
@@ -37,6 +40,7 @@ package = false
 
 [tool.uv.sources]
 ray-dispatcher = { git = "https://github.com/miciav/ray-dispatcher.git", tag = "v0.1.1" }
+RL4CC = { git = "https://github.com/FFede0/RL4CC.git", rev = "6256ac010eaada08ce6072315dd34c5ed5211938" }
 
 [dependency-groups]
 dev = [

@@ -177,15 +177,15 @@ class LRMP(RMPCentralized):
     return sum(
       sum(
         model.beta[n,m,f] * model.y[n,m,f] for m in model.N
-      ) / model.incoming_load[n,f] for n in model.N for f in model.F
+      ) / (model.incoming_load[n,f] or 1) for n in model.N for f in model.F
     ) - sum(
       model.gamma[n,f] * (
         model.omega_bar[n,f] - sum(model.y[n,m,f] for m in model.N)
-      ) / model.incoming_load[n,f] for n in model.N for f in model.F
+      ) / (model.incoming_load[n,f] or 1) for n in model.N for f in model.F
     )
 
 
-class LRMP_freeMemory(RMPAbstractModel):
+class LRMP_freeMemory(RMPCentralized):
   def __init__(self):
     super().__init__()
     self.name = "LRMP_freeMemory"
@@ -283,5 +283,5 @@ class LRMP_freeMemory(RMPAbstractModel):
     return sum(
       sum(
         model.beta[n,m,f] * model.y[n,m,f] for m in model.N
-      ) / model.incoming_load[n,f] for n in model.N for f in model.F
+      ) / (model.incoming_load[n,f] or 1) for n in model.N for f in model.F
     )

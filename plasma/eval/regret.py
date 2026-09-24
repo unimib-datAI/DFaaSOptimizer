@@ -21,7 +21,7 @@ def adaptation_lag(
   lags: List[float] = []
   for cp in change_points:
     after = times >= cp
-    recovered = after & (method_obj >= (1.0 - threshold) * oracle_obj)
+    recovered = after & (method_obj >= oracle_obj - threshold * np.abs(oracle_obj))
     idx = np.flatnonzero(recovered)
     lags.append(float(times[idx[0]] - cp) if len(idx) else float("nan"))
   return lags

@@ -255,8 +255,9 @@ def run(
         best_centralized_solution = deepcopy(csol)
         best_centralized_it = it
       stop_searching, why_stop_searching = check_stopping_criteria(
-        it, max_iterations, blackboard, omega, rmp_omega, None,
-        bids, memory_bids, tolerance, total_runtime, time_limit
+        it, max_iterations, blackboard, omega, rmp_omega,
+        bids=bids, memory_bids=memory_bids,
+        tolerance=tolerance, total_runtime=total_runtime, time_limit=time_limit,
       )
       if not stop_searching:
         it += 1

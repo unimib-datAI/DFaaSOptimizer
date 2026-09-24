@@ -8,10 +8,7 @@ from run_centralized_model import init_problem, update_data, get_current_load
 from decentralized_bestresponse import reoptimize_node
 
 
-def _require_gurobi() -> None:
-  solver = pyo.SolverFactory("gurobi")
-  if not solver.available(exception_flag=False):
-    pytest.skip("Gurobi solver is not available")
+from solver_support import require_gurobi as _require_gurobi
 
 
 def _tiny_instance(tmp_path: Path):

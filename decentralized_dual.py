@@ -452,8 +452,8 @@ def run(
         best_centralized_it = it
       stop_searching, why_stop_searching = check_stopping_criteria(
         it, max_iterations, blackboard, omega, rmp_omega,
-        additional_replicas, None, memory_bids,
-        tolerance, total_runtime, time_limit
+        a=additional_replicas, memory_bids=memory_bids,
+        tolerance=tolerance, total_runtime=total_runtime, time_limit=time_limit,
       )
       if not stop_searching and not allocation_changed and not (
           additional_replicas > tolerance
