@@ -160,6 +160,40 @@ options:
 > exploit multithreading. Keep `j` small to avoid issues with aggressive 
 > over-commitment.
 
+### Hierarchical MADEA variants
+
+Two separate algorithms are available:
+
+- `hierarchical-madea` retains the existing interleaved auction implementation.
+- `hierarchical-madea-cycles` completes the production MADEA loop before invoking
+  higher-level auctions. If the actual stopping reason is `all load assigned`,
+  it terminates immediately. Other reasons invoke the hierarchy, followed by a
+  new complete MADEA cycle.
+
+After a hierarchy → MADEA pass, the cycle variant also stops if neither total
+assigned load nor best centralized welfare improves beyond `tolerance`. This
+avoids repeating route swaps without progress. The best solution is retained.
+
+The cycle variant preserves allocations, prices, replicas, fairness, the best
+centralized solution and cumulative runtime. It resets the local iteration
+counter and convergence queues between cycles. A list-valued `eta` retains
+MADEA's per-iteration schedule; the hierarchy reads the same list by level.
+
+The supplied 10-node, 5-function configuration (seed 4850) is available at
+[`config_files/hierarchical_madea_cycles.json`](config_files/hierarchical_madea_cycles.json).
+Run either the new module directly or both variants through the experiment runner:
+
+```sh
+uv run --locked python -m hierarchical_auction.madea_cycles_runner \
+  -c config_files/hierarchical_madea_cycles.json -j 0 --disable_plotting
+uv run --locked python run.py -c config_files/hierarchical_madea_cycles.json \
+  --methods hierarchical-madea hierarchical-madea-cycles \
+  --reference_method hierarchical-madea --n_experiments 1 --loop_over Nn -j 0
+```
+
+The variants export distinct objective columns: `HierarchicalMADeA` and
+`HierarchicalMADeACycles`.
+
 ### Comparing approaches on planar graphs
 
 A ready-to-use configuration file is provided at

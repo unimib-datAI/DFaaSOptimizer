@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from postprocessing import load_solution
 from run_centralized_model import (
   encode_solution,
@@ -580,6 +582,306 @@ def start_additional_replicas(
   return additional_replicas, residual_capacity
 
 
+@dataclass
+class MadeaState:
+  """Auction state retained between complete MADEA cycles.
+
+  Local iteration counters and convergence queues belong to a single cycle.
+  Allocations, prices, fairness, replicas, the global incumbent and runtime
+  survive a hierarchical auction and are inputs to the following cycle.
+  """
+  y: np.ndarray
+  omega: np.ndarray
+  p: np.ndarray
+  fairness: np.ndarray
+  sp_r: np.ndarray
+  sp_rho: np.ndarray
+  total_runtime: float = 0.0
+  best_centralized_solution: dict | None = None
+  best_centralized_cost: float = -np.inf
+  best_centralized_it: int = -1
+  iterations: int = 0
+  best_solution_so_far: dict | None = None
+  best_it_so_far: int = -1
+  it: int = 0
+  reason: str | None = None
+  objective_deviation: float = np.inf
+
+
+def compute_offloaded_demand(y: np.ndarray) -> np.ndarray:
+  return y.sum(axis=1)
+
+
+def run_madea_cycle(
+    state: MadeaState, *, sp_x, sp_omega, sp_data, data, agents, loadt,
+    neighborhood, latency, config, auction_options, parallelism,
+    log_stream, started_at,
+  ) -> MadeaState:
+  """Run the production MADEA loop to its actual stopping criterion.
+
+  This phase never invokes the hierarchy. The caller may update the returned
+  state and start another cycle, with fresh local convergence history.
+  """
+  Nn, Nf = sp_x.shape
+  solver_name = config["solver_name"]
+  general_solver_options = config.get("solver_options", {}).get("general", {})
+  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  tolerance = config.get("tolerance", 1e-6)
+  max_iterations = config["max_iterations"]
+  patience = config.get("patience", 1)
+  verbose = config.get("verbose", 0)
+  spr = LSPr_x()
+  ss = started_at
+  u0 = np.ones((Nn, Nf)) * 0.8
+  y, omega, p, fairness = state.y, state.omega, state.p, state.fairness
+  sp_r, sp_rho = state.sp_r, state.sp_rho
+  total_runtime = state.total_runtime
+  best_centralized_solution = state.best_centralized_solution
+  best_centralized_cost = state.best_centralized_cost
+  best_centralized_it = state.best_centralized_it
+  best_solution_so_far = None
+  best_cost_so_far = np.inf
+  spr_obj = np.inf
+  best_it_so_far = -1
+  it = 0
+  stop_searching = False
+  n_accepted_queue = deque(maxlen=patience)
+  odev_queue = deque(maxlen=patience)
+  while not stop_searching:
+    if verbose > 0:
+      print(f"    it = {it}", file = log_stream, flush = True)
+    # compute residual computational capacity
+    s = datetime.now()
+    capacity, residual_capacity, ell = compute_residual_capacity(
+      sp_x, y, sp_r, sp_data
+    )
+    blackboard = np.maximum(0.0, capacity - sp_x)
+    e = datetime.now()
+    if verbose > 1:
+      print(
+        f"        compute_residual_capacity: DONE ",
+        f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
+        f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})",
+        file = log_stream,
+        flush = True
+      )
+    total_runtime += (e - s).total_seconds()
+    # buyers define their bids
+    s = datetime.now()
+    bids, memory_bids, n_auctions = define_bids(
+      omega,
+      blackboard,
+      p,
+      sp_data,
+      neighborhood,
+      sp_rho,
+      auction_options,
+      latency,
+      fairness,
+      force_memory_bids = (
+        (sp_rho > 0).any() and
+          len(n_accepted_queue) >= n_accepted_queue.maxlen and
+            all(x == n_accepted_queue[0] for x in n_accepted_queue)
+      )
+    )
+    e = datetime.now()
+    rt = (e - s).total_seconds()
+    if verbose > 1:
+      print(
+        f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
+        f"n_auctions = {n_auctions}; tot runtime = {rt})",
+        file = log_stream,
+        flush = True
+      )
+      if verbose > 2:
+        print(bids, file = log_stream, flush = True)
+    total_runtime += (rt/max(n_auctions, 1))
+    # sellers accept/reject bids
+    rmp_omega = np.zeros((Nn,Nf))
+    additional_replicas = np.zeros((Nn,Nf))
+    if len(bids) > 0:
+      s = datetime.now()
+      auction_y, p, additional_replicas, n_auctions = evaluate_bids(
+        bids,
+        residual_capacity,
+        data,
+        y,
+        ell,
+        p,
+        capacity,
+        u0,
+        auction_options,
+        sp_rho,
+        sp_r,
+        tentatively_start_replicas = (len(memory_bids) == 0),
+        it = it
+      )
+      e = datetime.now()
+      rt = (e - s).total_seconds()
+      if verbose > 1:
+        print(
+         f"        evaluate_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
+         f"n_auctions = {n_auctions}; tot runtime = {rt})",
+         file = log_stream,
+         flush = True
+        )
+      total_runtime += (rt/max(n_auctions, 1))
+      # update effective load, number of replicas and fairness matrix
+      y += auction_y
+      rmp_omega = compute_offloaded_demand(y)
+      fairness += (rmp_omega > 0).astype(fairness.dtype)
+      n_accepted_queue.append(rmp_omega.sum())
+      # -- solve "restricted problem"
+      bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+      if bad_nodes:
+        raise RuntimeError(
+          f"LSPr infeasible from fixed y assignments: {bad_nodes}"
+        )
+      spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
+        spr,
+        sp_data,
+        agents,
+        solver_name,
+        general_solver_options,
+        y,
+        rmp_omega,
+        parallelism,
+        sp_x
+      )
+      total_runtime += spr_runtime
+      if verbose > 1:
+        print(
+          f"        solve 'restricted problem': DONE ({spr_tc}; "
+          f"obj: {spr_obj}; runtime = {spr_runtime})",
+          file = log_stream,
+          flush = True
+        )
+      # -- update solution
+      _, _, _, _, sp_r, sp_rho = spr_sol
+      for i in range(Nn):
+        for f in range(Nf):
+          omega[i,f] = sp_omega[i,f] - rmp_omega[i,f]
+          if abs(omega[i,f]) < tolerance:
+            omega[i,f] = 0.0
+      if verbose > 1:
+        print(
+          f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
+          f"omega = {omega.tolist()}; x = {sp_x.tolist()}; "
+          f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()}; ",
+          f"y = {y.tolist()})",
+          file = log_stream,
+          flush = True
+        )
+    if len(memory_bids) > 0 and not (additional_replicas > 0).any():
+      # tentatively start additional replicas
+      s = datetime.now()
+      additional_replicas, sp_rho = start_additional_replicas(
+        memory_bids, sp_r, sp_data, sp_rho
+      )
+      sp_r += additional_replicas
+      e = datetime.now()
+      if verbose > 1:
+        print(
+          f"        additional replicas started: DONE "
+          f"(a = {additional_replicas.tolist()}; "
+          f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})",
+          file = log_stream,
+          flush = True
+        )
+      total_runtime += (e - s).total_seconds()
+    # merge solutions and compute the centralized objective value
+    csol = combine_solutions(
+      Nn, Nf, sp_data, loadt,
+      sp_x, sp_r, sp_rho,
+      None, y, None, None, None, None
+    )
+    cobj = compute_centralized_objective(
+      sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+    )
+    s = datetime.now()
+    feas = check_feasibility(
+      csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+      csol["sp"]["r"], csol["sp"]["U"], sp_data
+    )
+    e = datetime.now()
+    print(
+      f"        check_feasibility: DONE ({feas[0]}; {feas[1]}; "
+      f"runtime = {(e-s).total_seconds()})",
+      file = log_stream,
+      flush = True
+    )
+    assert feas[0],feas[1]
+    # update best solution so far
+    if spr_obj < best_cost_so_far or it == 0:
+      best_cost_so_far = spr_obj
+      best_solution_so_far = deepcopy(csol)
+      best_it_so_far = it
+      if verbose > 0:
+        print(
+          f"        best solution updated; obj = {spr_obj}",
+          file = log_stream,
+          flush = True
+        )
+    prev_cobj = best_centralized_cost
+    if cobj > best_centralized_cost:
+      best_centralized_cost = cobj
+      best_centralized_solution = deepcopy(csol)
+      best_centralized_it = state.iterations + it
+      if verbose > 0:
+        print(
+          f"        best centralized solution updated; obj = {cobj}",
+          file = log_stream,
+          flush = True
+        )
+    odev_queue.append(
+      relative_objective_gap(prev_cobj, best_centralized_cost)
+    )
+    # check termination criteria
+    s = datetime.now()
+    stop_searching, why_stop_searching = check_stopping_criteria(
+      it,
+      max_iterations,
+      blackboard,
+      omega,
+      rmp_omega,
+      odev_queue,
+      additional_replicas,
+      bids,
+      memory_bids,
+      tolerance,
+      total_runtime,
+      time_limit
+    )
+    e = datetime.now()
+    if verbose > 1:
+      print(
+        f"        check_stopping_criteria: DONE "
+        f"(runtime = {(e - s).total_seconds()}; "
+        f"total runtime = {total_runtime}; "
+        f"wallclock: {(datetime.now() - ss).total_seconds()}) "
+        f"--> stop? {stop_searching} ({why_stop_searching})",
+        file = log_stream,
+        flush = True
+      )
+    if not stop_searching:
+      it += 1
+
+  state.y, state.omega, state.p, state.fairness = y, omega, p, fairness
+  state.sp_r, state.sp_rho = sp_r, sp_rho
+  state.total_runtime = total_runtime
+  state.best_centralized_solution = best_centralized_solution
+  state.best_centralized_cost = best_centralized_cost
+  state.best_centralized_it = best_centralized_it
+  state.best_solution_so_far = best_solution_so_far
+  state.best_it_so_far = best_it_so_far
+  state.it = it
+  state.iterations += it + 1
+  state.reason = why_stop_searching
+  state.objective_deviation = odev_queue[-1]
+  return state
+
+
+
 def run(
     config: dict, 
     parallelism: int,
@@ -664,7 +966,6 @@ def run(
           sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r[n,f])
     # -- solve subproblem
     sp = LSP() if opt_solution is None else LSP_fixedr()
-    spr = LSPr_x()
     s = datetime.now()
     (
       sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
@@ -685,277 +986,39 @@ def run(
         flush = True
       )
     total_runtime += sp_runtime["tot"]
-    # define target operating point and initial prices
-    u0 = np.ones((Nn,Nf)) * 0.8
-    p = np.zeros((Nn,Nf))
-    # loop over iterations
-    it = 0
-    stop_searching = False
-    best_solution_so_far = None
-    best_centralized_solution = None
-    best_cost_so_far = np.inf
-    spr_obj = np.inf
-    best_centralized_cost = -np.inf
-    best_it_so_far = -1
-    best_centralized_it = -1
-    y = np.zeros((Nn,Nn,Nf))
-    omega = deepcopy(sp_omega)
-    fairness = np.zeros((Nn,Nf))
-    n_accepted_queue = deque(maxlen = patience)
-    odev_queue = deque(maxlen = patience)
-    while not stop_searching:
-      if verbose > 0:
-        print(f"    it = {it}", file = log_stream, flush = True)
-      # compute residual computational capacity
-      s = datetime.now()
-      capacity, residual_capacity, ell = compute_residual_capacity(
-        sp_x, y, sp_r, sp_data
+    state = MadeaState(
+      y=np.zeros((Nn, Nn, Nf)), omega=deepcopy(sp_omega),
+      p=np.zeros((Nn, Nf)), fairness=np.zeros((Nn, Nf)),
+      sp_r=sp_r, sp_rho=sp_rho, total_runtime=total_runtime,
+    )
+    state = run_madea_cycle(
+      state, sp_x=sp_x, sp_omega=sp_omega, sp_data=sp_data, data=data,
+      agents=agents, loadt=loadt, neighborhood=neighborhood, latency=latency,
+      config=config, auction_options=auction_options, parallelism=parallelism,
+      log_stream=log_stream, started_at=ss,
+    )
+    total_runtime = state.total_runtime
+    sp_complete_solution, _, objf = decode_solutions(
+      sp_data, state.best_solution_so_far, sp_complete_solution, None,
+    )
+    spc_complete_solution, _, objc = decode_solutions(
+      sp_data, state.best_centralized_solution, spc_complete_solution, None,
+    )
+    obj_dict["LSPr_final"].append(objc)
+    tc_dict["LSPr"].append(
+      f"{state.reason} "
+      f"(it: {state.it}; obj. deviation: {state.objective_deviation}; "
+      f"best it: {state.best_it_so_far}; "
+      f"best centralized it: {state.best_centralized_it}; "
+      f"total runtime: {total_runtime})"
+    )
+    if t % checkpoint_interval == 0 or t == max_steps - 1:
+      save_checkpoint(
+        sp_complete_solution, os.path.join(solution_folder, "LSP"), t
       )
-      blackboard = np.maximum(0.0, capacity - sp_x)
-      e = datetime.now()
-      if verbose > 1:
-        print(
-          f"        compute_residual_capacity: DONE ",
-          f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
-          f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})", 
-          file = log_stream, 
-          flush = True
-        )
-      total_runtime += (e - s).total_seconds()
-      # buyers define their bids
-      s = datetime.now()
-      bids, memory_bids, n_auctions = define_bids(
-        omega, 
-        blackboard, 
-        p, 
-        sp_data, 
-        neighborhood, 
-        sp_rho,
-        auction_options, 
-        latency,
-        fairness,
-        force_memory_bids = (
-          (sp_rho > 0).any() and
-            len(n_accepted_queue) >= n_accepted_queue.maxlen and 
-              all(x == n_accepted_queue[0] for x in n_accepted_queue)
-        )
+      save_checkpoint(
+        spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
       )
-      e = datetime.now()
-      rt = (e - s).total_seconds()
-      if verbose > 1:
-        print(
-          f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
-          f"n_auctions = {n_auctions}; tot runtime = {rt})",
-          file = log_stream,
-          flush = True
-        )
-        if verbose > 2:
-          print(bids, file = log_stream, flush = True)
-      total_runtime += (rt/max(n_auctions, 1))
-      # sellers accept/reject bids
-      rmp_omega = np.zeros((Nn,Nf))
-      additional_replicas = np.zeros((Nn,Nf))
-      if len(bids) > 0:
-        s = datetime.now()
-        auction_y, p, additional_replicas, n_auctions = evaluate_bids(
-          bids, 
-          residual_capacity, 
-          data, 
-          y,
-          ell, 
-          p, 
-          capacity, 
-          u0, 
-          auction_options,
-          sp_rho,
-          sp_r,
-          tentatively_start_replicas = (len(memory_bids) == 0),
-          it = it
-        )
-        e = datetime.now()
-        rt = (e - s).total_seconds()
-        if verbose > 1:
-          print(
-           f"        evaluate_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
-           f"n_auctions = {n_auctions}; tot runtime = {rt})",
-           file = log_stream,
-           flush = True
-          )
-        total_runtime += (rt/max(n_auctions, 1))
-        # update effective load, number of replicas and fairness matrix
-        y += auction_y
-        for n in range(Nn):
-          for f in range(Nf):
-            rmp_omega[n,f] = y[n,:,f].sum()
-            if rmp_omega[n,f] > 0:
-              fairness[n,f] += 1
-        n_accepted_queue.append(rmp_omega.sum())
-        # -- solve "restricted problem"
-        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
-        if bad_nodes:
-          raise RuntimeError(
-            f"LSPr infeasible from fixed y assignments: {bad_nodes}"
-          )
-        spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
-          spr, 
-          sp_data, 
-          agents, 
-          solver_name, 
-          general_solver_options, 
-          y, 
-          rmp_omega,
-          parallelism,
-          sp_x
-        )
-        total_runtime += spr_runtime
-        if verbose > 1:
-          print(
-            f"        solve 'restricted problem': DONE ({spr_tc}; "
-            f"obj: {spr_obj}; runtime = {spr_runtime})", 
-            file = log_stream, 
-            flush = True
-          )
-        # -- update solution
-        _, _, _, _, sp_r, sp_rho = spr_sol
-        for i in range(Nn):
-          for f in range(Nf):
-            omega[i,f] = sp_omega[i,f] - rmp_omega[i,f]
-            if abs(omega[i,f]) < tolerance:
-              omega[i,f] = 0.0
-        if verbose > 1:
-          print(
-            f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
-            f"omega = {omega.tolist()}; x = {sp_x.tolist()}; "
-            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()}; ", 
-            f"y = {y.tolist()})", 
-            file = log_stream, 
-            flush = True
-          )
-      if len(memory_bids) > 0 and not (additional_replicas > 0).any():
-        # tentatively start additional replicas
-        s = datetime.now()
-        additional_replicas, sp_rho = start_additional_replicas(
-          memory_bids, sp_r, sp_data, sp_rho
-        )
-        sp_r += additional_replicas
-        e = datetime.now()
-        if verbose > 1:
-          print(
-            f"        additional replicas started: DONE "
-            f"(a = {additional_replicas.tolist()}; "
-            f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})", 
-            file = log_stream, 
-            flush = True
-          )
-        total_runtime += (e - s).total_seconds()
-      # merge solutions and compute the centralized objective value
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, 
-        sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None
-      )
-      cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-      )
-      s = datetime.now()
-      feas = check_feasibility(
-        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-        csol["sp"]["r"], csol["sp"]["U"], sp_data
-      )
-      e = datetime.now()
-      print(
-        f"        check_feasibility: DONE ({feas[0]}; {feas[1]}; "
-        f"runtime = {(e-s).total_seconds()})", 
-        file = log_stream, 
-        flush = True
-      )
-      assert feas[0],feas[1]
-      # update best solution so far
-      if spr_obj < best_cost_so_far or it == 0:
-        best_cost_so_far = spr_obj
-        best_solution_so_far = deepcopy(csol)
-        best_it_so_far = it
-        if verbose > 0:
-          print(
-            f"        best solution updated; obj = {spr_obj}",
-            file = log_stream,
-            flush = True
-          )
-      prev_cobj = best_centralized_cost
-      if cobj > best_centralized_cost:
-        best_centralized_cost = cobj
-        best_centralized_solution = deepcopy(csol)
-        best_centralized_it = it
-        if verbose > 0:
-          print(
-            f"        best centralized solution updated; obj = {cobj}",
-            file = log_stream,
-            flush = True
-          )
-      odev_queue.append(
-        relative_objective_gap(prev_cobj, best_centralized_cost)
-      )
-      # check termination criteria
-      s = datetime.now()
-      stop_searching, why_stop_searching = check_stopping_criteria(
-        it,
-        max_iterations,
-        blackboard,
-        omega,
-        rmp_omega,
-        odev_queue,
-        additional_replicas,
-        bids,
-        memory_bids,
-        tolerance,
-        total_runtime,
-        time_limit
-      )
-      e = datetime.now()
-      if verbose > 1:
-        print(
-          f"        check_stopping_criteria: DONE "
-          f"(runtime = {(e - s).total_seconds()}; "
-          f"total runtime = {total_runtime}; "
-          f"wallclock: {(datetime.now() - ss).total_seconds()}) "
-          f"--> stop? {stop_searching} ({why_stop_searching})", 
-          file = log_stream, 
-          flush = True
-        )
-      # -- move to next iteration, or...
-      if not stop_searching:
-        it += 1
-      # -- ...save solution
-      else:
-        # save solutions
-        sp_complete_solution, _, objf = decode_solutions(
-          sp_data, 
-          best_solution_so_far, 
-          sp_complete_solution, 
-          None
-        )
-        spc_complete_solution, _, objc = decode_solutions(
-          sp_data, 
-          best_centralized_solution, 
-          spc_complete_solution, 
-          None
-        )
-        obj_dict["LSPr_final"].append(objc)
-        tc_dict["LSPr"].append(
-          f"{why_stop_searching} "
-          f"(it: {it}; obj. deviation: {odev_queue[-1]}; "
-          f"best it: {best_it_so_far}; "
-          f"best centralized it: {best_centralized_it}; "
-          f"total runtime: {total_runtime})"
-        )
-        # save checkpoint
-        if t % checkpoint_interval == 0 or t == max_steps - 1:
-          save_checkpoint(
-            sp_complete_solution, os.path.join(solution_folder, "LSP"), t
-          )
-          save_checkpoint(
-            spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
-          )
     ee = datetime.now()
     if verbose > 0:
       print(

@@ -1,0 +1,51 @@
+{
+  "base_solution_folder": "solutions/prova",
+  "verbose": 2,
+  "seed": 4850,
+  "max_steps": 100,
+  "min_run_time": 0,
+  "max_run_time": 100,
+  "run_time_step": 10,
+  "solver_name": "gurobi",
+  "solver_options": {
+    "general": {"TimeLimit": 120, "MIPGap": 0.00001},
+    "auction": {
+      "eta": 0.0, "epsilon": 0.001, "zeta": 0.01,
+      "latency_weight": 0.0, "fairness_weight": 0.0, "unit_bids": true
+    },
+    "coordinator": {"sorting_rule": "product"},
+    "update_neighborhood": false,
+    "start_from_last_pi": false,
+    "use_detailed_pi": false
+  },
+  "checkpoint_interval": 10,
+  "max_iterations": 100,
+  "plot_interval": 100,
+  "patience": 10,
+  "sw_patience": 200,
+  "limits": {
+    "instance_type": "random",
+    "Nn": {"min": 10, "max": 10},
+    "Nf": {"min": 5, "max": 5},
+    "demand": {
+      "min": 0.2, "max": 0.5,
+      "speedup_factors": {"4096": 0.5, "8192": 1.0, "16384": 1.2, "24576": 1.4, "32768": 1.4}
+    },
+    "memory_requirement": {"values_from": [128, 256, 512, 1024]},
+    "memory_capacity": {
+      "repeated_values": [[0.125, 4096], [0.125, 8192], [0.375, 16384], [0.25, 24576], [0.125, 32768]],
+      "min": 4096, "max": 4096
+    },
+    "neighborhood": {"k": 3},
+    "max_utilization": {"min": 0.8, "max": 0.8},
+    "load": {"trace_type": "fixed_sum", "values": ["auto"], "edge_exposed_fraction": 1.0},
+    "weights": {
+      "alpha": {"min": 1, "max": 10},
+      "beta_multiplier": {"min": 0.1, "max": 1.5},
+      "gamma": {"min": 1, "max": 1},
+      "delta_multiplier": {"min": 1.0, "max": 1.0},
+      "edge_network_latency": {"min": 0.005, "max": 1.0},
+      "edge_bandwidth": {"min": 100, "max": 100}
+    }
+  }
+}

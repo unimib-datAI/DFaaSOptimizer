@@ -1,5 +1,6 @@
 # Configuration files
 config_files/*
+!config_files/hierarchical_madea_cycles.json
 
 # Data and solution files
 solutions/*
