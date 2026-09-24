@@ -52,6 +52,22 @@ def run(
     log_on_file: bool = False,
     disable_plotting: bool = False,
   ) -> str:
+  return _run(
+    config, parallelism, log_on_file, disable_plotting,
+    engine_class=HierarchicalAuctionEngine, result_name="HierarchicalMADeACycles",
+  )
+
+
+def _run(
+    config: dict[str, Any],
+    parallelism: int,
+    log_on_file: bool,
+    disable_plotting: bool,
+    *,
+    engine_class: type[HierarchicalAuctionEngine],
+    result_name: str,
+  ) -> str:
+  """Shared cycle orchestration; variants select an engine and output column."""
   del disable_plotting
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
@@ -121,7 +137,7 @@ def run(
       p=np.zeros((Nn, Nf)), fairness=np.zeros((Nn, Nf)),
       sp_r=sp_r, sp_rho=sp_rho, total_runtime=total_runtime,
     )
-    engine = HierarchicalAuctionEngine(
+    engine = engine_class(
       neighborhood=neighborhood,
       num_functions=Nf,
       service_quantum=np.ones(Nf),
@@ -238,7 +254,7 @@ def run(
   save_solution(
     solution, offloaded, complete_solution, detailed, "LSPc", solution_folder,
   )
-  pd.DataFrame({"HierarchicalMADeACycles": objectives}).to_csv(
+  pd.DataFrame({result_name: objectives}).to_csv(
     os.path.join(solution_folder, "obj.csv"), index=False,
   )
   pd.DataFrame(termination_conditions).to_csv(

@@ -2,15 +2,21 @@ import numpy as np
 import pytest
 
 from hierarchical_auction.engine import HierarchicalAuctionEngine
+from hierarchical_auction.iterative_engine import IterativeHierarchicalAuctionEngine
 
 
-def test_level2_rejects_non_neighbor_allocation():
+@pytest.fixture(params=[HierarchicalAuctionEngine, IterativeHierarchicalAuctionEngine])
+def engine_class(request):
+  return request.param
+
+
+def test_level2_rejects_non_neighbor_allocation(engine_class):
   neighborhood = np.array([
     [0, 1, 0],
     [1, 0, 1],
     [0, 1, 0],
   ], dtype=float)
-  engine = HierarchicalAuctionEngine(
+  engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
     service_quantum=np.array([1.0]),
@@ -43,9 +49,9 @@ def test_level2_rejects_non_neighbor_allocation():
   assert result.accepted_allocations == []
 
 
-def test_service_quantum_converts_tokens_to_capacity_quantity():
+def test_service_quantum_converts_tokens_to_capacity_quantity(engine_class):
   neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
-  engine = HierarchicalAuctionEngine(
+  engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
     service_quantum=np.array([2.0]),
@@ -72,13 +78,13 @@ def test_service_quantum_converts_tokens_to_capacity_quantity():
   assert sum(a.tokens for a in result.accepted_allocations) == 2
 
 
-def test_higher_level_auction_never_allocates_to_same_node():
+def test_higher_level_auction_never_allocates_to_same_node(engine_class):
   neighborhood = np.array([
     [0, 1, 0],
     [1, 0, 1],
     [0, 1, 0],
   ], dtype=float)
-  engine = HierarchicalAuctionEngine(
+  engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
     service_quantum=np.array([1.0]),
@@ -105,9 +111,9 @@ def test_higher_level_auction_never_allocates_to_same_node():
   assert result.accepted_allocations == []
 
 
-def test_higher_level_auction_rejects_buyer_that_already_receives():
+def test_higher_level_auction_rejects_buyer_that_already_receives(engine_class):
   neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
-  engine = HierarchicalAuctionEngine(
+  engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
     service_quantum=np.array([1.0]),
@@ -139,9 +145,9 @@ def test_higher_level_auction_rejects_buyer_that_already_receives():
   assert result.accepted_allocations == []
 
 
-def test_higher_level_auction_rejects_seller_that_already_sends():
+def test_higher_level_auction_rejects_seller_that_already_sends(engine_class):
   neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
-  engine = HierarchicalAuctionEngine(
+  engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
     service_quantum=np.array([1.0]),
@@ -173,9 +179,9 @@ def test_higher_level_auction_rejects_seller_that_already_sends():
   assert result.accepted_allocations == []
 
 
-def test_higher_level_auction_prefers_best_effective_seller():
+def test_higher_level_auction_prefers_best_effective_seller(engine_class):
   neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
-  engine = HierarchicalAuctionEngine(
+  engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
     service_quantum=np.array([1.0]),
@@ -207,13 +213,13 @@ def test_higher_level_auction_prefers_best_effective_seller():
   assert result.omega[0, 0] == 0.0
 
 
-def test_higher_level_auction_rejects_non_positive_effective_bid():
+def test_higher_level_auction_rejects_non_positive_effective_bid(engine_class):
   neighborhood = np.array([
     [0, 1, 0],
     [1, 0, 1],
     [0, 1, 0],
   ], dtype=float)
-  engine = HierarchicalAuctionEngine(
+  engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
     service_quantum=np.array([1.0]),
@@ -244,7 +250,7 @@ def test_higher_level_auction_rejects_non_positive_effective_bid():
   assert result.omega[0, 0] == 2.0
 
 
-def test_price_computed_correctly_in_zero_price_two_function_network():
+def test_price_computed_correctly_in_zero_price_two_function_network(engine_class):
   """Regression: price computation must not rely on zero sentinel.
 
   With eta=0 and zero node prices, structure_price = 0 legitimately.
@@ -252,7 +258,7 @@ def test_price_computed_correctly_in_zero_price_two_function_network():
   must still happen for both functions.
   """
   neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
-  engine = HierarchicalAuctionEngine(
+  engine = engine_class(
     neighborhood=neighborhood,
     num_functions=2,
     service_quantum=np.array([1.0, 1.0]),
@@ -280,14 +286,14 @@ def test_price_computed_correctly_in_zero_price_two_function_network():
   assert result.omega[0, 1] == 0.0
 
 
-def test_engine_stops_early_when_no_capacity_available():
+def test_engine_stops_early_when_no_capacity_available(engine_class):
     """No seller has capacity — engine must return immediately with empty allocations."""
     neighborhood = np.array([
         [0, 1, 0],
         [1, 0, 1],
         [0, 1, 0],
     ], dtype=float)
-    engine = HierarchicalAuctionEngine(
+    engine = engine_class(
         neighborhood=neighborhood,
         num_functions=1,
         service_quantum=np.array([1.0]),
@@ -314,7 +320,7 @@ def test_engine_stops_early_when_no_capacity_available():
     assert result.y[0, :, 0].sum() == 0.0
 
 
-def test_engine_multi_level_cascade_terminates_cleanly():
+def test_engine_multi_level_cascade_terminates_cleanly(engine_class):
     """Engine must iterate levels without error and not over-allocate.
 
     Topology: linear chain 0-1-2-3-4.
@@ -329,7 +335,7 @@ def test_engine_multi_level_cascade_terminates_cleanly():
         neighborhood[i, i + 1] = 1.0
         neighborhood[i + 1, i] = 1.0
 
-    engine = HierarchicalAuctionEngine(
+    engine = engine_class(
         neighborhood=neighborhood,
         num_functions=1,
         service_quantum=np.array([1.0]),

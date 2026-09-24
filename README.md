@@ -162,13 +162,15 @@ options:
 
 ### Hierarchical MADEA variants
 
-Two separate algorithms are available:
+Three separate algorithms are available:
 
 - `hierarchical-madea` retains the existing interleaved auction implementation.
 - `hierarchical-madea-cycles` completes the production MADEA loop before invoking
   higher-level auctions. If the actual stopping reason is `all load assigned`,
   it terminates immediately. Other reasons invoke the hierarchy, followed by a
   new complete MADEA cycle.
+- `hierarchical-madea-level-cycles` uses the same complete MADEA phases, with
+  repeated auctions inside each hierarchy level before advancing to the next.
 
 After a hierarchy → MADEA pass, the cycle variant also stops if neither total
 assigned load nor best centralized welfare improves beyond `tolerance`. This
@@ -192,7 +194,31 @@ uv run --locked python run.py -c config_files/hierarchical_madea_cycles.json \
 ```
 
 The variants export distinct objective columns: `HierarchicalMADeA` and
-`HierarchicalMADeACycles`.
+`HierarchicalMADeACycles`. The third variant exports `HierarchicalMADeALevelCycles`.
+
+For the third variant, use `--methods hierarchical-madea-level-cycles` or:
+
+```sh
+uv run --locked python -m hierarchical_auction.madea_level_cycles_runner \
+  -c config_files/hierarchical_madea_cycles.json -j 0 --disable_plotting
+```
+
+Its `IterativeHierarchicalAuctionEngine` separates level progression (levels 2
+through `max_hierarchy_depth`, preserving existing numbering) from repeated
+auctions at that level. It reuses the original bid generation, conflict resolution,
+capacity commits and flow mapping. A level completes when an iteration accepts
+no allocations; the engine can then try the next level, whose structures and
+prices may differ. If residual demand is exhausted, the hierarchy finishes.
+No fixed minimum number of iterations is imposed on an already completed level.
+
+Structures remain the same objects within a level. Flows, residual demand and
+committed capacity persist across iterations and levels; demand aggregates,
+indicative token counts and structure prices are refreshed from that state.
+Pending offers belong to one auction round and are discarded before rebidding;
+node prices and fairness retain the original engine's read-only semantics.
+Each productive iteration spends at least one indivisible token, so the finite
+initial token budget bounds repetition without an extra convergence threshold.
+The external no-progress stopping rule above applies to both cycle variants.
 
 ### Comparing approaches on planar graphs
 

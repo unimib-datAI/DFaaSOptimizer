@@ -9,13 +9,20 @@ import pytest
 
 import run_faasmadea as madea
 from hierarchical_auction import madea_cycles_runner as madea_runner
+from hierarchical_auction import madea_level_cycles_runner
 from hierarchical_auction.engine import HierarchicalAuctionEngine, LevelResult
 from hierarchical_auction.types import AcceptedAllocation
 from test_review_distributed_regressions import _materialized_config, _two_node_data
 
 
-@pytest.fixture
-def cycle_run(tmp_path, monkeypatch):
+@pytest.fixture(params=["cycles", "level-cycles"])
+def cycle_run(tmp_path, monkeypatch, request):
+  runner = madea_runner
+  engine_class = HierarchicalAuctionEngine
+  if request.param == "level-cycles":
+    runner = madea_level_cycles_runner
+    from hierarchical_auction.iterative_engine import IterativeHierarchicalAuctionEngine
+    engine_class = IterativeHierarchicalAuctionEngine
   data = _two_node_data()
   data[None].update({
     "incoming_load": {(1, 1): 100, (2, 1): 1},
@@ -78,8 +85,8 @@ def cycle_run(tmp_path, monkeypatch):
       return LevelResult(y, omega, allocations)
 
     monkeypatch.setattr(madea, "check_stopping_criteria", check)
-    monkeypatch.setattr(HierarchicalAuctionEngine, "run_higher_levels", higher)
-    folder = madea_runner.run(config, parallelism=0, disable_plotting=True)
+    monkeypatch.setattr(engine_class, "run_higher_levels", higher)
+    folder = runner.run(config, parallelism=0, disable_plotting=True)
     return events, folder
 
   return run
@@ -145,17 +152,20 @@ def test_real_no_progress_runs_one_followup_cycle(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("resume", [False, True])
-def test_both_algorithms_are_selectable_and_resume_independently(tmp_path, monkeypatch, resume):
+def test_three_algorithms_are_selectable_and_resume_independently(tmp_path, monkeypatch, resume):
   import json
   import run
   from hierarchical_auction import madea_runner as original
+  from hierarchical_auction import madea_level_cycles_runner as level_cycles
 
   monkeypatch.setattr("sys.argv", [
     "run.py", "--methods", "hierarchical-madea", "hierarchical-madea-cycles",
+    "hierarchical-madea-level-cycles",
   ])
   methods = run.parse_arguments().methods
   assert run.run_hierarchical_madea is original.run
   assert run.run_hierarchical_madea_cycles is madea_runner.run
+  assert run.run_hierarchical_madea_level_cycles is level_cycles.run
   assert run.METHOD_RESULT_MODELS["hierarchical-madea-cycles"] == (
     "LSPc", "HierarchicalMADeACycles",
   )
@@ -173,6 +183,11 @@ def test_both_algorithms_are_selectable_and_resume_independently(tmp_path, monke
     calls.append("cycles")
     return "cycles-result"
 
+  def levels(*args, **kwargs):
+    calls.append("levels")
+    return "levels-result"
+
+  monkeypatch.setattr(run, "run_hierarchical_madea_level_cycles", levels)
   monkeypatch.setattr(run, "run_hierarchical_madea", old)
   monkeypatch.setattr(run, "run_hierarchical_madea_cycles", new)
   monkeypatch.setattr(run, "results_postprocessing", lambda *a, **kw: None)
@@ -182,10 +197,11 @@ def test_both_algorithms_are_selectable_and_resume_independently(tmp_path, monke
     reference_method="hierarchical-madea", fix_r=False, sp_parallelism=0,
     enable_plotting=False, loop_over="Nn",
   )
-  assert calls == (["cycles"] if resume else ["old", "cycles"])
+  assert calls == (["cycles", "levels"] if resume else ["old", "cycles", "levels"])
   results = json.loads((tmp_path / "experiments.json").read_text())
   assert results["hierarchical-madea"] == ["old-result"]
   assert results["hierarchical-madea-cycles"] == ["cycles-result"]
+  assert results["hierarchical-madea-level-cycles"] == ["levels-result"]
 
 
 def test_next_cycle_preserves_hierarchy_state_and_resets_iteration_history(cycle_run, monkeypatch):
@@ -302,6 +318,7 @@ def test_rerouting_without_served_load_or_welfare_gain_stops(tmp_path, monkeypat
 
 @pytest.mark.parametrize("runner,column", [
   (madea, "FaaS-MADeA"), (madea_runner, "HierarchicalMADeACycles"),
+  (madea_level_cycles_runner, "HierarchicalMADeALevelCycles"),
 ])
 def test_supplied_configuration_preserves_first_snapshot_welfare(tmp_path, runner, column):
   """Use the user's seed/topology/load, with a pre-refactor numerical baseline."""

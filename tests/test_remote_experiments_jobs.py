@@ -18,7 +18,7 @@ def _experiment(algorithm="centralized"):
 def test_all_algorithms_are_mapped():
   expected = {
     "centralized", "faas-macro", "faas-macro-v0", "faas-madea", "hierarchical",
-    "hierarchical-madea", "hierarchical-madea-cycles",
+    "hierarchical-madea", "hierarchical-madea-cycles", "hierarchical-madea-level-cycles",
     "faas-diffuse", "faas-powd", "faas-br-s", "faas-br-r", "faas-br-o",
     "faas-pg-s", "faas-pg-r", "faas-gcaa", "plasma",
   }
@@ -111,5 +111,13 @@ def test_experiment_to_job_runs_madea_cycles_as_distinct_module(tmp_path):
   job = experiment_to_job(_experiment("hierarchical-madea-cycles"), tmp_path)
   assert job.command == (
     "python", "-m", "hierarchical_auction.madea_cycles_runner", "-c", "config.json",
+    "--disable_plotting",
+  )
+
+
+def test_experiment_to_job_runs_madea_level_cycles_as_distinct_module(tmp_path):
+  job = experiment_to_job(_experiment("hierarchical-madea-level-cycles"), tmp_path)
+  assert job.command == (
+    "python", "-m", "hierarchical_auction.madea_level_cycles_runner", "-c", "config.json",
     "--disable_plotting",
   )

@@ -19,6 +19,7 @@ SCRIPT_BY_ALGORITHM: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
   "hierarchical":  (("-m", "hierarchical_auction.runner"), ()),
   "hierarchical-madea": (("-m", "hierarchical_auction.madea_runner"), ()),
   "hierarchical-madea-cycles": (("-m", "hierarchical_auction.madea_cycles_runner"), ()),
+  "hierarchical-madea-level-cycles": (("-m", "hierarchical_auction.madea_level_cycles_runner"), ()),
   "faas-diffuse":  (("decentralized_diffusion.py",), ()),
   "faas-powd":     (("decentralized_powerd.py",), ()),
   "faas-br-s":     (("decentralized_bestresponse.py",), ("--variant", "s")),

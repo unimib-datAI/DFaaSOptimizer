@@ -122,47 +122,14 @@ class HierarchicalAuctionEngine:
       if not next_structures:
         break
 
-      self._aggregate_residual_demand(next_structures, current_omega)
-      self._populate_indicative_tokens(next_structures, token_manager)
-
-      eta = self._get_eta(current_level)
-      lat_w = self._options.get("latency_weight", 0.0)
-      fair_w = self._options.get("fairness_weight", 0.0)
-      eps = self._options.get("epsilon", 1e-4)
-
-      requests = self._generate_level_requests(
-        buyer_structures=next_structures,
-        all_structures=next_structures,
-        current_y=current_y,
-        node_prices=node_prices,
-        token_manager=token_manager,
-        latency=latency,
-        fairness=fairness,
-        omega=current_omega,
-        eta=eta,
-        epsilon=eps,
-        latency_weight=lat_w,
-        fairness_weight=fair_w,
-        level=current_level,
+      result = self._run_level_iteration(
+        next_structures, current_level, token_manager,
+        current_y, current_omega, node_prices, latency, fairness,
       )
-
-      level_accepted: list[AcceptedAllocation] = []
-      # Buyer demand is shared across overlapping structures and sellers.
-      remaining_demand = current_omega.copy()
-      for k in range(self._num_nodes):
-        for f in range(self._num_functions):
-          accepted = token_manager.resolve_node_function(k, f, remaining_demand)
-          if accepted:
-            token_manager.commit(accepted)
-            level_accepted.extend(accepted)
-
-      if not level_accepted:
+      if not result.accepted_allocations:
         break
-
-      all_accepted.extend(level_accepted)
-      current_y, current_omega = apply_allocations(
-        current_y, current_omega, level_accepted,
-      )
+      all_accepted.extend(result.accepted_allocations)
+      current_y, current_omega = result.y, result.omega
       level_structures = next_structures
       current_level += 1
 
@@ -178,6 +145,59 @@ class HierarchicalAuctionEngine:
   # ------------------------------------------------------------------
   # Internal helpers
   # ------------------------------------------------------------------
+
+  def _run_level_iteration(
+    self,
+    structures: dict[int, Structure],
+    level: int,
+    token_manager: CapacityTokenManager,
+    current_y: FloatArray,
+    current_omega: FloatArray,
+    node_prices: FloatArray,
+    latency: FloatArray,
+    fairness: FloatArray,
+  ) -> LevelResult:
+    """One existing auction round, without advancing or rebuilding structures."""
+    self._aggregate_residual_demand(structures, current_omega)
+    self._populate_indicative_tokens(structures, token_manager)
+
+    eta = self._get_eta(level)
+    lat_w = self._options.get("latency_weight", 0.0)
+    fair_w = self._options.get("fairness_weight", 0.0)
+    eps = self._options.get("epsilon", 1e-4)
+
+    self._generate_level_requests(
+      buyer_structures=structures,
+      all_structures=structures,
+      current_y=current_y,
+      node_prices=node_prices,
+      token_manager=token_manager,
+      latency=latency,
+      fairness=fairness,
+      omega=current_omega,
+      eta=eta,
+      epsilon=eps,
+      latency_weight=lat_w,
+      fairness_weight=fair_w,
+      level=level,
+    )
+
+    level_accepted: list[AcceptedAllocation] = []
+    # Buyer demand is shared across overlapping structures and sellers.
+    remaining_demand = current_omega.copy()
+    for k in range(self._num_nodes):
+      for f in range(self._num_functions):
+        accepted = token_manager.resolve_node_function(k, f, remaining_demand)
+        if accepted:
+          token_manager.commit(accepted)
+          level_accepted.extend(accepted)
+
+    if not level_accepted:
+      return LevelResult(current_y, current_omega)
+    current_y, current_omega = apply_allocations(
+      current_y, current_omega, level_accepted,
+    )
+    return LevelResult(current_y, current_omega, level_accepted)
 
   def _aggregate_residual_demand(
     self,

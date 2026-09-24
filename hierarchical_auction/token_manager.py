@@ -116,6 +116,12 @@ class CapacityTokenManager:
       )
       self._pending[node][function].clear()
 
+  def clear_pending_requests(self) -> None:
+    """Discard this round's offers while retaining all committed capacity."""
+    for node_requests in self._pending:
+      for function_requests in node_requests:
+        function_requests.clear()
+
   def check_global_feasibility(self) -> bool:
     """Verify Eq.26: committed <= initial tokens for every (k,f)."""
     committed = self._initial_tokens - self._current_tokens

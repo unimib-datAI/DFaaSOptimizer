@@ -6,6 +6,7 @@ from run_faasmadea import run as run_auction
 from hierarchical_auction.runner import run as run_hierarchical
 from hierarchical_auction.madea_runner import run as run_hierarchical_madea
 from hierarchical_auction.madea_cycles_runner import run as run_hierarchical_madea_cycles
+from hierarchical_auction.madea_level_cycles_runner import run as run_hierarchical_madea_level_cycles
 from decentralized_diffusion import run as run_diffusion
 from decentralized_powerd import run as run_powerd
 from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
@@ -39,6 +40,7 @@ METHOD_RESULT_MODELS = {
   "hierarchical": ("LSPc", "HierarchicalAuction"),
   "hierarchical-madea": ("LSPc", "HierarchicalMADeA"),
   "hierarchical-madea-cycles": ("LSPc", "HierarchicalMADeACycles"),
+  "hierarchical-madea-level-cycles": ("LSPc", "HierarchicalMADeALevelCycles"),
   "faas-diffuse": ("LSPc", "FaaS-MADiG"),
   "faas-powd": ("LSPc", "FaaS-MAPoD"),
   "faas-br-s": ("LSPc", "FaaS-MABR-S"),
@@ -100,6 +102,7 @@ def parse_arguments() -> argparse.Namespace:
       "hierarchical",
       "hierarchical-madea",
       "hierarchical-madea-cycles",
+      "hierarchical-madea-level-cycles",
       "faas-diffuse",
       "faas-powd",
       "faas-br-s",
@@ -969,6 +972,7 @@ def run(
     "hierarchical": [],
     "hierarchical-madea": [],
     "hierarchical-madea-cycles": [],
+    "hierarchical-madea-level-cycles": [],
     "faas-diffuse": [],
     "faas-powd": [],
     "faas-br-s": [],
@@ -996,6 +1000,7 @@ def run(
     run_h = False # -- hierarchical
     run_hm = False # -- hierarchical MADeA
     run_hmc = False # -- complete MADEA cycles followed by hierarchy
+    run_hmlc = False # -- repeated auctions at each hierarchy level
     run_d = False # -- faas-diffuse (FaaS-MADiG)
     run_p = False # -- faas-powd (FaaS-MAPoD)
     run_brs = False # -- faas-br-s (FaaS-MABR-S)
@@ -1058,6 +1063,12 @@ def run(
           solution_folders["hierarchical-madea-cycles"][experiment_idx] is None
         )):
         run_hmc = True
+      if (not generate_only and "hierarchical-madea-level-cycles" in methods) and ((
+          len(solution_folders.get("hierarchical-madea-level-cycles", [])) <= experiment_idx
+        ) or (
+          solution_folders["hierarchical-madea-level-cycles"][experiment_idx] is None
+        )):
+        run_hmlc = True
       if (not generate_only and "faas-diffuse" in methods) and ((
           len(solution_folders.get("faas-diffuse", [])) <= experiment_idx
         ) or (
@@ -1121,6 +1132,7 @@ def run(
       run_h = "hierarchical" in methods
       run_hm = "hierarchical-madea" in methods
       run_hmc = "hierarchical-madea-cycles" in methods
+      run_hmlc = "hierarchical-madea-level-cycles" in methods
       run_d = "faas-diffuse" in methods
       run_p = "faas-powd" in methods
       run_brs = "faas-br-s" in methods
@@ -1131,7 +1143,7 @@ def run(
       run_g = "faas-gcaa" in methods
       run_pl = "plasma" in methods
     # if the experiment is still to run...
-    if (run_c or run_sc or run_i or run_i_v0 or run_a or run_h or run_hm or run_hmc or \
+    if (run_c or run_sc or run_i or run_i_v0 or run_a or run_h or run_hm or run_hmc or run_hmlc or \
         run_d or run_p or run_brs or run_brr or run_bro or run_pgs or \
           run_pgr or run_g or run_pl or generate_only
       ):
@@ -1283,6 +1295,16 @@ def run(
         )
         set_solution_folder(
           solution_folders, "hierarchical-madea-cycles", experiment_idx, hmc_folder
+        )
+      if run_hmlc:
+        hmlc_folder = run_hierarchical_madea_level_cycles(
+          config,
+          sp_parallelism,
+          log_on_file = log_on_file,
+          disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "hierarchical-madea-level-cycles", experiment_idx, hmlc_folder
         )
       # -- solve diffusion (FaaS-MADiG)
       if run_d:
