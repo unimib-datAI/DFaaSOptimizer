@@ -1,6 +1,8 @@
 """The hierarchy runs only at completed MADEA cycle boundaries."""
 
 from copy import deepcopy
+from datetime import datetime
+from io import StringIO
 
 import numpy as np
 import pandas as pd
@@ -13,6 +15,72 @@ from hierarchical_auction import madea_level_cycles_runner
 from hierarchical_auction.engine import HierarchicalAuctionEngine, LevelResult
 from hierarchical_auction.types import AcceptedAllocation
 from test_review_distributed_regressions import _materialized_config, _two_node_data
+
+
+@pytest.mark.parametrize("patience", [1, 3])
+@pytest.mark.parametrize("complete_incumbent", [False, True])
+def test_resumed_cycle_attempts_memory_fallback_without_losing_incumbent(
+    patience, complete_incumbent,
+  ):
+  if not pyo.SolverFactory("glpk").available(exception_flag=False):
+    pytest.skip("GLPK needed for the resumed MADEA regression")
+  from hierarchical_auction.madea_runner import build_auction_options
+  from utils.centralized import validate_centralized_solution
+
+  nodes = range(1, 4)
+  data = {None: {
+    "Nn": {None: 3}, "Nf": {None: 1},
+    "incoming_load": {(1, 1): 2, (2, 1): 1, (3, 1): 0},
+    "neighborhood": {(i, j): int(i != j) for i in nodes for j in nodes},
+    "demand": {(i, 1): 1. for i in nodes}, "max_utilization": {1: 1.},
+    "memory_capacity": {1: 0, 2: 2, 3: 1}, "memory_requirement": {1: 1},
+    "alpha": {(i, 1): 1. for i in nodes},
+    "gamma": {(i, 1): 1. for i in nodes},
+    "delta": {(i, 1): 0. for i in nodes},
+    "beta": {(i, j, 1): 1. for i in nodes for j in nodes},
+  }}
+  # Seller 1 is full; seller 2 can start a replica, but ordinary bids keep
+  # targeting seller 1 until the accepted-load plateau forces memory bids.
+  x = np.array([[0.], [1.], [0.]])
+  y = np.zeros((3, 3, 1))
+  y[0, 1, 0] = 1
+  state = madea.MadeaState(
+    y=y, omega=np.array([[1.], [0.], [0.]]), p=np.zeros((3, 1)),
+    fairness=np.zeros((3, 1)), sp_r=np.array([[0.], [2.], [0.]]),
+    sp_rho=np.array([0., 0., 1.]), iterations=10, best_centralized_it=7,
+  )
+  incumbent_y = y.copy()
+  incumbent_rho = state.sp_rho.copy()
+  if complete_incumbent:
+    incumbent_y[0, 2, 0] = 1
+    incumbent_rho[2] = 0
+  incumbent = madea.combine_solutions(
+    3, 1, data, data[None]["incoming_load"], x, state.sp_r, incumbent_rho,
+    None, incumbent_y, None, None, None, None,
+  )
+  validate_centralized_solution(x, y, np.array([[1.], [0.], [0.]]), state.sp_r, data)
+  state.best_centralized_solution = deepcopy(incumbent)
+  state.best_centralized_cost = 2. if complete_incumbent else 1.
+  config = {"solver_name": "glpk", "max_iterations": 20, "patience": patience}
+  kwargs = dict(
+    sp_x=x, sp_omega=np.array([[2.], [0.], [0.]]), sp_data=data, data=data,
+    agents=[0, 1, 2], loadt=data[None]["incoming_load"],
+    neighborhood=np.ones((3, 3)) - np.eye(3), latency=np.zeros((3, 3)),
+    config=config, auction_options=build_auction_options(config), parallelism=0,
+    log_stream=StringIO(), started_at=datetime.now(),
+  )
+  madea.run_madea_cycle(state, **kwargs)
+  assert state.sp_r[2, 0] == 1, "Memory fallback must run before convergence"
+  assert state.sp_rho[2] == 0
+  assert state.best_centralized_cost == (2. if complete_incumbent else 1.)
+  np.testing.assert_array_equal(state.best_centralized_solution["sp"]["y"], incumbent_y)
+  assert state.best_centralized_it == 7
+
+  madea.run_madea_cycle(state, **kwargs)
+  assert state.reason == "all load assigned"
+  assert state.y.sum() == 2
+  assert state.omega.sum() == 0
+  assert state.best_centralized_cost == 2.
 
 
 @pytest.fixture(params=["cycles", "level-cycles"])

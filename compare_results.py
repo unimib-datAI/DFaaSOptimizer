@@ -50,22 +50,9 @@ def parse_arguments() -> argparse.Namespace:
   )
   parser.add_argument(
     "--models",
-    help = "List of model names",
+    help = "List of model names (single-model mode defaults to LoadManagementModel)",
     nargs = "*",
-    default = [
-      "LoadManagementModel", 
-      "Selfish-LMM", 
-      "FaaS-MACrO", 
-      "FaaS-MADeA", 
-      "HierarchicalMADeA",
-      "HierarchicalMADeACycles",
-      "HierarchicalMADeALevelCycles",
-      "FaaS-MADiG", 
-      "FaaS-MAPoD", 
-      "FaaS-MABR-S", 
-      "FaaS-MABR-R", 
-      "FaaS-MABR-O"
-    ]
+    default = None
   )
   parser.add_argument(
   "--baseline_model",
@@ -105,6 +92,21 @@ def parse_arguments() -> argparse.Namespace:
   )
   # Parse the arguments
   args: argparse.Namespace = parser.parse_known_args()[0]
+  if args.models is None:
+    args.models = ["LoadManagementModel"] if args.run == "compare_single_model" else [
+      "LoadManagementModel",
+      "Selfish-LMM",
+      "FaaS-MACrO",
+      "FaaS-MADeA",
+      "HierarchicalMADeA",
+      "HierarchicalMADeACycles",
+      "HierarchicalMADeALevelCycles",
+      "FaaS-MADiG",
+      "FaaS-MAPoD",
+      "FaaS-MABR-S",
+      "FaaS-MABR-R",
+      "FaaS-MABR-O",
+    ]
   return args
 
 

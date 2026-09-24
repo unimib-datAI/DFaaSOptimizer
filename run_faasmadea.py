@@ -639,6 +639,9 @@ def run_madea_cycle(
   best_centralized_solution = state.best_centralized_solution
   best_centralized_cost = state.best_centralized_cost
   best_centralized_it = state.best_centralized_it
+  # A new cycle needs its own convergence baseline. Reusing the incumbent
+  # can fill the plateau window before the memory-bid fallback gets a turn.
+  cycle_best_centralized_cost = -np.inf
   best_solution_so_far = None
   best_cost_so_far = np.inf
   spr_obj = np.inf
@@ -822,7 +825,8 @@ def run_madea_cycle(
           file = log_stream,
           flush = True
         )
-    prev_cobj = best_centralized_cost
+    prev_cobj = cycle_best_centralized_cost
+    cycle_best_centralized_cost = max(cycle_best_centralized_cost, cobj)
     if cobj > best_centralized_cost:
       best_centralized_cost = cobj
       best_centralized_solution = deepcopy(csol)
@@ -834,7 +838,7 @@ def run_madea_cycle(
           flush = True
         )
     odev_queue.append(
-      relative_objective_gap(prev_cobj, best_centralized_cost)
+      relative_objective_gap(prev_cobj, cycle_best_centralized_cost)
     )
     # check termination criteria
     s = datetime.now()

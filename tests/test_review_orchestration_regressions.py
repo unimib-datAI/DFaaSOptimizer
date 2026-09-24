@@ -26,6 +26,39 @@ from remote_experiments.results_reader import read_run_objective
 from remote_experiments.survivors import SurvivorSelectionError, select_survivors
 
 
+def test_single_model_default_plots_generic_result_columns(tmp_path, monkeypatch):
+  folder = tmp_path / "Nn_3"
+  inputs = folder / "postprocessing"
+  inputs.mkdir(parents=True)
+  pd.DataFrame({"obj": [1., 2.]}).to_csv(inputs / "obj.csv", index=False)
+  pd.DataFrame({"runtime": [0.1, 0.2]}).to_csv(inputs / "runtime.csv", index=False)
+  monkeypatch.setattr("sys.argv", [
+    "compare_results.py", "-i", str(folder), "--run", "compare_single_model",
+  ])
+  args = compare_results.parse_arguments()
+  output = tmp_path / "plots"
+  try:
+    compare_results.compare_single_model(
+      args.postprocessing_folders, "{}_{:d}", "Nodes", args.models, str(output),
+    )
+    assert pd.read_csv(output / "obj.csv")["LoadManagementModel"].tolist() == [1., 2.]
+    assert pd.read_csv(output / "runtime.csv")["LoadManagementModel"].tolist() == [0.1, 0.2]
+    assert list(output.glob("*.png"))
+  finally:
+    plt.close("all")
+
+
+@pytest.mark.parametrize("mode", [
+  "compare_single_model", "compare_results", "compare_across_folders",
+])
+def test_comparison_explicit_models_override_mode_default(monkeypatch, mode):
+  monkeypatch.setattr("sys.argv", [
+    "compare_results.py", "-i", "results", "--run", mode,
+    "--models", "HierarchicalMADeALevelCycles",
+  ])
+  assert compare_results.parse_arguments().models == ["HierarchicalMADeALevelCycles"]
+
+
 def _experiment(algorithm, seed=1, suite="review"):
   config = {
     "seed": seed,
