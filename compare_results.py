@@ -54,6 +54,7 @@ def parse_arguments() -> argparse.Namespace:
     nargs = "*",
     default = [
       "LoadManagementModel", 
+      "Selfish-LMM", 
       "FaaS-MACrO", 
       "FaaS-MADeA", 
       "HierarchicalMADeA", 
@@ -120,7 +121,7 @@ def get_loop_over_label(key: str) -> str:
 def get_baseline_name(key: str) -> str:
   if key == "LoadManagementModel":
     return "LMM"
-  elif key == "FaaS-MACrO(v0)":
+  elif key == "Selfish-LMM":
     return "LMM(s)"
   return key
 
@@ -260,7 +261,7 @@ def compare_results(
     runtime.to_csv(os.path.join(postprocessing_folder, "runtime.csv"))
   helper_dev_cols = {"obj": [], "runtime": [], "rej": []}
   for model in models:
-    if (
+    if "LoadManagementModel" in models and (
         model != "LoadManagementModel" and 
           "dev" in obj and f"dev_{model}" not in obj
       ):
@@ -273,7 +274,7 @@ def compare_results(
         obj[model] - obj[baseline_model]
       ) / obj[baseline_model] * 100
       helper_dev_cols["obj"].append(f"dev_{model}-vs-{baseline_model}")
-    if (
+    if "LoadManagementModel" in models and (
         model != "LoadManagementModel" and "dev" in runtime and
           f"dev_{model}" not in runtime
       ):
@@ -286,7 +287,7 @@ def compare_results(
         runtime[model] / runtime[baseline_model]
       )
       helper_dev_cols["runtime"].append(f"dev_{model}-vs-{baseline_model}")
-    if (
+    if "LoadManagementModel" in models and (
         rej is not None and model != "LoadManagementModel" and "dev" in rej and
           f"dev_{model}" not in rej
       ):
@@ -759,6 +760,7 @@ def plot_by_key(
     "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
+    "Selfish-LMM": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
     "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
     "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
@@ -822,6 +824,7 @@ def dev_barplot_by_key(
     f"-vs-{baseline_model}" if baseline_model != "LoadManagementModel" else ""
   )
   bmn = get_baseline_name(baseline_model)
+  limits = [[None,None], [None,None], [None,None]]
   for model in models:
     if model != baseline_model:
       data = pd.DataFrame({
@@ -837,6 +840,16 @@ def dev_barplot_by_key(
         fontsize = fontsize,
         rot = 0
       )
+      limits[0][0] = float(
+        data.drop(key, axis = "columns").min().min()
+      ) if limits[0][0] is None else min(
+        limits[0][0], float(data.drop(key, axis = "columns").min().min())
+      )
+      limits[0][1] = float(
+        data.drop(key, axis = "columns").max().max()
+      ) if limits[0][1] is None else max(
+        limits[0][1], float(data.drop(key, axis = "columns").max().max())
+      )
       data = pd.DataFrame({
         key: list(rgroup.groups.keys()),
         "avg": rgroup.mean()[f"dev_{model}{sfx}"].values.tolist(),
@@ -850,6 +863,16 @@ def dev_barplot_by_key(
         fontsize = fontsize,
         rot = 0,
         logy = True
+      )
+      limits[1][0] = float(
+        data.drop(key, axis = "columns").min().min()
+      ) if limits[1][0] is None else min(
+        limits[1][0], float(data.drop(key, axis = "columns").min().min())
+      )
+      limits[1][1] = float(
+        data.drop(key, axis = "columns").max().max()
+      ) if limits[1][1] is None else max(
+        limits[1][1], float(data.drop(key, axis = "columns").max().max())
       )
       if ncols > 2:
         group = rej.groupby(key)
@@ -865,6 +888,16 @@ def dev_barplot_by_key(
           grid = True,
           fontsize = fontsize,
           rot = 0
+        )
+        limits[2][0] = float(
+          data.drop(key, axis = "columns").min().min()
+        ) if limits[2][0] is None else min(
+          limits[2][0], float(data.drop(key, axis = "columns").min().min())
+        )
+        limits[2][1] = float(
+          data.drop(key, axis = "columns").max().max()
+        ) if limits[2][1] is None else max(
+          limits[2][1], float(data.drop(key, axis = "columns").max().max())
         )
       # horizontal lines (for reference)
       axs2[ridx,0].axhline(
@@ -909,6 +942,9 @@ def dev_barplot_by_key(
         )
         axs2[ridx,idx].legend(fontsize = fontsize)
       ridx += 1
+  for idx in range(nrows):
+    for cidx in range(ncols):
+      axs2[idx,cidx].set_ylim(limits[cidx][0], limits[cidx][1])
   f2.savefig(
     os.path.join(plot_folder, f"bars{sfx}.png"),
     dpi = 300,
@@ -931,6 +967,7 @@ def violinplot_by_key(
     "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
+    "Selfish-LMM": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
     "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
     "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
