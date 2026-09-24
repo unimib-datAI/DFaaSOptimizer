@@ -43,8 +43,8 @@ methods in your work, please cite:
 
 ## Installation instructions
 
-This repository is configured as an `uv` project. To create a local
-environment and install dependencies, run:
+This repository is configured as an `uv` project for Python 3.10. To create a
+local environment and install dependencies, run:
 
 ```
 uv venv --python 3.10
@@ -58,6 +58,17 @@ uv run run_centralized_model.py --help
 uv run run_faasmacro.py --help
 uv run run.py --help
 ```
+
+To run the code quality checks and test suite:
+
+```
+uv run --locked ruff check .
+uv run --locked mypy
+uv run --locked pytest -q
+```
+
+The pre-push hooks run Ruff and mypy using the versions in `uv.lock`. Install
+them with `uv run pre-commit install --hook-type pre-push`.
 
 > [!NOTE]
 > The provided code was tested under Python versions 3.10.15 and 3.12.3

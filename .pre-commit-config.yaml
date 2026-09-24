@@ -1,6 +1,16 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.11.12
+  - repo: local
     hooks:
       - id: ruff
+        name: ruff
+        entry: uv run --locked ruff check
+        language: system
+        types: [python]
+        stages: [pre-push]
+      - id: mypy
+        name: mypy
+        entry: uv run --locked mypy
+        language: system
+        types: [python]
+        pass_filenames: false
         stages: [pre-push]

@@ -17,7 +17,7 @@ pyparsing==3.2.3
 python-dateutil==2.9.0.post0
 pytz==2025.2
 ray[rllib]==2.40.0
-scipy==1.15.3
+scipy==1.14.1
 seaborn==0.13.2
 six==1.17.0
 torch==2.11.0

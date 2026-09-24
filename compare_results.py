@@ -192,10 +192,12 @@ def compare_across_folders(
   # plot
   os.makedirs(plot_folder, exist_ok = True)
   dev_plot_by_key(
-    all_obj, all_runtime, all_rej, key, key_label, plot_folder, models
+    all_obj, all_runtime, all_rej, key, key_label, plot_folder, models,
+    "LoadManagementModel"
   )
   dev_barplot_by_key(
-    all_obj, all_runtime, all_rej, key, key_label, plot_folder, models
+    all_obj, all_runtime, all_rej, key, key_label, plot_folder, models,
+    "LoadManagementModel"
   )
   plot_by_key(
     all_obj, 
@@ -442,7 +444,8 @@ def compare_single_model(
         df[key] = key_val
         runtime_dev = pd.concat([runtime_dev, df], ignore_index = True)
     dev_plot_by_key(
-      obj_dev, runtime_dev, None, key, key_label, plot_folder, models
+      obj_dev, runtime_dev, None, key, key_label, plot_folder, models,
+      "LoadManagementModel"
     )
 
 

@@ -218,6 +218,7 @@ def test_run_updates_existing_method_slot_when_resuming(tmp_path: Path, monkeypa
     str(base_folder),
     n_experiments = 1,
     methods = ["faas-macro"],
+    reference_method = "centralized",
     fix_r = False,
     sp_parallelism = 0,
     enable_plotting = False,

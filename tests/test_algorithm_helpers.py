@@ -149,7 +149,7 @@ def test_evaluate_bids_eta_schedule_and_scalar_and_n_auctions_guard():
   # n_auctions == 0 (no potential sellers) must not raise ZeroDivisionError
   y_empty, _, _, n_auctions = run_faasmadea.evaluate_bids(
     pd.DataFrame(columns = ["i", "j", "f", "d", "b"]),
-    blackboard = np.zeros((2, 2)), data = data, last_y = np.zeros((2, 2, 2)),
+    blackboard = np.zeros((2, 2)), data = data,
     ell = ell, p = p.copy(), capacity = cap, u0 = np.zeros((2, 2)),
     auction_options = {"eta": 0.5, "zeta": 0.1},
   )

@@ -42,7 +42,11 @@ def test_campaign_runs_screening_then_selects_then_confirms(tmp_path, monkeypatc
 
 def test_campaign_resumes_from_state(tmp_path, monkeypatch):
   calls = []
-  monkeypatch.setattr(campaign, "_run_suite", lambda s, a, st: (calls.append(s), True)[1])
+  def fake_run_suite(suite, args, state):
+    calls.append(suite)
+    return True
+
+  monkeypatch.setattr(campaign, "_run_suite", fake_run_suite)
   monkeypatch.setattr(campaign, "select_survivors", lambda *a, **k: ["x", "y", "z", "w"])
   monkeypatch.setattr(campaign, "SURVIVORS_PATH", tmp_path / "survivors.json")
   state = tmp_path / "campaign-state.json"

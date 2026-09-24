@@ -332,6 +332,7 @@ def test_run_results_postprocessing_aggregates_synthetic_experiment(tmp_path):
     str(tmp_path),
     loop_over = "Nn",
     methods = ["centralized", "faas-macro"],
+    reference_method = "centralized",
   )
 
   post_folder = tmp_path / "postprocessing"
@@ -352,6 +353,7 @@ def test_run_results_postprocessing_ignores_generate_only(tmp_path):
     str(tmp_path),
     loop_over = "Nn",
     methods = ["generate_only"],
+    reference_method = "centralized",
   )
 
   assert (tmp_path / "postprocessing" / "ping_pong_problems.txt").exists()

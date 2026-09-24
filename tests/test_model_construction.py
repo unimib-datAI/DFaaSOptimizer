@@ -449,9 +449,13 @@ def test_pyo_var_type_is_non_negative_integers():
 def test_solve_caches_solver_per_name(monkeypatch):
   calls = []
   monkeypatch.setattr(model_module, "_SOLVER_CACHE", {})
+  def fake_solver_factory(name):
+    calls.append(name)
+    return FakeSolver()
+
   monkeypatch.setattr(
     model_module.pyo, "SolverFactory",
-    lambda name: calls.append(name) or FakeSolver(),
+    fake_solver_factory,
   )
   m = BaseAbstractModel()
   m.solve(FakeInstance(), {}, solver_name="glpk")
