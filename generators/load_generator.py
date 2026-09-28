@@ -13,6 +13,8 @@ def rescale(
   Rescale value from the original interval [in_min, in_max] to the new 
   range [out_min, out_max]
   """
+  if in_min == in_max:
+    return out_min
   return out_min + (val - in_min) * ((out_max - out_min) / (in_max - in_min))
 
 
@@ -84,7 +86,7 @@ class LoadGenerator:
       # (max_steps = 288). We first generate the periods and expand the array
       # to match the max_steps. If max_steps is not a multiple of 96, some
       # elements must be appended at the end, hence the resize call.
-      repeats = max_steps // self.unique_periods
+      repeats = max(1, max_steps // self.unique_periods)
       periods = rng.uniform(15, high = 100, size = self.unique_periods)
       periods = np.repeat(periods, repeats)  # Expand the single values.
       periods = np.resize(periods, periods.size + max_steps - periods.size)
