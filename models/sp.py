@@ -174,6 +174,109 @@ class LSP(LSP_v0):
       model.pi[f] * model.omega[f] / (model.incoming_load[model.whoami,f] or 1) for f in model.F
     )
 
+class LSP_detailed(SPAbstractModel):
+  def __init__(self):
+    super().__init__()
+    self.name = "LSP_detailed"
+    ###########################################################################
+    # Problem parameters
+    ###########################################################################
+    # number and set of nodes
+    # neighborhood (n_{ij}=1 if neighbors)
+    self.model.neighborhood = pyo.Param(
+      self.model.N, self.model.N, within = pyo.Binary,
+      default = 0
+    )
+    # objective function weights
+    self.model.pi = pyo.Param(
+      self.model.F, 
+      within = pyo.NonNegativeReals, default = 0.0
+    )
+    self.model.beta = pyo.Param(
+      self.model.N, self.model.N, self.model.F, 
+      within = pyo.NonNegativeReals, default = 0.9
+    )
+    self.model.gamma = pyo.Param(
+      self.model.N, self.model.F, within = pyo.NonNegativeReals, default = 0.1
+    )
+    ###########################################################################
+    # Problem variables
+    ###########################################################################
+    # number of rejected requests
+    self.model.y = pyo.Var(
+      self.model.N, self.model.F, 
+      domain = PYO_VAR_TYPE
+    )
+    self.model.z = pyo.Var(
+      self.model.F, 
+      domain = PYO_VAR_TYPE
+    )
+    ###########################################################################
+    # Constraints
+    ###########################################################################
+    self.model.no_traffic_loss = pyo.Constraint(
+      self.model.F, rule = self.no_traffic_loss
+    )
+    self.model.utilization_equilibrium = pyo.Constraint(
+      self.model.F, rule = self.utilization_equilibrium
+    )
+    self.model.utilization_equilibrium2 = pyo.Constraint(
+      self.model.F, rule = self.utilization_equilibrium2
+    )
+    self.model.residual_capacity = pyo.Constraint(
+      rule = self.residual_capacity
+    )
+    ###########################################################################
+    # Objective function
+    ###########################################################################
+    self.set_objective(rule = self.minimize_processing_cost)
+  
+  @staticmethod
+  def no_traffic_loss(model, f):
+    return (
+      model.x[f] + sum(model.y[n,f] for n in model.N) + model.z[f]
+    ) == model.incoming_load[model.whoami,f]
+  
+  @staticmethod
+  def utilization_equilibrium(model, f):
+    return (
+      model.demand[model.whoami,f] * (
+        model.x[f]
+      ) <= model.r[f] * model.max_utilization[f]
+    )
+  
+  @staticmethod
+  def utilization_equilibrium2(model, f):
+    return (
+      model.demand[model.whoami,f] * (
+        model.x[f]
+      ) >= (model.r[f] - 1) * model.max_utilization[f]
+    )
+  
+  @staticmethod
+  def residual_capacity(model):
+    return sum(
+      model.r[f] * model.memory_requirement[f] for f in model.F
+    ) <= model.memory_capacity[model.whoami]
+  
+  @staticmethod
+  def minimize_processing_cost(model):
+    return - (
+      sum(
+        (
+          model.alpha[model.whoami,f] * model.x[f] + 
+          sum(
+            model.beta[model.whoami,n,f] * model.y[n,f] for n in model.N
+          ) -
+          model.gamma[model.whoami,f] * model.z[f]
+        ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
+      )
+    ) + sum(
+      model.pi[f] * sum(
+        model.y[n,f] for n in model.N
+      ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
+    )
+
 
 class LSPr_v0(SPAbstractModel):
   def __init__(self):
