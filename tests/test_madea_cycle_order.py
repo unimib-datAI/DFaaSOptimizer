@@ -443,7 +443,7 @@ def test_rerouting_without_served_load_or_welfare_gain_stops(tmp_path, monkeypat
   (madea_level_cycles_runner, "HierarchicalMADeALevelCycles"),
 ])
 def test_supplied_configuration_preserves_first_snapshot_welfare(tmp_path, runner, column):
-  """Use the user's seed/topology/load, with a pre-refactor numerical baseline."""
+  """Compare against standalone MADEA with the restored legacy load generator."""
   import json
   from pathlib import Path
 
@@ -455,8 +455,9 @@ def test_supplied_configuration_preserves_first_snapshot_welfare(tmp_path, runne
   config["solver_options"]["general"] = {"TimeLimit": 120, "mipgap": 1e-5}
   folder = runner.run(config, parallelism=0, log_on_file=True, disable_plotting=True)
   objectives = pd.read_csv(f"{folder}/obj.csv")[column].tolist()
-  # Measured using the unmodified standalone runner on the same configuration.
-  baseline = 150.9883071774954
+  # Measured with standalone MADEA and GLPK after generator restoration (29c74be).
+  # The legacy fixed_sum generator truncates integer shares without redistribution.
+  baseline = 150.5905885342843
   assert len(objectives) == 1
   if runner is madea:
     assert objectives[0] == pytest.approx(baseline)
