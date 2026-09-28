@@ -229,8 +229,13 @@ class LSP_detailed(SPAbstractModel):
     ###########################################################################
     # Objective function
     ###########################################################################
-    self.set_objective(rule = self.minimize_processing_cost)
-  
+    self.set_objective(rule = self.maximize_processing, sense = pyo.maximize)
+
+  @staticmethod
+  def maximize_processing(model):
+    """Equivalent to minimizing the original cost, with a positive gain sign."""
+    return -LSP_detailed.minimize_processing_cost(model)
+
   @staticmethod
   def no_traffic_loss(model, f):
     return (

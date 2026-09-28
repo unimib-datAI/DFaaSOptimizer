@@ -1,0 +1,56 @@
+........................................................................ [  8%]
+........................................................................ [ 17%]
+........................................................................ [ 26%]
+........................................................................ [ 35%]
+........................................................................ [ 44%]
+........................................................................ [ 53%]
+........................................................................ [ 62%]
+........................................................................ [ 71%]
+........................................................................ [ 80%]
+.................F...................................................... [ 88%]
+........................................................................ [ 97%]
+.................                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_integer_fixed_sum_traces_preserve_system_workload ____________
+
+    def test_integer_fixed_sum_traces_preserve_system_workload():
+      """#20: integer allocation must distribute rounding remainders, not lose them."""
+      traces = generate_load_traces(
+        {0: {0: 10, 1: 10}}, max_steps=20, seed=4850,
+        trace_type="fixed_sum", enable_plotting=False,
+      )
+      workload = np.stack(list(traces[0].values()))
+
+      assert np.all(workload >= 0)
+      assert np.all(workload == np.floor(workload))
+>     np.testing.assert_array_equal(workload.sum(axis=0), np.full(20, 10))
+E     AssertionError:
+E     Arrays are not equal
+E
+E     Mismatched elements: 20 / 20 (100%)
+E     Max absolute difference among violations: 1
+E     Max relative difference among violations: 0.1
+E      ACTUAL: array([9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9])
+E      DESIRED: array([10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10,
+E            10, 10, 10])
+
+tests/test_review_optimization_regressions.py:184: AssertionError
+=============================== warnings summary ===============================
+tests/test_coverage_expansion.py::test_parse_logs_dispatches_macro_and_madea_runs
+  /Users/micheleciavotta/Downloads/DFaaSOptimizer/.worktrees/feat-uv-migration-and-extended-tests/logs_postprocessing.py:301: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation.
+    logs_df = pd.concat(
+
+tests/test_review_orchestration_regressions.py::test_fix_r_uses_newly_generated_centralized_solution
+tests/test_review_orchestration_regressions.py::test_resume_can_add_method_without_a_centralized_reference
+tests/test_review_orchestration_regressions.py::test_runtime_comparison_accepts_decentralized_reference
+  /Users/micheleciavotta/Downloads/DFaaSOptimizer/.worktrees/feat-uv-migration-and-extended-tests/.venv/lib/python3.10/site-packages/pandas/plotting/_matplotlib/core.py:822: UserWarning: Data has no positive values, and therefore cannot be log-scaled.
+    labels = axis.get_majorticklabels() + axis.get_minorticklabels()
+
+tests/test_review_orchestration_regressions.py::test_custom_baseline_does_not_require_optional_rejections_csv
+  /Users/micheleciavotta/Downloads/DFaaSOptimizer/.worktrees/feat-uv-migration-and-extended-tests/compare_results.py:956: UserWarning: Attempting to set identical low and high ylims makes transformation singular; automatically expanding.
+    axs2[idx,cidx].set_ylim(limits[cidx][0], limits[cidx][1])
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload
+1 failed, 808 passed, 5 warnings in 75.91s (0:01:15)

@@ -1,0 +1,13 @@
+{
+  "snapshots": 12,
+  "node_checks_per_model": 210,
+  "violations_original": 87,
+  "violations_selfish": 0,
+  "incumbent_gain_reduction_pct_min": 0.989696816848562,
+  "incumbent_gain_reduction_pct_max": 11.862338907629011,
+  "incumbent_gain_reduction_pct_mean": 6.520108982201819,
+  "optimal_original": 7,
+  "optimal_selfish": 11,
+  "max_gap_original_pct": 0.18889471620927964,
+  "max_gap_selfish_pct": 0.011444118152080296
+}

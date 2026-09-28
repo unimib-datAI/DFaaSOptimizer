@@ -1,0 +1,22 @@
+{
+  "gurobi_version": [
+    12,
+    0,
+    3
+  ],
+  "solver": "gurobi",
+  "options": {
+    "OutputFlag": 0,
+    "MIPGap": 1e-05,
+    "TimeLimit": 30,
+    "Threads": 1,
+    "Seed": 0,
+    "FeasibilityTol": 1e-08
+  },
+  "steps": [
+    0,
+    50,
+    75
+  ],
+  "pi": 0
+}
