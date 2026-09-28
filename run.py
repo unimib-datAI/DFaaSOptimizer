@@ -953,9 +953,11 @@ def run(
   ):
   seed = base_config["seed"]
   log_on_file = True if base_config["verbose"] > 0 else False
-  exp_values = base_config["limits"].get(loop_over)
+  exp_values = base_config.get(loop_over)
   if exp_values is None:
-    exp_values = base_config["limits"]["neighborhood"][loop_over]
+    exp_values = base_config["limits"].get(loop_over)
+    if exp_values is None:
+      exp_values = base_config["limits"]["neighborhood"][loop_over]
   disable_plotting = not enable_plotting
   from_instances = base_config["limits"].get("path", None)
   generate_only = "generate_only" in methods
@@ -1149,7 +1151,10 @@ def run(
       ):
       # -- update configuration
       config = deepcopy(base_config)
-      if loop_over in config["limits"]:
+      if loop_over in config:
+        config[loop_over].pop("values", None)
+        config[loop_over] = exp_value
+      elif loop_over in config["limits"]:
         config["limits"][loop_over].pop("values", None)
         config["limits"][loop_over]["min"] = exp_value
         config["limits"][loop_over]["max"] = exp_value
