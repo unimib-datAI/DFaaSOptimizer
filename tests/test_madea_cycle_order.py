@@ -100,7 +100,8 @@ def cycle_run(tmp_path, monkeypatch, request):
     "beta": {(1, 1, 1): 0.0, (1, 2, 1): 1.0,
              (2, 1, 1): 1.0, (2, 2, 1): 0.0},
   })
-  config = _materialized_config(tmp_path, data)
+  config = _materialized_config(tmp_path, data, steps=2)
+  config.update(max_steps=1, max_run_time=1)
   config["solver_options"] = {"general": {}, "auction": {
     "eta": 0.0, "epsilon": 0.001, "zeta": 0.01, "unit_bids": True,
   }}
@@ -133,7 +134,8 @@ def cycle_run(tmp_path, monkeypatch, request):
   # Observe the real shared cycle, not a replacement implementation.
   monkeypatch.setattr(madea, "define_bids", define)
 
-  def run(stops, hierarchy_quantity=0, eta=0.0):
+  def run(stops, hierarchy_quantity=0, eta=0.0, **config_overrides):
+    config.update(config_overrides)
     config["solver_options"]["auction"]["eta"] = eta
     outcomes = iter(stops)
 
@@ -158,6 +160,58 @@ def cycle_run(tmp_path, monkeypatch, request):
     return events, folder
 
   return run
+
+
+@pytest.mark.parametrize("max_cycles", [1, 2])
+def test_max_cycles_counts_complete_pairs_and_saves_hierarchical_incumbent(cycle_run, max_cycles):
+  events, folder = cycle_run(
+    [(False, None), (True, "max iterations reached")] * 3,
+    max_cycles=max_cycles, hierarchy_quantity=0.25,
+  )
+  assert events.count("madea") == 2 * max_cycles
+  assert events.count("hierarchy") == max_cycles
+  assert events[-1] == "hierarchy"
+  termination = pd.read_csv(f"{folder}/termination_condition.csv").iloc[0, -1]
+  assert termination.startswith("max cycles reached")
+  # Each pair forwards one unit bid; its other MADEA iteration starts a replica.
+  # The hierarchy adds 0.25, worth (beta + gamma) / load = 0.11 per unit.
+  objective = pd.read_csv(f"{folder}/obj.csv").iloc[0, 0]
+  assert objective == pytest.approx(-8.78 + 0.11 * 1.25 * max_cycles)
+
+
+def test_cycle_budget_resets_at_each_simulation_timestep(cycle_run):
+  events, folder = cycle_run(
+    [(True, "max iterations reached")] * 3,
+    max_cycles=1, max_steps=2, max_run_time=2,
+  )
+  assert events.count("madea") == events.count("hierarchy") == 2
+  objectives = pd.read_csv(f"{folder}/obj.csv").iloc[:, 0].tolist()
+  assert objectives == pytest.approx([-8.67, -8.67])
+
+
+@pytest.mark.parametrize("limit,madea_count,hierarchy_count", [
+  (0.2, 0, 0), (0.3, 1, 0), (0.4, 1, 1),
+])
+def test_time_limit_stops_at_phase_boundaries(cycle_run, limit, madea_count, hierarchy_count):
+  events, folder = cycle_run(
+    [(True, "max iterations reached")] * 3,
+    hierarchy_quantity=0.25,
+    solver_options={"general": {"TimeLimit": limit}, "auction": {
+      "eta": 0.0, "epsilon": 0.001, "zeta": 0.01, "unit_bids": True,
+    }},
+  )
+  assert events.count("madea") == madea_count
+  assert events.count("hierarchy") == hierarchy_count
+  termination = pd.read_csv(f"{folder}/termination_condition.csv").iloc[0, -1]
+  assert termination.startswith("reached time limit")
+  objective = pd.read_csv(f"{folder}/obj.csv").iloc[0, 0]
+  assert objective == pytest.approx(-8.78 + 0.11 * (madea_count + 0.25 * hierarchy_count))
+
+
+@pytest.mark.parametrize("limit", [0, -1, 1.5, True, "2"])
+def test_max_cycles_rejects_invalid_limit(cycle_run, limit):
+  with pytest.raises(ValueError, match="max_cycles"):
+    cycle_run([(True, "all load assigned")], max_cycles=limit)
 
 
 def test_complete_cycle_finishes_before_hierarchy_and_restarts(cycle_run):

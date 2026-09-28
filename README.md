@@ -167,14 +167,31 @@ Three separate algorithms are available:
 - `hierarchical-madea` retains the existing interleaved auction implementation.
 - `hierarchical-madea-cycles` completes the production MADEA loop before invoking
   higher-level auctions. If the actual stopping reason is `all load assigned`,
-  it terminates immediately. Other reasons invoke the hierarchy, followed by a
-  new complete MADEA cycle.
+  it terminates immediately. Other convergence reasons invoke the hierarchy,
+  followed by a new complete MADEA cycle, unless a global budget is exhausted.
 - `hierarchical-madea-level-cycles` uses the same complete MADEA phases, with
   repeated auctions inside each hierarchy level before advancing to the next.
 
 After a hierarchy → MADEA pass, the cycle variant also stops if neither total
 assigned load nor best centralized welfare improves beyond `tolerance`. This
 avoids repeating route swaps without progress. The best solution is retained.
+
+Both cycle variants also support optional budgets, reset at each simulation
+timestep:
+
+- `max_cycles`: positive integer limiting complete MADEA + hierarchy pairs.
+  For example, `"max_cycles": 10` permits at most ten pairs. Omit it or use
+  `null` for no cycle cap. `max_iterations` still limits iterations within each
+  MADEA phase.
+- `solver_options.general.TimeLimit`: the existing time limit in seconds now
+  also stops the outer cycle loop. Omit it for no time cap. It uses cumulative
+  algorithm runtime (including the initial local solve and hierarchy), not
+  wall-clock elapsed time. Checks occur between phases, in addition to MADEA's
+  existing internal checks; a running phase can exceed the budget.
+
+Budget exhaustion saves the best solution found and records `max cycles reached`
+or `reached time limit` in `termination_condition.csv`. If the initial local solve
+exhausts the time budget, its local-only solution is saved without starting MADEA.
 
 The cycle variant preserves allocations, prices, replicas, fairness, the best
 centralized solution and cumulative runtime. It resets the local iteration

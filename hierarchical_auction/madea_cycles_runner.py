@@ -77,6 +77,10 @@ def _run(
   solver_name = config["solver_name"]
   solver_options = config.get("solver_options", {})
   general_solver_options = solver_options.get("general", {})
+  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  max_cycles = config.get("max_cycles")
+  if max_cycles is not None and (type(max_cycles) is not int or max_cycles < 1):
+    raise ValueError("max_cycles must be a positive integer or null")
   auction_options = build_auction_options(config)
   tolerance = config.get("tolerance", 1e-6)
   max_steps = config["max_steps"]
@@ -145,7 +149,20 @@ def _run(
       auction_options=auction_options,
     )
     previous_cycle_progress = None
+    completed_cycles = 0
     while True:
+      if state.total_runtime >= time_limit:
+        reason = f"reached time limit: {state.total_runtime} >= {time_limit}"
+        # The initial local solve may exhaust the budget before the first auction.
+        if state.best_centralized_solution is None:
+          state.best_centralized_solution = combine_solutions(
+            Nn, Nf, sp_data, loadt, sp_x, state.sp_r, state.sp_rho,
+            None, state.y, None, None, None, None,
+          )
+        break
+      if max_cycles is not None and completed_cycles >= max_cycles:
+        reason = f"max cycles reached: {completed_cycles} >= {max_cycles}"
+        break
       state = run_madea_cycle(
         state, sp_x=sp_x, sp_omega=sp_omega, sp_data=sp_data, data=sp_data,
         agents=agents, loadt=loadt, neighborhood=neighborhood, latency=latency,
@@ -156,6 +173,9 @@ def _run(
       # Use the actual reason, including its existing priority over other tests.
       reason = state.reason
       if reason == "all load assigned":
+        break
+      if state.total_runtime >= time_limit:
+        reason = f"reached time limit: {state.total_runtime} >= {time_limit}"
         break
       # Measure the whole hierarchy -> MADEA pass. Route swaps are not
       # progress unless they increase assigned load or improve the incumbent.
@@ -226,6 +246,7 @@ def _run(
             f"        best centralized solution updated; obj = {cost}",
             file=log_stream, flush=True,
           )
+      completed_cycles += 1
 
     complete_solution, _, objective = decode_solutions(
       sp_data, state.best_centralized_solution, complete_solution, None,
