@@ -24,6 +24,7 @@ from run_centralized_model import (
   init_complete_solution,
   init_problem,
   join_complete_solution,
+  plot_history,
   save_checkpoint,
   save_solution,
 )
@@ -68,7 +69,6 @@ def _run(
     result_name: str,
   ) -> str:
   """Shared cycle orchestration; variants select an engine and output column."""
-  del disable_plotting
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
   limits = config["limits"]
@@ -254,6 +254,20 @@ def _run(
   save_solution(
     solution, offloaded, complete_solution, detailed, "LSPc", solution_folder,
   )
+  if not disable_plotting and Nf <= 10 and Nn <= 10:
+    plot_history(
+      traces, 
+      min_run_time,
+      max_run_time,
+      run_time_step,
+      solution, 
+      complete_solution["utilization"], 
+      complete_solution["replicas"], 
+      offloaded,
+      # obj_dict["LSP"][max_iterations-1],
+      objectives,
+      os.path.join(solution_folder, "sp.png")
+    )
   pd.DataFrame({result_name: objectives}).to_csv(
     os.path.join(solution_folder, "obj.csv"), index=False,
   )
