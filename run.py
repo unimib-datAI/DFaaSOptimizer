@@ -61,7 +61,11 @@ METHOD_RESULT_MODELS = {
 # on-disk files by the actual saved name, so it probes the folder. This also
 # works when re-postprocessing solution_folders loaded from an earlier run whose
 # variant the current config no longer reflects.
-CENTRALIZED_MODEL_KEYS = ("LoadManagementModel", "TightLoadManagementModel")
+CENTRALIZED_MODEL_KEYS = (
+  "LoadManagementModel", 
+  "TightLoadManagementModel",
+  "SelfishLoadManagementModel"
+)
 
 
 def resolve_centralized_model_key(folder: str, default: str) -> str:
