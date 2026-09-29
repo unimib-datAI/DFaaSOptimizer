@@ -384,8 +384,8 @@ def compare_single_model(
       )
       # add info
       key, key_val = tokens
-      obj[key] = int(key_val)
-      runtime[key] = int(key_val)
+      obj[key] = key_val
+      runtime[key] = key_val
       if filter_by is not None and filter_by in obj and filter_by in runtime:
         if keep_only is not None:
           obj = obj[obj[filter_by] == keep_only]
