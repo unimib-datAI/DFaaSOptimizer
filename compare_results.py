@@ -93,9 +93,11 @@ def parse_arguments() -> argparse.Namespace:
   # Parse the arguments
   args: argparse.Namespace = parser.parse_known_args()[0]
   if args.models is None:
-    args.models = ["LoadManagementModel"] if args.run == "compare_single_model" else [
+    args.models = [
+      "LoadManagementModel"
+    ] if args.run == "compare_single_model" else [
       "LoadManagementModel",
-      "Selfish-LMM",
+      "Selfish-DLMM",
       "FaaS-MACrO",
       "FaaS-MADeA",
       "HierarchicalMADeA",
@@ -125,8 +127,8 @@ def get_loop_over_label(key: str) -> str:
 def get_baseline_name(key: str) -> str:
   if key == "LoadManagementModel":
     return "LMM"
-  elif key == "Selfish-LMM":
-    return "LMM(s)"
+  elif key == "Selfish-DLMM":
+    return "DLMM(s)"
   return key
 
 
@@ -767,7 +769,7 @@ def plot_by_key(
     "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
-    "Selfish-LMM": mcolors.CSS4_COLORS["lightcoral"],
+    "Selfish-DLMM": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
     "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
     "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
@@ -976,7 +978,7 @@ def violinplot_by_key(
     "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
     "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
     "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
-    "Selfish-LMM": mcolors.CSS4_COLORS["lightcoral"],
+    "Selfish-DLMM": mcolors.CSS4_COLORS["lightcoral"],
     "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
     "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
     "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
