@@ -16,14 +16,19 @@ from run_faasmacro import (
   solve_subproblem
 )
 from run_faasmadea import (
+  check_stopping_criteria,
+  compute_residual_capacity,
   define_bids, 
   evaluate_bids,
+  neigh_dict_to_matrix,
+  relative_objective_gap,
   start_additional_replicas
 )
 from utils.common import load_configuration
 from models.sp import LSP, LSPr_x
 
 from networkx import adjacency_matrix
+from collections import deque
 from datetime import datetime
 from copy import deepcopy
 from typing import Tuple
@@ -66,72 +71,6 @@ def parse_arguments() -> argparse.Namespace:
   return args
 
 
-def check_stopping_criteria(
-    it: int,
-    max_iterations: int,
-    blackboard: np.array,
-    omega: np.array,
-    rmp_omega: np.array,
-    bids: pd.DataFrame,
-    memory_bids: pd.DataFrame,
-    tolerance: float,
-    total_runtime: float,
-    time_limit: float
-  ) -> Tuple[bool, str]:
-  stop = False
-  why_stopping = None
-  if it >= max_iterations - 1:
-    stop = True
-    why_stopping = "max iterations reached"
-  elif (blackboard <= tolerance).all():
-    stop = True
-    why_stopping = "no capacity left"
-  elif (omega <= tolerance).all():
-    stop = True
-    why_stopping = "all load assigned"
-  elif (rmp_omega <= tolerance).all():
-    stop = True
-    why_stopping = "load cannot be assigned"
-  elif len(bids) == 0 and len(memory_bids) == 0:
-    stop = True
-    why_stopping = "no available or convenient sellers"
-  elif total_runtime >= time_limit:
-    stop = True
-    why_stopping = f"reached time limit: {total_runtime} >= {time_limit}"
-  return stop, why_stopping
-
-
-def compute_residual_capacity(
-    x: np.array, y: np.array, r: np.array, data: dict
-  ) -> Tuple[np.array, np.array, np.array]:
-  Nn = data[None]["Nn"][None]
-  Nf = data[None]["Nf"][None]
-  # loop over nodes and functions
-  cap = np.zeros((Nn,Nf))
-  c = np.zeros((Nn,Nf))
-  ell = np.zeros((Nn,Nf))
-  for n in range(Nn):
-    for f in range(Nf):
-      # number of enqueued requests
-      ell[n,f] = x[n,f] + y[:,n,f].sum()
-      # computational capacity
-      cap[n,f] = r[n,f] * (
-        data[None]["max_utilization"][f+1] / data[None]["demand"][(n+1,f+1)]
-      )
-      # residual capacity
-      c[n,f] = max(0.0, cap[n,f] - ell[n,f])
-  return cap, c, ell
-
-
-def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
-  neighborhood = np.zeros((Nn,Nn))
-  for n1 in range(Nn):
-    for n2 in range(Nn):
-      if n1 != n2 and neighborhood_dict[(n1+1,n2+1)]:
-        neighborhood[n1,n2] = 1
-  return neighborhood
-
-
 def run(
     config: dict, 
     parallelism: int,
@@ -142,6 +81,7 @@ def run(
   seed = config["seed"]
   limits = config["limits"]
   trace_type = config["limits"]["load"].get("trace_type", "fixed_sum")
+  patience = config.get("patience", 1)
   verbose = config.get("verbose", 0)
   # -- solver name and options
   solver_name = config["solver_name"]
@@ -235,6 +175,7 @@ def run(
     y = np.zeros((Nn,Nn,Nf))
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn,Nf))
+    odev_queue = deque(maxlen=patience)
     while not stop_searching:
       if verbose > 0:
         print(f"    it = {it}", file = log_stream, flush = True)
@@ -381,6 +322,7 @@ def run(
             file = log_stream,
             flush = True
           )
+      prev_cobj = best_centralized_cost
       if cobj > best_centralized_cost:
         best_centralized_cost = cobj
         best_centralized_solution = csol
@@ -391,19 +333,23 @@ def run(
             file = log_stream,
             flush = True
           )
+      odev_queue.append(
+        relative_objective_gap(prev_cobj, best_centralized_cost)
+      )
       # check termination criteria
       s = datetime.now()
       stop_searching, why_stop_searching = check_stopping_criteria(
-        it,
-        max_iterations,
-        blackboard,
-        omega,
-        rmp_omega,
-        bids,
-        memory_bids,
-        tolerance,
-        total_runtime,
-        time_limit
+        it = it,
+        max_iterations = max_iterations,
+        blackboard = blackboard,
+        omega = omega,
+        rmp_omega = rmp_omega,
+        odev_queue = odev_queue,
+        bids = bids,
+        memory_bids = memory_bids,
+        tolerance = tolerance,
+        total_runtime = total_runtime,
+        time_limit = time_limit
       )
       e = datetime.now()
       if verbose > 1:
