@@ -7,12 +7,12 @@ from models.sp import LSP_detailed
 
 
 class SelfishLoadManagementModel(LoadManagementModel):
-  """Solve LSP_detailed per node, then protect only its alpha*x/load gain.
-
+  """
+  Solve LSP_detailed per node, then protect only its alpha*x/load gain.
   The local solve includes y, z and pi; its total objective is not the floor.
   The central objective and physical constraints are inherited unchanged.
   Use this class's solve() to compute the floors before the global solve.
-  Among tied local optima, the reference is the solution returned by the solver.
+  Among tied local optima, the reference is the solution returned by the solver
   """
 
   def __init__(self):
@@ -43,7 +43,9 @@ class SelfishLoadManagementModel(LoadManagementModel):
   def protect_local_gain(model, n):
     return model.local_processing_gain[n] >= model.minimum_local_gain[n]
 
-  def compute_local_gain_floors(self, instance, solver_options, solver_name = "glpk"):
+  def compute_local_gain_floors(
+      self, instance, solver_options, solver_name = "glpk"
+    ):
     """Populate per-node floors and return the total local solver runtime."""
     local = LSP_detailed()
     # Copy evaluated central parameters, including defaults (gamma differs
@@ -58,21 +60,36 @@ class SelfishLoadManagementModel(LoadManagementModel):
       data[None]["whoami"] = {None: n}
       reference = local.generate_instance(data)
       result = local.solve(reference, solver_options, solver_name)
-      if not result["solution_exists"] or result["termination_condition"] != "optimal":
+      if (
+          not result["solution_exists"] or 
+          result["termination_condition"] != "optimal"
+        ):
         raise RuntimeError(
           f"Local reference for node {n} is not optimal: "
           f"{result['termination_condition']}"
         )
       instance.minimum_local_gain[n] = pyo.value(sum(
-        reference.alpha[n, f] * reference.x[f] / (reference.incoming_load[n, f] or 1)
+        reference.alpha[n, f] * reference.x[f] / (
+          reference.incoming_load[n, f] or 1
+        )
         for f in reference.F
       ))
       local_runtime += result["runtime"]
     return local_runtime
 
-  def solve(self, instance, solver_options, solver_name = "glpk", initial_solution = None):
-    local_runtime = self.compute_local_gain_floors(instance, solver_options, solver_name)
-    solution = super().solve(instance, solver_options, solver_name, initial_solution)
+  def solve(
+      self, 
+      instance, 
+      solver_options, 
+      solver_name = "glpk", 
+      initial_solution = None
+    ):
+    local_runtime = self.compute_local_gain_floors(
+      instance, solver_options, solver_name
+    )
+    solution = super().solve(
+      instance, solver_options, solver_name, initial_solution
+    )
     solution["local_reference_runtime"] = local_runtime
     solution["global_runtime"] = solution["runtime"]
     solution["runtime"] += local_runtime
