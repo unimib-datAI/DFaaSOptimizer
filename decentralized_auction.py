@@ -15,8 +15,13 @@ from run_faasmacro import (
   decode_solutions,
   solve_subproblem
 )
+from run_faasmadea import (
+  define_bids, 
+  evaluate_bids,
+  start_additional_replicas
+)
 from utils.common import load_configuration
-from models.sp import LSP, LSPr
+from models.sp import LSP, LSPr_x
 
 from networkx import adjacency_matrix
 from datetime import datetime
@@ -42,13 +47,13 @@ def parse_arguments() -> argparse.Namespace:
     "-c", "--config",
     help = "Configuration file",
     type = str,
-    default = "manual_config.json"
+    default = "config_files/manual_config.json"
   )
   parser.add_argument(
     "-j", "--parallelism",
     help = "Number of parallel processes to start (-1: auto, 0: sequential)",
     type = int,
-    default = -1
+    default = 0
   )
   parser.add_argument(
     "--disable_plotting",
@@ -118,128 +123,6 @@ def compute_residual_capacity(
   return cap, c, ell
 
 
-def define_bids(
-    omega: np.array,
-    blackboard: np.array, 
-    p: np.array, 
-    data: dict,
-    neighborhood: np.array,
-    rho: np.array,
-    auction_options: dict,
-    latency: np.array,
-    fairness: np.array,
-    delta: np.array
-  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-  # loop over agents and functions
-  potential_buyers, functions_to_share = np.nonzero(omega)
-  bids = {
-    "i": [], "j": [], "f": [], "d": [], "b": [], "utility": [], "weight": []
-  }
-  memory_bids = {
-    "i": [], "j": [], "f": []
-  }
-  for i,f in zip(potential_buyers, functions_to_share):
-    # identify potential sellers
-    potential_sellers = set(np.nonzero(neighborhood[i,:])[0])
-    # -- capacity sellers are neighbors with residual computing capacity 
-    # for function f
-    potential_capacity_sellers = potential_sellers.intersection(
-      set(np.nonzero(blackboard[:,f])[0])
-    )
-    # -- memory sellers are neighbors with residual memory capacity to 
-    # instantiate new replicas
-    potential_memory_sellers = potential_sellers.intersection(
-      set(np.nonzero(rho)[0])
-    )
-    # -- loop over potential sellers
-    utility = []
-    candidate_sellers = []
-    for j in potential_capacity_sellers:
-      # -- compute utility
-      ut = (  
-        data[None]["beta"][(i+1,j+1,f+1)] - 
-        p[j,f] - 
-        auction_options["latency_weight"] * latency[i,j] - 
-        auction_options["fairness_weight"] * fairness[i,f]
-      )
-      if ut > 0:
-        utility.append(ut)
-        candidate_sellers.append(j)
-    # compute weights and define bids
-    if len(utility) > 0:
-      utility = np.array(utility)
-      weights = np.exp(utility) / np.sum(np.exp(utility))
-      for idx,(j,w) in enumerate(zip(candidate_sellers,weights)):
-        d = min(blackboard[j,f], w * omega[i,f])
-        b = p[j,f] + auction_options["epsilon"] + delta[i,f]
-        bids["i"].append(i)
-        bids["f"].append(f)
-        bids["j"].append(j)
-        bids["d"].append(d)
-        bids["b"].append(b)
-        bids["utility"].append(utility[idx])
-        bids["weight"].append(w)
-    else:
-      # if the problem is missing computing capacity, ask for new replicas
-      for j in potential_memory_sellers - potential_capacity_sellers:
-        memory_bids["i"].append(i)
-        memory_bids["j"].append(j)
-        memory_bids["f"].append(f)
-  return pd.DataFrame(bids), pd.DataFrame(memory_bids)
-
-
-def evaluate_bids(
-    bids: pd.DataFrame, 
-    blackboard: np.array, 
-    data: dict, 
-    ell: np.array, 
-    p: np.array, 
-    capacity: np.array, 
-    u0: np.array, 
-    auction_options: dict,
-    current_y: np.array = None,
-  ) -> np.array:
-  Nn = data[None]["Nn"][None]
-  Nf = data[None]["Nf"][None]
-  if current_y is None:
-    current_y = np.zeros((Nn,Nn,Nf))
-  sending = current_y.sum(axis=1) > 1e-10
-  receiving = current_y.sum(axis=0) > 1e-10
-  # loop over agents and functions
-  potential_sellers, functions_to_share = np.nonzero(blackboard)
-  y = np.zeros((Nn,Nn,Nf))
-  for j,f in zip(potential_sellers,functions_to_share):
-    # extract bids for the current node
-    bids_for_j = bids[(bids["j"] == j) & (bids["f"] == f)].sort_values(
-      by = "b", ascending = False
-    )
-    remaining_capacity = blackboard[j,f]
-    next_bid_idx = 0
-    min_b = bids_for_j["b"].max()
-    accepted_any = False
-    # loop over bids until there is remaining capacity
-    while next_bid_idx < len(bids_for_j) and remaining_capacity > 0:
-      bid = bids_for_j.iloc[next_bid_idx]
-      i = int(bid["i"])
-      next_bid_idx += 1
-      if receiving[i,f] or sending[j,f]:
-        continue
-      q = min(remaining_capacity, bid["d"])
-      y[i,j,f] += q
-      remaining_capacity -= q
-      min_b = min(min_b, bid["b"])
-      sending[i,f] = True
-      receiving[j,f] = True
-      accepted_any = True
-    # compute utilization and update prices
-    if accepted_any:
-      u = (ell[j,f] + y[:,j,f].sum()) / capacity[j,f]
-      p[j,f] = min_b + auction_options["eta"] * (u - u0[j,f])
-    else:
-      p[j,f] *= (1 - auction_options["zeta"])
-  return y, p
-
-
 def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
   neighborhood = np.zeros((Nn,Nn))
   for n1 in range(Nn):
@@ -247,32 +130,6 @@ def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
       if n1 != n2 and neighborhood_dict[(n1+1,n2+1)]:
         neighborhood[n1,n2] = 1
   return neighborhood
-
-
-def start_additional_replicas(
-    memory_bids: pd.DataFrame, 
-    r: np.array,
-    data: dict,
-    rho: np.array
-  ) -> Tuple[np.array, np.array]:
-  # loop over sellers
-  additional_replicas = np.zeros(r.shape)
-  residual_capacity = deepcopy(rho)
-  for j, bids_for_j in memory_bids.groupby("j"):
-    if rho[j] > 0:
-      # count the fraction that each function requires
-      fractions = bids_for_j["f"].value_counts(normalize = True)
-      # assign new replicas proportionally to this fraction
-      for f, frac in fractions.items():
-        # -- check memory requirement
-        ram_f = data[None]["memory_requirement"][f+1]
-        # -- determine the maximum number of replicas that fit in the 
-        # assignable fraction of the residual memory capacity
-        a = int((residual_capacity[j] * frac) // ram_f)
-        # -- update
-        residual_capacity[j] -= int(ram_f * a)
-        additional_replicas[j,f] = a
-  return additional_replicas, residual_capacity
 
 
 def run(
@@ -341,7 +198,7 @@ def run(
     ss = datetime.now()
     # -- solve subproblem
     sp = LSP()
-    spr = LSPr()
+    spr = LSPr_x()
     sp_data = deepcopy(data)
     s = datetime.now()
     (
@@ -398,7 +255,7 @@ def run(
       total_runtime += (e - s).total_seconds()
       # buyers define their bids
       s = datetime.now()
-      bids, memory_bids = define_bids(
+      bids, memory_bids, n_auctions = define_bids(
         omega, 
         blackboard, 
         p, 
@@ -408,13 +265,15 @@ def run(
         auction_options, 
         latency,
         fairness,
-        np.zeros((Nn,Nn))
+        False
       )
       e = datetime.now()
+      rt = (e - s).total_seconds()
       if verbose > 1:
         print(
-          f"        define_bids: DONE; runtime = {(e - s).total_seconds()})", 
-          file = log_stream, 
+          f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
+          f"n_auctions = {n_auctions}; tot runtime = {rt})",
+          file = log_stream,
           flush = True
         )
         if verbose > 2:
@@ -423,9 +282,18 @@ def run(
       # sellers accept/reject bids
       if len(bids) > 0:
         s = datetime.now()
-        auction_y, p = evaluate_bids(
-          bids, blackboard, data, ell, p, capacity, u0, auction_options,
-          current_y=y,
+        auction_y, p, _, _ = evaluate_bids(
+          bids, 
+          blackboard, 
+          data, 
+          previous_y = y,
+          ell = ell, 
+          p = p, 
+          capacity = capacity, 
+          u0 = u0, 
+          auction_options = auction_options,
+          tentatively_start_replicas = False,
+          may_replace_existing_assignments = False
         )
         e = datetime.now()
         if verbose > 1:
@@ -452,7 +320,8 @@ def run(
           general_solver_options, 
           y, 
           rmp_omega,
-          parallelism
+          parallelism,
+          sp_x
         )
         total_runtime += spr_runtime
         if verbose > 1:
@@ -463,7 +332,7 @@ def run(
             flush = True
           )
         # -- update solution
-        sp_x, _, sp_r, sp_rho = spr_sol
+        _, _, _, _, sp_r, sp_rho = spr_sol # x, y, z, omega, r, rho
         for i in range(Nn):
           for f in range(Nf):
             omega[i,f] = sp_omega[i,f] - rmp_omega[i,f]
