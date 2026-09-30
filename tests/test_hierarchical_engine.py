@@ -50,7 +50,7 @@ def test_level2_rejects_non_neighbor_allocation(engine_class):
 
 
 def test_service_quantum_converts_tokens_to_capacity_quantity(engine_class):
-  neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
+  neighborhood = np.array([[0, 1, 1], [1, 0, 0], [1, 0, 0]], dtype=float)
   engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
@@ -76,6 +76,26 @@ def test_service_quantum_converts_tokens_to_capacity_quantity(engine_class):
   assert result.y[0, 2, 0] == 4.0
   assert result.omega[0, 0] == 0.0
   assert sum(a.tokens for a in result.accepted_allocations) == 2
+
+
+def test_full_level1_coverage_skips_higher_level_auctions(engine_class):
+  engine = engine_class(
+    neighborhood=np.ones((3, 3)) - np.eye(3),
+    num_functions=1,
+    service_quantum=np.ones(1),
+    max_depth=10,
+  )
+  result = engine.run_higher_levels(
+    y=np.zeros((3, 3, 1)),
+    omega=np.array([[2.], [0.], [0.]]),
+    residual_capacity=np.array([[0.], [0.], [5.]]),
+    node_prices=np.zeros((3, 1)),
+    latency=np.zeros((3, 3)),
+    fairness=np.zeros((3, 1)),
+  )
+  assert result.accepted_allocations == []
+  assert not result.y.any()
+  np.testing.assert_array_equal(result.omega, [[2.], [0.], [0.]])
 
 
 def test_higher_level_auction_never_allocates_to_same_node(engine_class):
@@ -112,7 +132,7 @@ def test_higher_level_auction_never_allocates_to_same_node(engine_class):
 
 
 def test_higher_level_auction_rejects_buyer_that_already_receives(engine_class):
-  neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
+  neighborhood = np.array([[0, 1, 1], [1, 0, 0], [1, 0, 0]], dtype=float)
   engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
@@ -146,7 +166,7 @@ def test_higher_level_auction_rejects_buyer_that_already_receives(engine_class):
 
 
 def test_higher_level_auction_rejects_seller_that_already_sends(engine_class):
-  neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
+  neighborhood = np.array([[0, 1, 1], [1, 0, 0], [1, 0, 0]], dtype=float)
   engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
@@ -180,7 +200,7 @@ def test_higher_level_auction_rejects_seller_that_already_sends(engine_class):
 
 
 def test_higher_level_auction_prefers_best_effective_seller(engine_class):
-  neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
+  neighborhood = np.array([[0, 1, 1], [1, 0, 0], [1, 0, 0]], dtype=float)
   engine = engine_class(
     neighborhood=neighborhood,
     num_functions=1,
@@ -257,7 +277,7 @@ def test_price_computed_correctly_in_zero_price_two_function_network(engine_clas
   The effective bid = max(0 + epsilon, 0) = epsilon > 0, so allocation
   must still happen for both functions.
   """
-  neighborhood = np.ones((3, 3), dtype=float) - np.eye(3)
+  neighborhood = np.array([[0, 1, 1], [1, 0, 0], [1, 0, 0]], dtype=float)
   engine = engine_class(
     neighborhood=neighborhood,
     num_functions=2,

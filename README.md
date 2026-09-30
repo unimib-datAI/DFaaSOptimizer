@@ -237,6 +237,70 @@ Each productive iteration spends at least one indivisible token, so the finite
 initial token budget bounds repetition without an extra convergence threshold.
 The external no-progress stopping rule above applies to both cycle variants.
 
+### MADEA-PG: auction initialization and welfare refinement
+
+Two separate methods reuse the best auction incumbent at each timestep:
+
+| Method | Auction phase | Objective column |
+| --- | --- | --- |
+| `faas-madea-pg` | FaaS-MADeA | `FaaS-MADeA-PG` |
+| `hierarchical-madea-level-cycles-pg` | HierarchicalMADeALevelCycles | `HierarchicalMADeALevelCyclesPG` |
+
+After the auction finishes, sequential potential-game proposals reconsider local
+processing, replica placement and outgoing requests. They reuse `LSP_pg` (or
+`LSP_pg_fixedr` for fixed-replica experiments) and preserve committed inbound
+traffic. Each node checks its own load, memory and processing constraints and
+accepts a proposal only if its own normalized utility increases. It uses residual
+capacity advertised by its neighbors; integer-flow models use integer slots.
+Other sources' served traffic stays fixed, so the local utility increase equals
+the global welfare increase. There is no global welfare comparison in move
+acceptance. Global scoring and feasibility checks run only for measurement and
+export after the refinement. The original auction methods do not run refinement.
+
+This is a sequential simulation of decentralized decisions, not a distributed
+runtime: shared arrays represent node state, neighbor advertisements and immediate
+capacity reservations. The simulation scheduler serializes moves. Monotonicity
+assumes current advertisements and atomic reservations; concurrent moves with
+stale capacity information would need a reservation/conflict protocol. The auction
+phase retains MADEA's existing global incumbent tracking and stopping checks.
+
+`solver_options.madea_pg` controls the refinement, with these defaults:
+
+```json
+{"max_sweeps": 5, "epsilon": 0.000001, "time_limit": 5.0}
+```
+
+Budgets reset at each timestep. `time_limit` is refinement wall time in seconds,
+capped by the remaining cumulative `solver_options.general.TimeLimit` budget.
+Alternatively, set `time_limit_per_node` to seconds per network node; when present,
+it replaces the fixed `time_limit`. For example, `{"time_limit_per_node": 0.25}`
+allocates 2.5 s for 10 nodes, 5 s for 20 and 10 s for 40, still capped by the
+remaining cumulative budget. The node count scales the sequential simulation's
+budget; it does not change the information used to accept local moves.
+Each local solve receives the remaining time. GLPK needs whole-second solve
+limits, so no new solve starts with less than one second left. Budget checks
+occur between node moves; bookkeeping and solver shutdown can exceed the limit.
+Zero sweeps or zero time disable refinement. A pass without an improving proposal
+also stops; this is not a certificate of global optimality or Nash equilibrium.
+
+`refinement.csv` records before/after welfare, accepted moves, sweeps, the effective
+`time_budget`, runtime and
+stopping reason for every timestep. `runtime.csv` includes both phases;
+`termination_condition.csv` retains the auction's stopping reason. Standard
+`LSPc` artifacts and `obj.csv` contain the final refined solution.
+
+```sh
+uv run --locked python madea_pg.py -c config_files/hierarchical_madea_cycles.json \
+  -j 0 --disable_plotting
+uv run --locked python madea_pg.py -c config_files/hierarchical_madea_cycles.json \
+  --variant hierarchical -j 0 --disable_plotting
+uv run --locked python run.py -c config_files/hierarchical_madea_cycles.json \
+  --methods faas-madea faas-madea-pg hierarchical-madea-level-cycles-pg \
+  --reference_method faas-madea --n_experiments 1 --loop_over Nn -j 0
+```
+
+The two methods also have distinct batch-resume slots and remote job mappings.
+
 ### Comparing approaches on planar graphs
 
 A ready-to-use configuration file is provided at

@@ -54,13 +54,17 @@ def compute_node_utility(
   ) -> float:
   """Node i's share of the centralized objective. Summing over all nodes
   yields exactly compute_centralized_objective (the exact potential)."""
-  xm = np.zeros_like(x)
-  ym = np.zeros_like(y)
-  zm = np.zeros_like(z)
-  xm[i, :] = x[i, :]
-  ym[i, :, :] = y[i, :, :]
-  zm[i, :] = z[i, :]
-  return compute_centralized_objective(sp_data, xm, ym, zm)
+  values = sp_data[None]
+  utility = 0.
+  for f in range(x.shape[1]):
+    load = values["incoming_load"][i + 1, f + 1] or 1
+    utility += (
+      values["alpha"].get((i + 1, f + 1), 0) * x[i, f]
+      - values["gamma"].get((i + 1, f + 1), 0) * z[i, f]
+      + sum(values["beta"].get((i + 1, j + 1, f + 1), 0) * y[i, j, f]
+            for j in range(y.shape[1]))
+    ) / load
+  return float(utility)
 
 
 def split_omega(
@@ -161,6 +165,7 @@ def node_move(
     epsilon: float,
     propose_fn: Callable,
     tolerance: float,
+    *, integer_flows: bool = False,
   ) -> Tuple[bool, float, dict, float]:
   """One better-response move. Rules that keep Phi an exact potential:
   the mover keeps serving committed inbound flows (enforced by LSP_pg via
@@ -178,6 +183,8 @@ def node_move(
   y_trial = np.array(y, dtype=float)
   y_trial[i, :, :] = 0.0
   _, ledger, _ = compute_residual_capacity(x, y_trial, r, sp_data)
+  if integer_flows:
+    ledger = np.floor(ledger + 1e-9)
   # FRALB no-ping-pong (validate_centralized_solution): a node must not both
   # send and receive the same function. Inductively (y starts at 0):
   # a neighbour currently offloading f is not a valid seller for f, and the

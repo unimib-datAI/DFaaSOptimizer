@@ -12,6 +12,7 @@ from decentralized_diffusion import run as run_diffusion
 from decentralized_powerd import run as run_powerd
 from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
 from decentralized_potentialgame import run_pg_s, run_pg_r
+from madea_pg import run as run_madea_pg, run_hierarchical as run_hierarchical_madea_pg
 from decentralized_gcaa import run as run_gcaa
 from plasma.runner import run as run_plasma
 from postprocessing import load_models_results
@@ -39,6 +40,8 @@ METHOD_RESULT_MODELS = {
   "faas-macro-v0": ("LSP", "FaaS-MACrO(v0)"),
   "faas-madea": ("LSPc", "FaaS-MADeA"),
   "faas-madea-1s": ("LSPc", "FaaS-MADeA(1s)"),
+  "faas-madea-pg": ("LSPc", "FaaS-MADeA-PG"),
+  "hierarchical-madea-level-cycles-pg": ("LSPc", "HierarchicalMADeALevelCyclesPG"),
   "hierarchical": ("LSPc", "HierarchicalAuction"),
   "hierarchical-madea": ("LSPc", "HierarchicalMADeA"),
   "hierarchical-madea-cycles": ("LSPc", "HierarchicalMADeACycles"),
@@ -106,6 +109,8 @@ def parse_arguments() -> argparse.Namespace:
       "faas-macro", 
       "faas-madea",
       "faas-madea-1s",
+      "faas-madea-pg",
+      "hierarchical-madea-level-cycles-pg",
       "hierarchical",
       "hierarchical-madea",
       "hierarchical-madea-cycles",
@@ -1160,11 +1165,22 @@ def run(
       run_pgr = "faas-pg-r" in methods
       run_g = "faas-gcaa" in methods
       run_pl = "plasma" in methods
+    pending_refinements = {
+      method: runner for method, runner in (
+        ("faas-madea-pg", run_madea_pg),
+        ("hierarchical-madea-level-cycles-pg", run_hierarchical_madea_pg),
+      )
+      if not generate_only and method in methods and (
+        experiment_idx is None
+        or len(solution_folders.get(method, [])) <= experiment_idx
+        or solution_folders[method][experiment_idx] is None
+      )
+    }
     # if the experiment is still to run...
     if (run_c or run_sc or run_i or run_i_v0 or run_a or run_a1s or run_h or \
         run_hm or run_hmc or run_hmlc or run_d or run_p or run_brs or \
           run_brr or run_bro or run_pgs or run_pgr or run_g or run_pl or \
-            generate_only
+            generate_only or pending_refinements
       ):
       # -- update configuration
       config = deepcopy(base_config)
@@ -1427,6 +1443,11 @@ def run(
         set_solution_folder(
           solution_folders, "plasma", experiment_idx, pl_folder
         )
+      for method, refinement_runner in pending_refinements.items():
+        folder = refinement_runner(
+          config, sp_parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
+        )
+        set_solution_folder(solution_folders, method, experiment_idx, folder)
       # -- save info
       if experiment_idx is None:
         solution_folders["experiments_list"].append([exp_value, seed])

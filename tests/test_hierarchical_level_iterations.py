@@ -8,25 +8,34 @@ from hierarchical_auction.token_manager import CapacityTokenManager
 from hierarchical_auction.types import TokenRequest
 
 
+def _neighborhood():
+  # Five auction participants plus an idle tail: coverage grows at levels 2 and 3.
+  graph = np.zeros((9, 9))
+  graph[:5, :5] = np.ones((5, 5)) - np.eye(5)
+  for i, j in [(0, 5), (5, 6), (6, 7), (7, 8)]:
+    graph[i, j] = graph[j, i] = 1
+  return graph
+
+
 def _inputs(demand=(1., 1., 1., 0., 0.)):
   return dict(
-    y=np.zeros((5, 5, 1)), omega=np.array(demand).reshape(5, 1),
-    residual_capacity=np.array([[0.], [0.], [0.], [1.], [1.]]),
-    node_prices=np.zeros((5, 1)), latency=np.zeros((5, 5)),
-    fairness=np.zeros((5, 1)),
+    y=np.zeros((9, 9, 1)), omega=np.pad(demand, (0, 4)).reshape(9, 1),
+    residual_capacity=np.array([0., 0., 0., 1., 1., 0., 0., 0., 0.]).reshape(9, 1),
+    node_prices=np.zeros((9, 1)), latency=np.zeros((9, 9)),
+    fairness=np.zeros((9, 1)),
   )
 
 
 def _engine(depth=3, **options):
   from hierarchical_auction.iterative_engine import IterativeHierarchicalAuctionEngine
   return IterativeHierarchicalAuctionEngine(
-    np.ones((5, 5)) - np.eye(5), 1, np.ones(1), max_depth=depth,
+    _neighborhood(), 1, np.ones(1), max_depth=depth,
     auction_options={"eta": 0., "epsilon": 0.01, **options},
   )
 
 
 def test_level_repeats_until_no_allocations_then_advances_with_state(monkeypatch):
-  engine = _engine()
+  engine = _engine(depth=10)
   inputs = _inputs()
   snapshots = []
   real_generate = engine._generate_level_requests
@@ -47,6 +56,7 @@ def test_level_repeats_until_no_allocations_then_advances_with_state(monkeypatch
 
   # Round 1: seller 4 is contested. Seller 3 retains a token, used in round 2.
   # Round 3 finds no allocation; only then can level 3 start.
+  # Level 3 covers the network, so level 4 must not run despite residual demand.
   assert [s["level"] for s in snapshots] == [2, 2, 2, 3]
   assert [s["y"].sum() for s in snapshots] == [0., 1., 2., 2.]
   assert [s["omega"].sum() for s in snapshots] == [3., 2., 1., 1.]
@@ -61,7 +71,7 @@ def test_level_repeats_until_no_allocations_then_advances_with_state(monkeypatch
   np.testing.assert_allclose(result.y.sum(axis=1) + result.omega, inputs["omega"])
   assert (result.y.sum(axis=0) <= inputs["residual_capacity"]).all()
   assert not inputs["y"].any()  # callers' arrays must not be mutated
-  np.testing.assert_array_equal(inputs["omega"].ravel(), [1., 1., 1., 0., 0.])
+  np.testing.assert_array_equal(inputs["omega"].ravel(), [1., 1., 1., 0., 0., 0., 0., 0., 0.])
 
 
 def test_empty_current_level_does_not_prevent_next_level_allocation(monkeypatch):
@@ -101,7 +111,7 @@ def test_fulfilled_demand_finishes_without_spurious_level_advancement(monkeypatc
 
 def test_legacy_engine_keeps_single_iteration_per_level(monkeypatch):
   engine = HierarchicalAuctionEngine(
-    np.ones((5, 5)) - np.eye(5), 1, np.ones(1), max_depth=3,
+    _neighborhood(), 1, np.ones(1), max_depth=10,
     auction_options={"eta": 0., "epsilon": 0.01},
   )
   levels = []
@@ -132,7 +142,7 @@ def test_pending_offers_are_round_local_but_committed_capacity_persists():
 def test_engine_discards_rejected_duplicate_offers_without_restoring_tokens(monkeypatch):
   engine = _engine()
   inputs = _inputs((3., 0., 0., 0., 0.))
-  inputs["residual_capacity"][:, 0] = [0, 0, 0, 3, 2]
+  inputs["residual_capacity"][:5, 0] = [0, 0, 0, 3, 2]
   managers = []
   generate = engine._generate_level_requests
 
@@ -156,22 +166,25 @@ def test_runner_enters_iterative_engine_only_after_complete_madea_phase(tmp_path
   from hierarchical_auction import madea_level_cycles_runner as runner
   from hierarchical_auction.iterative_engine import IterativeHierarchicalAuctionEngine
 
-  n = 5
+  neighborhood = _neighborhood()
+  n = len(neighborhood)
   nodes = range(1, n + 1)
   inputs = _inputs()
   data = {None: {
     "Nn": {None: n}, "Nf": {None: 1},
     "incoming_load": {(i, 1): float(inputs["omega"][i - 1, 0]) for i in nodes},
-    "neighborhood": {(i, j): int(i != j) for i in nodes for j in nodes},
+    "neighborhood": {(i, j): int(neighborhood[i - 1, j - 1]) for i in nodes for j in nodes},
     "demand": {(i, 1): 1. for i in nodes},
-    "memory_capacity": {i: int(i >= 4) for i in nodes},
+    "memory_capacity": {i: int(i in (4, 5)) for i in nodes},
     "memory_requirement": {1: 1}, "max_utilization": {1: 1.},
     "alpha": {(i, 1): 1. for i in nodes},
     "gamma": {(i, 1): 1. for i in nodes},
     "delta": {(i, 1): 0. for i in nodes},
     "beta": {(i, j, 1): 1. for i in nodes for j in nodes},
   }}
-  monkeypatch.setattr(shared, "init_problem", lambda *a: (data, {}, list(range(n)), nx.complete_graph(n)))
+  monkeypatch.setattr(shared, "init_problem", lambda *a: (
+    data, {}, list(range(n)), nx.from_numpy_array(neighborhood),
+  ))
   monkeypatch.setattr(shared, "get_current_load", lambda *a: data[None]["incoming_load"])
   monkeypatch.setattr(shared, "solve_subproblem", lambda *a: (
     data, np.zeros((n, 1)), None, None, inputs["omega"].copy(),
@@ -216,5 +229,5 @@ def test_runner_enters_iterative_engine_only_after_complete_madea_phase(tmp_path
     ("level", 2), ("level", 2), ("level", 2), ("level", 3),
     "madea", ("check", True, "all load assigned"),
   ]
-  np.testing.assert_array_equal(demands[-1].ravel(), [0., 0., 1., 0., 0.])
+  np.testing.assert_array_equal(demands[-1].ravel(), [0., 0., 1., 0., 0., 0., 0., 0., 0.])
   assert pd.read_csv(f"{folder}/obj.csv")["HierarchicalMADeALevelCycles"].tolist() == [1.]
