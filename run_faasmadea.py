@@ -402,13 +402,14 @@ def evaluate_bids(
     all_bids_for_j = bids[(bids["j"] == j)].sort_values(
       by = "b", ascending = False
     )
+    bid_rows = all_bids_for_j.to_records(index=False)
     remaining_capacities = blackboard[j,:].astype(int).copy()
     all_min_b = all_bids_for_j.groupby("f")["b"].max()
     next_bid_idx = 0
     # loop over bids until there is remaining capacity
     while next_bid_idx < len(all_bids_for_j) and \
         (remaining_capacities > 0).any():
-      bid = all_bids_for_j.iloc[next_bid_idx]
+      bid = bid_rows[next_bid_idx]
       i = int(bid["i"])
       f = int(bid["f"])
       next_bid_idx += 1
@@ -430,8 +431,8 @@ def evaluate_bids(
       ):
       if tentatively_start_replicas and rho[j] > 0:
         while next_bid_idx < len(all_bids_for_j):
-          i = int(all_bids_for_j.iloc[next_bid_idx]["i"])
-          f = int(all_bids_for_j.iloc[next_bid_idx]["f"])
+          i = int(bid_rows[next_bid_idx]["i"])
+          f = int(bid_rows[next_bid_idx]["f"])
           current_a = int(additional_replicas[j,f])
           max_a = current_a + int(rho[j]/data[None]["memory_requirement"][f+1])
           managed = False
@@ -440,7 +441,7 @@ def evaluate_bids(
             a = max(current_a, 1)
             while a <= max_a and not managed:
               # -- check utilization with one more replica
-              q = all_bids_for_j.iloc[next_bid_idx]["d"]
+              q = bid_rows[next_bid_idx]["d"]
               u = data[None]["demand"][(j+1,f+1)] * (
                 ell[j,f] + y[:,j,f].sum() + q
               ) / (r[j,f] + a)
@@ -448,7 +449,7 @@ def evaluate_bids(
                 # -- if possible, accomodate one more bid...
                 y[i,j,f] += q
                 all_min_b[f] = min(
-                  all_min_b[f], all_bids_for_j.iloc[next_bid_idx]["b"]
+                  all_min_b[f], bid_rows[next_bid_idx]["b"]
                 )
                 sending[i,f] = True
                 receiving[j,f] = True
@@ -650,6 +651,7 @@ def run_madea_cycle(
   stop_searching = False
   n_accepted_queue = deque(maxlen=patience)
   odev_queue = deque(maxlen=patience)
+  cached_welfare = None
   while not stop_searching:
     if verbose > 0:
       print(f"    it = {it}", file = log_stream, flush = True)
@@ -740,17 +742,26 @@ def run_madea_cycle(
         raise RuntimeError(
           f"LSPr infeasible from fixed y assignments: {bad_nodes}"
         )
-      spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
-        spr,
-        sp_data,
-        agents,
-        solver_name,
-        general_solver_options,
-        y,
-        rmp_omega,
-        parallelism,
-        sp_x
-      )
+      # Data and local processing stay fixed within this cycle; only y changes.
+      if cached_welfare is not None and np.array_equal(y, cached_welfare[0]):
+        spr_sol, spr_obj, spr_tc = deepcopy(cached_welfare[1:])
+        spr_runtime = 0.0
+      else:
+        spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
+          spr,
+          sp_data,
+          agents,
+          solver_name,
+          general_solver_options,
+          y,
+          rmp_omega,
+          parallelism,
+          sp_x
+        )
+        # Retry unfinished solves; keep replicas separate from later mutations.
+        cached_welfare = (
+          y.copy(), deepcopy(spr_sol), spr_obj, spr_tc,
+        ) if set(str(spr_tc).split("-")) == {"optimal"} else None
       total_runtime += spr_runtime
       if verbose > 1:
         print(
@@ -890,8 +901,10 @@ def run(
     config: dict, 
     parallelism: int,
     log_on_file: bool = False, 
-    disable_plotting: bool = False
+    disable_plotting: bool = False,
+    *, refine_welfare: bool = False,
   ):
+  refinement_history = []
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
   limits = config["limits"]
@@ -1005,6 +1018,13 @@ def run(
     sp_complete_solution, _, objf = decode_solutions(
       sp_data, state.best_solution_so_far, sp_complete_solution, None,
     )
+    if refine_welfare:
+      from madea_pg import refine_solution
+      state.best_centralized_solution, refinement = refine_solution(
+        sp_data, state.best_centralized_solution, config, time_limit - total_runtime,
+      )
+      total_runtime += refinement["seconds"]
+      refinement_history.append({"time": t, **refinement})
     spc_complete_solution, _, objc = decode_solutions(
       sp_data, state.best_centralized_solution, spc_complete_solution, None,
     )
@@ -1070,7 +1090,10 @@ def run(
     solution_folder
   )
   # save objective function values
-  pd.DataFrame(obj_dict["LSPr_final"], columns = ["FaaS-MADeA"]).to_csv(
+  result_name = "FaaS-MADeA-PG" if refine_welfare else "FaaS-MADeA"
+  if refine_welfare:
+    pd.DataFrame(refinement_history).to_csv(os.path.join(solution_folder, "refinement.csv"), index=False)
+  pd.DataFrame(obj_dict["LSPr_final"], columns = [result_name]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index = False
   )
   # save models termination condition

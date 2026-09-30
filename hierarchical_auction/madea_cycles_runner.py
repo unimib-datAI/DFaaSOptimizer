@@ -67,8 +67,10 @@ def _run(
     *,
     engine_class: type[HierarchicalAuctionEngine],
     result_name: str,
+    refine_welfare: bool = False,
   ) -> str:
   """Shared cycle orchestration; variants select an engine and output column."""
+  refinement_history = []
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
   limits = config["limits"]
@@ -248,6 +250,13 @@ def _run(
           )
       completed_cycles += 1
 
+    if refine_welfare:
+      from madea_pg import refine_solution
+      state.best_centralized_solution, refinement = refine_solution(
+        sp_data, state.best_centralized_solution, config, time_limit - state.total_runtime,
+      )
+      state.total_runtime += refinement["seconds"]
+      refinement_history.append({"time": t, **refinement})
     complete_solution, _, objective = decode_solutions(
       sp_data, state.best_centralized_solution, complete_solution, None,
     )
@@ -292,6 +301,8 @@ def _run(
   pd.DataFrame({result_name: objectives}).to_csv(
     os.path.join(solution_folder, "obj.csv"), index=False,
   )
+  if refine_welfare:
+    pd.DataFrame(refinement_history).to_csv(os.path.join(solution_folder, "refinement.csv"), index=False)
   pd.DataFrame(termination_conditions).to_csv(
     os.path.join(solution_folder, "termination_condition.csv"),
   )

@@ -21,6 +21,7 @@ def test_all_algorithms_are_mapped():
     "hierarchical-madea", "hierarchical-madea-cycles", "hierarchical-madea-level-cycles",
     "faas-diffuse", "faas-powd", "faas-br-s", "faas-br-r", "faas-br-o",
     "faas-pg-s", "faas-pg-r", "faas-gcaa", "plasma",
+    "faas-madea-pg", "hierarchical-madea-level-cycles-pg",
   }
   assert set(SCRIPT_BY_ALGORITHM) == expected
 
