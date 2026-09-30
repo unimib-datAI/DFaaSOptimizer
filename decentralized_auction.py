@@ -318,7 +318,7 @@ def run(
         best_it_so_far = it
         if verbose > 0:
           print(
-            f"        best solution updated; obj = {cobj}",
+            f"        best solution updated; obj = {spr_obj}",
             file = log_stream,
             flush = True
           )
