@@ -64,11 +64,13 @@ class StructureGraph:
     prev_level: dict[int, Structure],
     num_functions: int,
   ) -> dict[int, Structure]:
+    """Return the next level, or no level if no structure gains members."""
     if not prev_level:
       return {}
 
     new_level_num = max(s.level for s in prev_level.values()) + 1
     structures: dict[int, Structure] = {}
+    expanded = False
 
     for root, s_prev in prev_level.items():
       if not s_prev.adjacent_structures:
@@ -78,6 +80,7 @@ class StructureGraph:
       for adj_root in s_prev.adjacent_structures:
         if adj_root in prev_level:
           merged_members.update(prev_level[adj_root].member_nodes)
+      expanded |= merged_members != s_prev.member_nodes
 
       structures[root] = Structure(
         level=new_level_num,
@@ -87,5 +90,7 @@ class StructureGraph:
         num_functions=num_functions,
       )
 
+    if not expanded:
+      return {}
     self.build_adjacency(structures)
     return structures

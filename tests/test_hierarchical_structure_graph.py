@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from hierarchical_auction.structure_graph import StructureGraph
 
@@ -36,3 +37,23 @@ def test_aggregation_rebuilds_adjacency_for_new_level():
   assert all(s.level == 2 for s in level2.values())
   assert level1[0].member_nodes.issubset(level2[0].member_nodes)
   assert all(root not in s.adjacent_structures for root, s in level2.items())
+
+
+@pytest.mark.parametrize("size, edges, expected_levels", [
+  (3, [(0, 1), (1, 2), (0, 2)], 1),  # Already complete at level 1.
+  (3, [(0, 1), (1, 2)], 2),  # One full structure must not stop the others.
+  (9, [(i, i + 1) for i in range(8)], 3),
+  (7, [(0, 1), (1, 2), (3, 4), (4, 5)], 2),  # Components + isolated node.
+  (1, [], 1),
+])
+def test_aggregation_stops_when_no_structure_can_expand(size, edges, expected_levels):
+  graph = np.zeros((size, size))
+  for i, j in edges:
+    graph[i, j] = graph[j, i] = 1
+  sg = StructureGraph(graph)
+  structures = sg.build_level1(num_functions=1)
+  for level in range(2, expected_levels + 1):
+    structures = sg.aggregate_to_next_level(structures, num_functions=1)
+    assert structures
+    assert all(s.level == level for s in structures.values())
+  assert sg.aggregate_to_next_level(structures, num_functions=1) == {}

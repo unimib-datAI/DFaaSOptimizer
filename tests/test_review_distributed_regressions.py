@@ -125,8 +125,10 @@ def test_greedy_adapter_accounts_for_prior_rejections():
 
 
 def test_overlapping_structures_do_not_spend_tokens_on_duplicate_demand():
+  neighborhood = np.ones((4, 4)) - np.eye(4)
+  neighborhood[0, 1] = neighborhood[1, 0] = 0
   engine = HierarchicalAuctionEngine(
-    np.ones((4, 4)) - np.eye(4), 1, np.ones(1), max_depth=2,
+    neighborhood, 1, np.ones(1), max_depth=2,
     auction_options={"latency_weight": 1.0, "epsilon": 1.0},
   )
   latency = np.zeros((4, 4))
