@@ -301,6 +301,71 @@ uv run --locked python run.py -c config_files/hierarchical_madea_cycles.json \
 
 The two methods also have distinct batch-resume slots and remote job mappings.
 
+### PLASMA-Welfare: local allocation with marginal-value reservations
+
+`plasma-welfare` is a separate PLASMA-derived method, exported as
+`Plasma-Welfare`. It replaces conductance routing and the provisioning Hamiltonian
+with marginal-value offers and exact local RAM allocation. It reuses PLASMA's
+node parameters, heartbeat transport, round clock, replica knapsack and result
+format. The existing `plasma` method keeps its behavior.
+
+At each timestep, nodes first allocate replicas to their own current workload.
+A receiver then requests offers from its fresh neighbors. A source offers batches
+of rejected requests at `(beta + gamma) / load`, or locally served requests at
+`(beta - alpha) / load` when positive. These are the source's actual welfare
+gains per accepted request. Offers carry only the function, quantity, marginal
+gain, fallback kind and reservation identity; the receiver has no access to the
+source's model or other nodes' state. Neighbor messages carry these offers in
+addition to the unchanged heartbeat protocol.
+
+The receiver jointly chooses its replicas, own processing and accepted offers
+under its own RAM and processing limits. Previously accepted inbound traffic is
+mandatory, and a node cannot both send and receive the same function. Sources
+lock their offered quantities, all confirmations are checked before committing,
+and unused reservations are released. Epochs reject stale confirmations and a
+committed reservation cannot be applied twice. Each receiver accepts only if its
+own utility change plus the gains advertised by the participating sources exceeds
+`epsilon`. A receiver may sacrifice some own utility for a larger gain at a
+neighbor: the method optimizes social welfare, not individual rationality at
+every node. Global welfare is calculated only by the output observer.
+
+For fixed arrivals within a timestep, truthful offers and atomic commits make
+each accepted transaction strictly increase the same welfare reported by MADEA.
+Integer allocations give a finite state space. This does not certify a global
+optimum or Nash equilibrium: accepted inbound commitments are not evicted, offers
+exclude individually harmful source moves, and the round budget can stop early.
+Allocations are rebuilt for each new workload snapshot; there is no monotonicity
+claim across changing loads.
+
+The implementation is a sequential simulation with rotating node turns, not a
+deployed asynchronous protocol. Heartbeat delay/loss is modeled; reservation,
+prepare, commit and release RPCs are reliable and atomic within a transaction.
+A distributed deployment needs durable transaction recovery before that assumption
+can be relaxed. Message counts include request/reply pairs and heartbeats, not
+one message per request in a batch. Replica optimization uses integer RAM units
+and does not require Gurobi.
+
+Options are independent of the original PLASMA options:
+
+```json
+"plasma_welfare": {
+  "W": 1.0, "rounds_per_step": 20, "epsilon": 0.000001,
+  "hb_latency_rounds": 1, "hb_loss": 0.0, "staleness_rounds": 3
+}
+```
+
+Place this block inside `solver_options`. Each round negotiates the same workload
+snapshot; `W` scales the requests and capacity of that window. The termination
+record says `round budget exhausted`, not `converged`. In addition to standard
+`LSPc` artifacts, `plasma_welfare.csv` records accepted transactions and rounds;
+`plasma_messages.csv` records communication counts per simulated second.
+
+```sh
+uv run --locked python -m plasma.welfare -c config_files/plasma_welfare.json
+uv run --locked python run.py -c config_files/plasma_welfare.json \
+  --methods plasma-welfare --reference_method plasma-welfare --n_experiments 1 -j 0
+```
+
 ### Comparing approaches on planar graphs
 
 A ready-to-use configuration file is provided at

@@ -1,6 +1,7 @@
 # Configuration files
 config_files/*
 !config_files/hierarchical_madea_cycles.json
+!config_files/plasma_welfare.json
 
 # Data and solution files
 solutions/*

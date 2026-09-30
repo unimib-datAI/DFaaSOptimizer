@@ -131,9 +131,17 @@ def exact_minimize(ctx: HamiltonianContext, r_max: np.ndarray) -> np.ndarray:
   # multi-choice knapsack DP over the integer RAM budget: exact argmin of the
   # Hamiltonian under the hard RAM constraint (per-node problem is separable
   # per function; RAM is the only coupling)
-  ram_req = np.rint(ctx.ram_req).astype(int)
-  budget = int(np.floor(ctx.ram_cap + 1e-9))
-  if not np.allclose(ctx.ram_req, ram_req, atol=1e-9) or (ram_req <= 0).any():
+  return minimize_replica_costs(
+    [_level_values(ctx, f, int(m)) for f, m in enumerate(r_max)],
+    ctx.ram_req, ctx.ram_cap,
+  )
+
+
+def minimize_replica_costs(costs, memory, ram_cap: float) -> np.ndarray:
+  """Local multi-choice knapsack; costs[f][r] may be +inf to forbid a level."""
+  ram_req = np.rint(memory).astype(int)
+  budget = int(np.floor(ram_cap + 1e-9))
+  if not np.allclose(memory, ram_req, atol=1e-9) or (ram_req <= 0).any():
     raise ValueError(
       "exact_minimize requires positive integer ram_req; use sbm_method 'dsb'"
     )
@@ -141,15 +149,15 @@ def exact_minimize(ctx: HamiltonianContext, r_max: np.ndarray) -> np.ndarray:
   scale = int(np.gcd.reduce(ram_req))
   ram_req = ram_req // scale
   budget = budget // scale
-  Nf = len(r_max)
+  Nf = len(costs)
   INF = np.inf
   best = np.full(budget + 1, 0.0)  # value of best partial assignment
   choice = np.zeros((Nf, budget + 1), dtype=int)
   for f in range(Nf):
-    values = _level_values(ctx, f, int(r_max[f]))
+    values = costs[f]
     new_best = np.full(budget + 1, INF)
     for b in range(budget + 1):
-      k_hi = min(int(r_max[f]), b // ram_req[f])
+      k_hi = min(len(values) - 1, b // ram_req[f])
       for k in range(k_hi + 1):
         cand = best[b - k * ram_req[f]] + values[k]
         if cand < new_best[b]:
@@ -157,6 +165,8 @@ def exact_minimize(ctx: HamiltonianContext, r_max: np.ndarray) -> np.ndarray:
           choice[f, b] = k
     best = new_best
   # backtrack from the best final budget
+  if not np.isfinite(best).any():
+    raise ValueError("No feasible local replica allocation")
   b = int(np.argmin(best))
   r = np.zeros(Nf, dtype=int)
   for f in range(Nf - 1, -1, -1):

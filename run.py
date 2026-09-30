@@ -14,6 +14,7 @@ from decentralized_potentialgame import run_pg_s, run_pg_r
 from madea_pg import run as run_madea_pg, run_hierarchical as run_hierarchical_madea_pg
 from decentralized_gcaa import run as run_gcaa
 from plasma.runner import run as run_plasma
+from plasma.welfare import run as run_plasma_welfare
 from postprocessing import load_models_results
 from utils.common import reconcile_paths
 
@@ -53,6 +54,7 @@ METHOD_RESULT_MODELS = {
   "faas-pg-r": ("LSPc", "FaaS-MAPG-R"),
   "faas-gcaa": ("LSPc", "FaaS-MAGCAA"),
   "plasma": ("LSPc", "Plasma"),
+  "plasma-welfare": ("LSPc", "Plasma-Welfare"),
 }
 
 # The centralized run saves its solution under the model's own name, which
@@ -117,6 +119,7 @@ def parse_arguments() -> argparse.Namespace:
       "faas-pg-r",
       "faas-gcaa",
       "plasma",
+      "plasma-welfare",
       "generate_only"
     ],
     required = True
@@ -1153,6 +1156,7 @@ def run(
       method: runner for method, runner in (
         ("faas-madea-pg", run_madea_pg),
         ("hierarchical-madea-level-cycles-pg", run_hierarchical_madea_pg),
+        ("plasma-welfare", run_plasma_welfare),
       )
       if not generate_only and method in methods and (
         experiment_idx is None

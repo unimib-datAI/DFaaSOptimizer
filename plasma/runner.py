@@ -21,7 +21,7 @@ from plasma.core.types import PlasmaOptions
 from plasma.engine import PlasmaEngine
 
 
-def build_nodes(base_instance_data: dict, opts: PlasmaOptions, seed: int):
+def build_nodes(base_instance_data: dict, opts: PlasmaOptions, seed: int, *, node_class=PlasmaNode):
   d = base_instance_data[None]
   Nn = d["Nn"][None]
   Nf = d["Nf"][None]
@@ -44,7 +44,7 @@ def build_nodes(base_instance_data: dict, opts: PlasmaOptions, seed: int):
       u_max=u_max, ram_cap=float(d["memory_capacity"][i + 1]),
       ram_req=np.array([d["memory_requirement"][f + 1] for f in range(Nf)]),
     )
-    node = PlasmaNode(params, opts, np.random.default_rng(seed * 1000 + i))
+    node = node_class(params, opts, np.random.default_rng(seed * 1000 + i))
     node.init_replicas()
     nodes.append(node)
   return nodes
@@ -52,7 +52,7 @@ def build_nodes(base_instance_data: dict, opts: PlasmaOptions, seed: int):
 
 def run(
     config: dict, parallelism: int, log_on_file: bool = False,
-    disable_plotting: bool = False
+    disable_plotting: bool = False, *, welfare: bool = False,
   ) -> str:
   # parallelism: accepted for signature compatibility with the other method
   # runners (decentralized_gcaa.run and friends); PLASMA is a single-process
@@ -67,7 +67,11 @@ def run(
   max_run_time = config.get("max_run_time", max_steps)
   run_time_step = config.get("run_time_step", 1)
   checkpoint_interval = config["checkpoint_interval"]
-  opts = PlasmaOptions.from_config(config)
+  if welfare:
+    from plasma.welfare import WelfareOptions, WelfareNode, WelfareEngine
+    opts = WelfareOptions.from_config(config)
+  else:
+    opts = PlasmaOptions.from_config(config)
   now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")
   solution_folder = f"{base_solution_folder}/{now}"
   os.makedirs(solution_folder, exist_ok=True)
@@ -82,8 +86,12 @@ def run(
   d = base_instance_data[None]
   Nn = d["Nn"][None]
   Nf = d["Nf"][None]
-  nodes = build_nodes(base_instance_data, opts, seed)
-  engine = PlasmaEngine(nodes, opts, np.random.default_rng(seed))
+  if welfare:
+    nodes = build_nodes(base_instance_data, opts, seed, node_class=WelfareNode)
+    engine = WelfareEngine(nodes, opts, np.random.default_rng(seed))
+  else:
+    nodes = build_nodes(base_instance_data, opts, seed)
+    engine = PlasmaEngine(nodes, opts, np.random.default_rng(seed))
   ram_cap = np.array([d["memory_capacity"][n + 1] for n in range(Nn)])
   ram_req = np.array([d["memory_requirement"][f + 1] for f in range(Nf)])
   demand = np.array([
@@ -93,6 +101,7 @@ def run(
   obj_list = []
   runtime_list = []
   msg_rows = []
+  trade_rows = []
   ub = (
     max_run_time + run_time_step
   ) if max_run_time == min_run_time else max_run_time
@@ -111,6 +120,9 @@ def run(
     started = datetime.now()
     res = engine.run_rounds(opts.rounds_per_step, arrivals)
     elapsed = (datetime.now() - started).total_seconds()
+    if welfare:
+      trade_rows.append({'time': t, 'rounds': opts.rounds_per_step,
+                         'accepted_trades': engine.accepted_trades})
     omega = res.y.sum(axis=1)
     with np.errstate(divide="ignore", invalid="ignore"):
       U = np.where(
@@ -136,15 +148,16 @@ def run(
       save_checkpoint(cs, os.path.join(solution_folder, "LSPc"), t)
   solution, offloaded, detailed_fwd = join_complete_solution(cs)
   save_solution(solution, offloaded, cs, detailed_fwd, "LSPc", solution_folder)
-  pd.DataFrame(obj_list, columns=["Plasma"]).to_csv(
+  pd.DataFrame(obj_list, columns=["Plasma-Welfare" if welfare else "Plasma"]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index=False
   )
   # format matches results_postprocessing's shared parser (run.py
   # load_termination_condition): "{criterion} (it: {iteration}; obj.
   # deviation: {deviation})" -- PLASMA always runs the full rounds_per_step
   # budget each step, there is no separate convergence criterion
+  criterion = "round budget exhausted" if welfare else "converged"
   pd.DataFrame(
-    [f"converged (it: {opts.rounds_per_step}; obj. deviation: {None})"]
+    [f"{criterion} (it: {opts.rounds_per_step}; obj. deviation: {None})"]
     * len(obj_list)
   ).to_csv(os.path.join(solution_folder, "termination_condition.csv"))
   pd.DataFrame({"tot": runtime_list}).to_csv(
@@ -153,6 +166,8 @@ def run(
   pd.DataFrame(msg_rows).to_csv(
     os.path.join(solution_folder, "plasma_messages.csv"), index=False
   )
+  if welfare:
+    pd.DataFrame(trade_rows).to_csv(os.path.join(solution_folder, 'plasma_welfare.csv'), index=False)
   if verbose > 0:
     print(f"All solutions saved in: {solution_folder}", file=log_stream,
           flush=True)
