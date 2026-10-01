@@ -1,0 +1,243 @@
+"""Summarize complete paired family experiments without weighting repeats twice."""
+from argparse import ArgumentParser
+from pathlib import Path
+import json
+
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+METHODS = ['MADEA', 'MADEA-one-shot', 'MADEA-PG', 'PLASMA-Welfare']
+
+
+def markdown_table(frame):
+  rows = [' | '.join(map(str, frame.columns)), ' | '.join(['---'] * len(frame.columns))]
+  rows.extend(' | '.join(map(str, row)) for row in frame.itertuples(index=False, name=None))
+  return '\n'.join('| ' + row + ' |' for row in rows)
+
+
+def run(source, output, pilot):
+  output.mkdir(parents=True, exist_ok=True)
+  runs = pd.read_csv(source / 'runs.csv')
+  methods = METHODS + [method for method in ('one-shot-pg', 'hierarchical-one-shot-pg')
+                       if runs.method.eq(method).any()]
+  steps = pd.read_csv(source / 'timesteps.csv')
+  protocol = json.loads((source / 'protocol.json').read_text())
+  valid_ids = []
+  for identifier, group in runs.groupby('case_id'):
+    if (len(group) == len(methods) and set(group.method) == set(methods)
+        and group.status.eq('ok').all()):
+      assert group.input_hash.nunique() == 1 and group.feasible.all()
+      valid_ids.append(identifier)
+  paired_runs = runs[runs.case_id.isin(valid_ids)].copy()
+  paired_steps = steps[steps.case_id.isin(valid_ids)].copy()
+  assert paired_steps.feasible.all()
+  assert paired_steps.groupby(['case_id', 'step']).input_requests.nunique().eq(1).all()
+  assert paired_steps.groupby(['case_id', 'step']).method.nunique().eq(len(methods)).all()
+  assert np.allclose(paired_steps.input_requests,
+                     paired_steps.served_requests + paired_steps.rejected_requests)
+  for frame, name in ((runs.drop(columns=['folder'], errors='ignore'), 'runs.csv'),
+                      (steps, 'timesteps.csv'), (paired_runs.drop(columns=['folder']), 'paired_runs.csv')):
+    frame.to_csv(output / name, index=False)
+  (output / 'protocol.json').write_text(json.dumps(protocol, indent=2))
+  keys = ['phase', 'nodes', 'functions', 'seed', 'repeat', 'case_id', 'step']
+  welfare = paired_steps.pivot(index=keys, columns='method', values='welfare')[methods]
+  gains = (welfare.div(welfare.MADEA, axis=0) - 1) * 100
+  welfare.to_csv(output / 'welfare.csv')
+  gains.to_csv(output / 'gain_vs_madea_pct.csv')
+  summary_rows = []
+  sections = []
+  for phase in ('static', 'stress', 'temporal'):
+    subset = paired_steps[paired_steps.phase.eq(phase)]
+    times = paired_runs[paired_runs.phase.eq(phase)]
+    if subset.empty:
+      continue
+    groups = ['nodes', 'functions'] + (['load_scale'] if phase == 'stress' else [])
+    w = subset.groupby(groups + ['method']).welfare.mean().unstack('method')[methods]
+    # Timing repeats belong to the same static instance, never an extra welfare sample.
+    if phase == 'static':
+      times = paired_runs[paired_runs.phase.isin(['static', 'repeat'])]
+      times = times.groupby(['nodes', 'functions', 'seed', 'method'], as_index=False).wall_seconds.median()
+    t = times.groupby(groups + ['method']).wall_seconds.median().unstack('method')[methods]
+    table = w.reset_index()[groups].copy()
+    table['Seed'] = subset.groupby(groups).seed.nunique().reindex(w.index).to_numpy()
+    table = table.rename(columns={'nodes':'Nodi', 'functions':'Funzioni',
+                                  'load_scale':'Moltiplicatore'})
+    for method in methods:
+      table[method] = [f'{value:.1f} ({seconds:.2f} s)'
+                       for value, seconds in zip(w[method], t[method])]
+    for idx in w.index:
+      values = idx if isinstance(idx, tuple) else (idx,)
+      row = dict(zip(groups, values), phase=phase)
+      for method in methods:
+        row[f'{method}_welfare_mean'] = float(w.loc[idx, method])
+        row[f'{method}_wall_median'] = float(t.loc[idx, method])
+      summary_rows.append(row)
+    title = {'static':'Carico standard', 'stress':'Carico più basso e più alto',
+             'temporal':'Tre timestep con carico variabile'}[phase]
+    sections.append(f'## {title}\n\n' + markdown_table(table))
+  pd.DataFrame(summary_rows).to_csv(output / 'summary.csv', index=False)
+  metrics = dict(successful_runs=int(runs.status.eq('ok').sum()),
+    errors=int(runs.status.eq('error').sum()), timeouts=int(runs.status.eq('timeout').sum()),
+    complete_paired_runs=len(paired_runs), complete_case_ids=len(valid_ids),
+    paired_timestep_observations=len(welfare), input_equivalence=True, feasible=True,
+    parallelism=protocol['parallelism'], phases={})
+  phase_values = welfare.reset_index()
+  for phase in ('static', 'stress', 'temporal'):
+    w = phase_values[phase_values.phase.eq(phase)]
+    if w.empty:
+      continue
+    g = (w[methods].div(w.MADEA, axis=0) - 1) * 100
+    best = w[methods].max(axis=1)
+    metrics['phases'][phase] = dict(observations=len(w), cases=int(w.case_id.nunique()),
+      welfare_gain_mean_pct={method:float(g[method].mean()) for method in methods},
+      welfare_gain_min_pct={method:float(g[method].min()) for method in methods},
+      welfare_gain_max_pct={method:float(g[method].max()) for method in methods},
+      winner_including_ties={method:int(np.isclose(w[method], best, atol=1e-6, rtol=0).sum())
+                            for method in methods})
+  repeated = paired_steps[paired_steps.phase.isin(['static', 'repeat'])]
+  repeat_checks = []
+  for key, group in repeated.groupby(['nodes', 'functions', 'seed', 'method']):
+    if len(group) == 2:
+      repeat_checks.append(dict(nodes=key[0], functions=key[1], seed=key[2], method=key[3],
+        exact_flow=group.final_flow.nunique()==1, exact_replicas=group.final_replicas.nunique()==1,
+        welfare_difference=float(group.welfare.max()-group.welfare.min())))
+  if repeat_checks:
+    pd.DataFrame(repeat_checks).to_csv(output / 'repeat_checks.csv', index=False)
+  for method, baseline_name, prefix in (('MADEA-PG', 'MADEA', 'pg'),
+                                        ('one-shot-pg', 'MADEA-one-shot', 'one_shot_pg')):
+    pg = paired_steps[paired_steps.method.eq(method)]
+    if len(pg):
+      baseline = paired_steps[paired_steps.method.eq(baseline_name)].set_index(['case_id', 'step']).welfare
+      initial = pg.set_index(['case_id', 'step']).pg_before
+      difference = np.abs(initial - baseline)
+      baseline_key = 'madea' if method == 'MADEA-PG' else 'one_shot'
+      metrics[f'{prefix}_initial_vs_{baseline_key}_max_difference'] = float(difference.max())
+      metrics[f'{prefix}_initial_matches_{baseline_key}'] = bool((difference <= 1e-6).all())
+      metrics[f'{prefix}_reasons'] = pg.pg_reason.value_counts().to_dict()
+      assert (pg.welfare >= pg.pg_before - 1e-6).all()
+  hierarchical_pg = paired_steps[paired_steps.method.eq('hierarchical-one-shot-pg')]
+  if len(hierarchical_pg):
+    assert (hierarchical_pg.welfare >= hierarchical_pg.pg_before - 1e-6).all()
+    metrics['hierarchical_one_shot_pg_refinement_monotone'] = True
+    metrics['hierarchical_one_shot_pg_reasons'] = hierarchical_pg.pg_reason.value_counts().to_dict()
+    metrics['hierarchical_one_shot_pg_timestep_counts'] = dict(
+      total=len(hierarchical_pg), improved=int(hierarchical_pg.pg_moves.gt(0).sum()),
+      zero_budget=int(hierarchical_pg.pg_budget.le(0).sum()))
+    comparison = {}
+    for phase in ('static', 'stress', 'temporal'):
+      w = phase_values[phase_values.phase.eq(phase)]
+      times = paired_runs[paired_runs.phase.eq(phase)].pivot(
+        index='case_id', columns='method', values='wall_seconds')
+      if not w.empty and 'one-shot-pg' in methods:
+        comparison[phase] = dict(
+          mean_welfare_change_pct=float(((w['hierarchical-one-shot-pg'] / w['one-shot-pg'] - 1) * 100).mean()),
+          median_time_ratio=float((times['hierarchical-one-shot-pg'] / times['one-shot-pg']).median()))
+    metrics['hierarchical_one_shot_pg_vs_one_shot_pg'] = comparison
+  if pilot and (pilot / 'runs.csv').exists():
+    controls = pd.read_csv(pilot / 'runs.csv')
+    successful = controls[controls.status.eq('ok')]
+    matching = successful.merge(paired_runs[paired_runs.phase.eq('static')],
+      on=['case_id', 'method', 'input_hash'], suffixes=('_j4', '_main'))
+    matching['time_ratio_j4_over_main'] = matching.wall_seconds_j4 / matching.wall_seconds_main
+    matching['welfare_difference'] = matching.welfare_sum_j4 - matching.welfare_sum_main
+    matching.drop(columns=['folder_j4', 'folder_main'], errors='ignore').to_csv(output / 'pool_controls.csv', index=False)
+    metrics['pilot_controls'] = len(matching)
+    (output / 'pilot_protocol.json').write_text((pilot / 'protocol.json').read_text())
+    snapshot = pilot / 'benchmark_snapshot.py.txt'
+    if snapshot.exists():
+      (output / 'pilot_benchmark.py.txt').write_text(snapshot.read_text())
+  static = paired_runs[paired_runs.phase.eq('static')]
+  if len(static):
+    values = static.pivot(index=['nodes', 'functions', 'seed'], columns='method',
+                          values='welfare_sum')[methods]
+    times = static.pivot(index=['nodes', 'functions', 'seed'], columns='method',
+                         values='wall_seconds')[methods]
+    colors = {'MADEA-one-shot':'#d97706', 'MADEA-PG':'#7c3aed', 'PLASMA-Welfare':'#0f766e',
+              'one-shot-pg':'#2563eb', 'hierarchical-one-shot-pg':'#dc2626'}
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharey=True)
+    for ax, nf in zip(axes, (5, 10)):
+      selected = values.index.get_level_values('functions') == nf
+      for method, color in colors.items():
+        if method not in methods:
+          continue
+        x = times.loc[selected, method] / times.loc[selected, 'MADEA']
+        y = (values.loc[selected, method] / values.loc[selected, 'MADEA'] - 1) * 100
+        size = values.loc[selected].index.get_level_values('nodes') / 2 + 15
+        ax.scatter(x, y, s=size, alpha=.7, label=method, color=color, edgecolors='white')
+      ax.axvline(1, color='gray', linestyle='--', linewidth=1)
+      ax.axhline(0, color='gray', linestyle='--', linewidth=1)
+      ax.set_xscale('log')
+      ax.set_title(f'{nf} funzioni')
+      ax.set_xlabel('Tempo totale / tempo MADEA (meno è meglio)')
+      ax.grid(alpha=.15)
+    axes[0].set_ylabel('Guadagno di welfare rispetto a MADEA (%)')
+    axes[1].legend(fontsize=8)
+    fig.suptitle('Istanze planari: welfare e tempo per seed; dimensione del punto = nodi')
+    fig.tight_layout()
+    fig.savefig(output / 'comparison.png', dpi=180)
+    fig.savefig(output / 'comparison.pdf')
+    plt.close(fig)
+  (output / 'metrics.json').write_text(json.dumps(metrics, indent=2) + '\n')
+  report = ['# Confronto planare delle famiglie MADEA e PLASMA-Welfare',
+    'Ogni confronto usa gli stessi dati, con topologia planare connessa e grado 3. '
+    'Il welfare viene ricalcolato dagli output con la funzione comune e ogni soluzione '
+    'viene verificata per ammissibilità e integrità delle allocazioni.',
+    f"Esecuzioni riuscite: {metrics['successful_runs']}; timeout: {metrics['timeouts']}; "
+    f"errori: {metrics['errors']}. Le tabelle usano solo casi con tutti i metodi previsti riusciti: "
+    f"{metrics['complete_case_ids']} gruppi, incluse eventuali ripetizioni.",
+    'Ogni cella mostra welfare medio e tempo mediano totale tra parentesi. '
+    'Il tempo include avvio e chiusura del pool e scrittura degli output. '
+    'Nei casi temporali il tempo si riferisce all’intera esecuzione di tre timestep; '
+    'il welfare è la media dei timestep. Le ripetizioni non contano come nuovi seed.',
+    'MADEA e le sue varianti usano la DP sequenziale; PLASMA-Welfare usa quattro processi. '
+    'Il pilot con quattro processi anche per MADEA è conservato separatamente: '
+    'la spedizione degli input completi ai worker può superare il costo della piccola DP. '
+    'Quindi questi risultati confrontano le configurazioni accelerate scelte, non lo stesso numero di core.',
+    'MADEA e one-shot hanno al massimo 100 iterazioni. La fase PG ha al massimo '
+    'cinque sweep e 0,25 secondi per nodo, limitati dal tempo nativo restante. '
+    'PLASMA-Welfare usa 20 round per timestep. I criteri d’arresto differiscono: '
+    'non è un confronto a parità di tempo disponibile e non certifica l’ottimo globale.',
+    'Il carico deriva dalle tracce intere del generatore esistente. Nei casi stress '
+    'è moltiplicato per 0,75 o 1,5; nei casi temporali per 0,75, 1,25 e 1 nei tre timestep, '
+    'con arrotondamento numpy.rint. Il problema noto del resto in fixed_sum non è stato modificato; '
+    'sono registrati i carichi effettivamente forniti a tutti i metodi.',
+    *([protocol['extension_note']] if 'extension_note' in protocol else []),
+    *(['Hierarchical-one-shot-PG usa il motore gerarchico iterativo già esistente, '
+       'profondità massima 3, inoltri solo tra vicini diretti e un raffinamento PG finale. '
+       'Il budget gerarchico usa il tempo effettivamente trascorso per timestep, incluso '
+       'il coordinamento: max(30, 0,5 × N) secondi. Un singolo round o una proposta DP '
+       'già avviati possono superare il budget; non è un timeout rigido. '
+       'Le altre colonne conservano le rispettive misure e convenzioni temporali originali.']
+      if 'hierarchical-one-shot-pg' in methods else []),
+    *([f"Nei 24 casi standard, rispetto a one-shot-PG il guadagno percentuale medio "
+       f"per istanza è {metrics['hierarchical_one_shot_pg_vs_one_shot_pg']['static']['mean_welfare_change_pct']:+.2f}% "
+       f"e il rapporto mediano dei tempi è {metrics['hierarchical_one_shot_pg_vs_one_shot_pg']['static']['median_time_ratio']:.2f}×. "
+       f"PG migliora l’incumbent in {metrics['hierarchical_one_shot_pg_timestep_counts']['improved']} "
+       f"timestep su {metrics['hierarchical_one_shot_pg_timestep_counts']['total']}; "
+       f"in {metrics['hierarchical_one_shot_pg_timestep_counts']['zero_budget']} timestep "
+       "la gerarchia esaurisce il budget e PG non avvia proposte. La variante è quindi "
+       "funzionante, ma questa configurazione non migliora complessivamente one-shot-PG."]
+      if 'hierarchical-one-shot-pg' in methods and 'one-shot-pg' in methods else []),
+    *sections,
+    '## Welfare e tempo per istanza\n\n![Confronto dei metodi](comparison.png)\n\n'
+    'Ogni punto è un caso e un metodo rispetto a MADEA sullo stesso input. '
+    'A sinistra della linea verticale il metodo è più rapido; sopra la linea '
+    'orizzontale ha welfare maggiore. I punti più grandi rappresentano più nodi.',
+    '## File di dettaglio\n\n'
+    '- [Risultati per esecuzione](runs.csv)\n'
+    '- [Welfare per istanza e timestep](welfare.csv)\n'
+    '- [Guadagni rispetto a MADEA](gain_vs_madea_pct.csv)\n'
+    '- [Metriche e verifiche](metrics.json)\n'
+    '- [Protocollo, configurazione e hash del codice](protocol.json)']
+  (output / 'report.md').write_text('\n\n'.join(report) + '\n')
+  print(json.dumps(metrics, indent=2))
+
+
+if __name__ == '__main__':
+  parser = ArgumentParser(description=__doc__)
+  parser.add_argument('source', type=Path)
+  parser.add_argument('output', type=Path)
+  parser.add_argument('--pilot', type=Path)
+  args = parser.parse_args()
+  run(args.source, args.output, args.pilot)

@@ -1,0 +1,27 @@
+{
+  "full_suite": {
+    "passed": 902,
+    "failed": 3,
+    "seconds": 93.58,
+    "failures": [
+      "tests/test_e2e_gurobi_planar.py::test_centralized_distributed_and_hierarchical_run_on_planar_degree_three_graph",
+      "tests/test_e2e_gurobi_planar.py::test_hierarchical_preserves_negative_best_objective",
+      "tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload"
+    ]
+  },
+  "hierarchical_failures_reproduced_with_head_auction": true,
+  "baseline_commit": "656718418e0c91620bb724b9fb45212a258dc0e6",
+  "focused_tests_passed": 2,
+  "code_review": "no critical or important issues",
+  "benchmark_hashes_unchanged": true,
+  "related_tests_passed": 50,
+  "ruff": "passed",
+  "mypy_production_files": "4 passed",
+  "git_diff_check": "passed",
+  "gitnexus": {
+    "detect_changes_risk": "critical",
+    "affected_flows": 17,
+    "interpretation": "Shared batch runner; keyword-only flag defaults false; related tests pass.",
+    "false_positive_unchanged_file": "tests/test_bestresponse_run.py"
+  }
+}

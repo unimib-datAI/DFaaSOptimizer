@@ -1,0 +1,25 @@
+{
+  "complete_cases": 8,
+  "successful_runs": 24,
+  "errors": 0,
+  "timeouts": 0,
+  "welfare_gain_mean_pct": {
+    "MADEA-one-shot": 0.0,
+    "one-shot-pg": 20.140412101355622,
+    "MADEA-PG": 20.709376561333297
+  },
+  "welfare_gain_min_pct": {
+    "MADEA-one-shot": 0.0,
+    "one-shot-pg": 0.5942269442609005,
+    "MADEA-PG": 0.2856089547715879
+  },
+  "winner_including_ties": {
+    "MADEA-one-shot": 0,
+    "one-shot-pg": 3,
+    "MADEA-PG": 5
+  },
+  "welfare_gain_mean_vs_madea_pg_pct": -0.384910902924282,
+  "welfare_gain_min_vs_madea_pg_pct": -2.319521858963458,
+  "median_wall_ratio_vs_madea_pg": 0.6863074965308529,
+  "faster_than_madea_pg": 8
+}

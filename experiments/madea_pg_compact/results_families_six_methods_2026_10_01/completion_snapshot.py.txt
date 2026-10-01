@@ -1,0 +1,54 @@
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import hashlib
+import json
+import sys
+import pandas as pd
+
+root = Path.cwd()
+sys.path.insert(0, str(root / 'experiments/madea_pg_compact'))
+import families_extended as families
+import extend_one_shot_pg as extension
+import one_shot_pg
+
+output = root / 'solutions/families-hierarchical-one-shot-pg-extension-2026-10-01'
+completion = output.with_name(output.name + '-completion')
+source = root / 'solutions/families-five-methods-2026-10-01'
+protocol = json.loads((output / 'protocol.json').read_text())
+original_runs = pd.read_csv(output / 'runs.csv')
+original_steps = pd.read_csv(output / 'timesteps.csv')
+missing = [case for case in protocol['cases'] if case['id'] not in set(original_runs.case_id)]
+assert len(original_runs) == 34 and len(missing) == 1
+assert missing[0]['id'] == 'temporal-n40-f10-s7-l0.75-r0'
+for path, expected in protocol['source_hashes'].items():
+  assert hashlib.sha256((root / path).read_bytes()).hexdigest() == expected
+input_source = root / protocol['instance_source']
+expected_inputs = pd.read_csv(source / 'runs.csv').groupby('case_id').input_hash.first()
+def shared(config, case, unused):
+  profile = '-'.join(f'{value:g}' for value in case['profile'])
+  path = input_source / 'instances' / f"n{case['nodes']}-f{case['functions']}-s{case['seed']}-t{case['steps']}-l{profile}"
+  assert hashlib.sha256((path / 'metadata.json').read_bytes()).hexdigest() == expected_inputs[case['id']]
+  data, traces, agents, graph = families.load_materialized_instance(path)
+  return path, data, traces, list(agents)
+families.cases = lambda: missing
+families.instance = shared
+families.METHODS = [('hierarchical-one-shot-pg', one_shot_pg.run_hierarchical)]
+families.run(completion, datetime.now(timezone.utc) + timedelta(seconds=120), 0, 1)
+added_runs = pd.read_csv(completion / 'runs.csv')
+added_steps = pd.read_csv(completion / 'timesteps.csv')
+assert len(added_runs) == 1 and added_runs.status.eq('ok').all() and len(added_steps) == 3
+for path, expected in protocol['source_hashes'].items():
+  assert hashlib.sha256((root / path).read_bytes()).hexdigest() == expected
+pd.concat([original_runs, added_runs], ignore_index=True).to_csv(output / 'runs.csv', index=False)
+pd.concat([original_steps, added_steps], ignore_index=True).to_csv(output / 'timesteps.csv', index=False)
+protocol['completion_session'] = json.loads((completion / 'protocol.json').read_text())
+protocol['completion_note'] = 'The first 30-minute window completed 34 cases; the remaining three-timestep case was run separately with unchanged production code and original input files.'
+(output / 'protocol.json').write_text(json.dumps(protocol, indent=2))
+(output / 'finished-first-window.json').write_bytes((output / 'finished.json').read_bytes())
+finish = dict(completed_runs=35, timestep_records=41, finished_utc=datetime.now(timezone.utc).isoformat(),
+              completion_runs=1, first_window_runs=34)
+(output / 'finished.json').write_text(json.dumps(finish, indent=2))
+# Finalize validation and CSV merge only; all 35 actual runs are already recorded.
+families.run = lambda *args, **kwargs: None
+extension.run(source, output, root / 'solutions/families-six-methods-2026-10-01', 0, 'hierarchical-one-shot-pg')
+print('Completed only the missing case and merged all 35 real measurements', flush=True)

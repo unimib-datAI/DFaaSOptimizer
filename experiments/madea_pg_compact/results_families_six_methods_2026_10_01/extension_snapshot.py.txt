@@ -1,0 +1,115 @@
+"""Add one one-shot-PG variant using the completed shared inputs of a benchmark."""
+from argparse import ArgumentParser
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+import hashlib
+import json
+
+import numpy as np
+import pandas as pd
+import networkx as nx
+import families_extended as families
+import one_shot_pg
+
+
+def run(source, output, merged, seconds, method='one-shot-pg'):
+  original_runs = pd.read_csv(source / 'runs.csv')
+  original_steps = pd.read_csv(source / 'timesteps.csv')
+  original_protocol = json.loads((source / 'protocol.json').read_text())
+  previous_methods = set(original_runs.method)
+  assert method not in previous_methods, 'Method already measured in source'
+  runner = {'one-shot-pg': one_shot_pg.run,
+            'hierarchical-one-shot-pg': one_shot_pg.run_hierarchical}[method]
+  instance_source = source if (source / 'instances').is_dir() else (
+    families.ROOT / original_protocol['extension_protocol']['instance_source'])
+  identifiers = {key for key, group in original_runs.groupby('case_id')
+                 if len(group) == len(previous_methods) and group.status.eq('ok').all()
+                 and set(group.method) == previous_methods}
+  planned = [case for case in original_protocol['cases'] if case['id'] in identifiers]
+  assert len(planned) == len(identifiers)
+  original_hashes = original_runs.groupby('case_id').input_hash.first()
+  config = json.loads((families.ROOT / 'experiments/madea_pg_compact/config.json').read_text())
+  config.update(run_time_step=1, checkpoint_interval=1)
+  config['solver_options']['plasma_welfare'] = dict(W=1., rounds_per_step=20,
+    epsilon=1e-6, hb_latency_rounds=1, hb_loss=0., staleness_rounds=3)
+  assert config == original_protocol['config'], 'Original experiment config changed'
+
+  def shared_instance(config, case, output):
+    profile = '-'.join(f'{value:g}' for value in case['profile'])
+    path = instance_source / 'instances' / f"n{case['nodes']}-f{case['functions']}-s{case['seed']}-t{case['steps']}-l{profile}"
+    assert hashlib.sha256((path / 'metadata.json').read_bytes()).hexdigest() == original_hashes[case['id']]
+    data, traces, agents, graph = families.load_materialized_instance(path)
+    assert nx.check_planarity(graph)[0] and nx.is_connected(graph)
+    assert all(degree == 3 for _, degree in graph.degree())
+    return path, data, traces, list(agents)
+
+  families.cases = lambda: planned
+  families.instance = shared_instance
+  families.METHODS = [(method, runner)]
+  files = ['one_shot_pg.py', 'experiments/madea_pg_compact/extend_one_shot_pg.py']
+  if method == 'hierarchical-one-shot-pg':
+    files += [str(path.relative_to(families.ROOT))
+              for path in sorted((families.ROOT / 'hierarchical_auction').glob('*.py'))]
+  hashes = {path: hashlib.sha256((families.ROOT / path).read_bytes()).hexdigest() for path in files}
+  families.run(output, datetime.now(timezone.utc) + timedelta(seconds=seconds), 0, len(planned))
+  protocol_path = output / 'protocol.json'
+  extension_protocol = json.loads(protocol_path.read_text())
+  extension_protocol['source_hashes'].update(hashes)
+  extension_protocol['instance_source'] = str(instance_source.relative_to(families.ROOT))
+  extension_protocol['previous_measurements'] = str(source.relative_to(families.ROOT))
+  if method == 'hierarchical-one-shot-pg':
+    extension_protocol['hierarchy'] = dict(max_depth=3, engine='IterativeHierarchicalAuctionEngine',
+      refinement='once after hierarchy', stopping_budget='actual elapsed time per timestep; max(30,0.5*N) seconds')
+  protocol_path.write_text(json.dumps(extension_protocol, indent=2))
+  assert all(hashlib.sha256((families.ROOT / path).read_bytes()).hexdigest() == h for path, h in hashes.items())
+  added_runs = pd.read_csv(output / 'runs.csv')
+  added_steps = pd.read_csv(output / 'timesteps.csv')
+  assert set(added_runs.case_id) == identifiers and added_runs.status.eq('ok').all()
+  assert added_runs.method.eq(method).all() and added_runs.case_id.is_unique
+  baseline = original_steps[original_steps.method.eq('MADEA-one-shot')].set_index(['case_id', 'step'])
+  for row in added_runs.itertuples():
+    stats = pd.read_csv(families.ROOT / row.folder / 'refinement.csv')
+    assert row.input_hash == original_hashes[row.case_id]
+    for step, refinement in stats.iterrows():
+      selected = added_steps.case_id.eq(row.case_id) & added_steps.step.eq(step)
+      assert selected.sum() == 1
+      before = baseline.loc[row.case_id, step]
+      after = added_steps.loc[selected].iloc[0]
+      assert after.input_requests == before.input_requests
+      if method == 'one-shot-pg':
+        np.testing.assert_allclose(refinement.welfare_before, before.welfare, atol=1e-6, rtol=0)
+      np.testing.assert_allclose(refinement.welfare_after, after.welfare, atol=1e-6, rtol=0)
+      assert after.welfare >= refinement.welfare_before - 1e-6
+      values = dict(pg_before=refinement.welfare_before, pg_seconds=refinement.seconds,
+                    pg_budget=refinement.time_budget, pg_moves=refinement.moves,
+                    pg_reason=refinement.reason)
+      for key, value in values.items():
+        added_steps.loc[selected, key] = value
+  added_steps.to_csv(output / 'timesteps.csv', index=False)
+  merged.mkdir(parents=True, exist_ok=True)
+  pd.concat([original_runs, added_runs], ignore_index=True).to_csv(merged / 'runs.csv', index=False)
+  pd.concat([original_steps, added_steps], ignore_index=True).to_csv(merged / 'timesteps.csv', index=False)
+  original_protocol['parallelism'][method] = 0
+  if 'extensions' not in original_protocol:
+    original_protocol['extensions'] = ([original_protocol['extension_protocol']]
+                                      if 'extension_protocol' in original_protocol else [])
+  original_protocol['extensions'].append(extension_protocol)
+  original_protocol['extension_protocol'] = extension_protocol
+  original_protocol['extension_note'] = (
+    f'La colonna {method} è stata aggiunta con una sessione successiva, eseguendo solo '
+    'questo metodo sugli stessi file di input e con la stessa configurazione. I risultati '
+    f'dei {len(previous_methods)} metodi precedenti sono conservati integralmente. I tempi provengono '
+    'quindi da sessioni distinte sulla stessa macchina.')
+  (merged / 'protocol.json').write_text(json.dumps(original_protocol, indent=2))
+  print(f'EXTENDED {len(added_runs)} cases; previous measurements preserved', flush=True)
+
+
+if __name__ == '__main__':
+  parser = ArgumentParser(description=__doc__)
+  parser.add_argument('--source', default='solutions/families-planar-hour-2026-10-01-adaptive')
+  parser.add_argument('--output', default='solutions/families-one-shot-pg-extension-2026-10-01')
+  parser.add_argument('--merged', default='solutions/families-five-methods-2026-10-01')
+  parser.add_argument('--seconds', type=float, default=600.)
+  parser.add_argument('--method', choices=('one-shot-pg', 'hierarchical-one-shot-pg'), default='one-shot-pg')
+  args = parser.parse_args()
+  run(*(families.ROOT / path for path in (args.source, args.output, args.merged)), args.seconds, args.method)

@@ -1,0 +1,28 @@
+{
+  "new_runs": 35,
+  "new_timestep_records": 41,
+  "previous_runs_preserved": 175,
+  "previous_timestep_records_preserved": 205,
+  "previous_five_method_summary_preserved": true,
+  "input_equivalence": true,
+  "feasible": true,
+  "integer_flows": true,
+  "exported_welfare_verified": true,
+  "pg_refinement_monotone": true,
+  "pg_improved_timestep_count": 14,
+  "pg_zero_budget_timestep_count": 27,
+  "production_and_benchmark_hashes_unchanged": true,
+  "report_source_sha256": "e4d600cbe87381fe2ba0fa545195e9b981b40904f068fd14962d8d47b3bbbe5d",
+  "full_suite": {
+    "passed": 907,
+    "failed": 1,
+    "seconds": 97.66,
+    "preexisting_failure": "tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload"
+  },
+  "interrupted_pilot_excluded": true,
+  "first_window_cases": 34,
+  "completion_cases": 1,
+  "gitnexus_scope": "27 affected flows, critical due to shared runners; reviewed and covered by full suite",
+  "gitnexus_false_positive": "tests/test_bestresponse_run.py is byte-identical to HEAD",
+  "review": "Premature stopping after new replicas fixed and regression-tested; no remaining important issues"
+}

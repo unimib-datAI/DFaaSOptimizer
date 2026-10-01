@@ -1,0 +1,12 @@
+{
+  "new_runs": 35,
+  "new_timestep_records": 41,
+  "previous_runs_preserved": 140,
+  "previous_timestep_records_preserved": 164,
+  "original_summary_preserved": true,
+  "input_equivalence": true,
+  "feasible": true,
+  "one_shot_incumbent_equivalent": true,
+  "report_source_sha256": "54757c1c0d94015e38d867978453603ecb673e1d62037e7b3fb96ab153027dfd",
+  "benchmark_source_hashes_unchanged": true
+}

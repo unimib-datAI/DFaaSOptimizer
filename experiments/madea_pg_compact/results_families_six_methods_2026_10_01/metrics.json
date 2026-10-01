@@ -1,0 +1,163 @@
+{
+  "successful_runs": 210,
+  "errors": 0,
+  "timeouts": 0,
+  "complete_paired_runs": 210,
+  "complete_case_ids": 35,
+  "paired_timestep_observations": 41,
+  "input_equivalence": true,
+  "feasible": true,
+  "parallelism": {
+    "MADEA": 0,
+    "MADEA-one-shot": 0,
+    "MADEA-PG": 0,
+    "PLASMA-Welfare": 4,
+    "one-shot-pg": 0,
+    "hierarchical-one-shot-pg": 0
+  },
+  "phases": {
+    "static": {
+      "observations": 24,
+      "cases": 24,
+      "welfare_gain_mean_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -2.2560149179448477,
+        "MADEA-PG": 17.65539719115533,
+        "PLASMA-Welfare": 26.27445737535295,
+        "one-shot-pg": 16.898193265696623,
+        "hierarchical-one-shot-pg": 14.666080966491398
+      },
+      "welfare_gain_min_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -20.208247853016058,
+        "MADEA-PG": 0.4060118755799147,
+        "PLASMA-Welfare": 0.38098025154336135,
+        "one-shot-pg": 1.0253464305906235,
+        "hierarchical-one-shot-pg": 1.187362206172704
+      },
+      "welfare_gain_max_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": 3.179715850835585,
+        "MADEA-PG": 51.918364815000004,
+        "PLASMA-Welfare": 77.7130311868924,
+        "one-shot-pg": 50.11901828342942,
+        "hierarchical-one-shot-pg": 60.243000732544076
+      },
+      "winner_including_ties": {
+        "MADEA": 0,
+        "MADEA-one-shot": 0,
+        "MADEA-PG": 0,
+        "PLASMA-Welfare": 17,
+        "one-shot-pg": 1,
+        "hierarchical-one-shot-pg": 6
+      }
+    },
+    "stress": {
+      "observations": 8,
+      "cases": 8,
+      "welfare_gain_mean_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -1.2398282847454687,
+        "MADEA-PG": 22.95631307376109,
+        "PLASMA-Welfare": 27.93863348652856,
+        "one-shot-pg": 22.601877277743153,
+        "hierarchical-one-shot-pg": 7.0754797829398886
+      },
+      "welfare_gain_min_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -8.920171688056278,
+        "MADEA-PG": 12.155740118382251,
+        "PLASMA-Welfare": 13.462217495958617,
+        "one-shot-pg": 11.682364727116168,
+        "hierarchical-one-shot-pg": 2.981155600310026
+      },
+      "welfare_gain_max_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": 1.103267386012341,
+        "MADEA-PG": 54.68971541237586,
+        "PLASMA-Welfare": 61.451777530410624,
+        "one-shot-pg": 54.11624050127695,
+        "hierarchical-one-shot-pg": 18.79333973708288
+      },
+      "winner_including_ties": {
+        "MADEA": 0,
+        "MADEA-one-shot": 0,
+        "MADEA-PG": 0,
+        "PLASMA-Welfare": 8,
+        "one-shot-pg": 0,
+        "hierarchical-one-shot-pg": 0
+      }
+    },
+    "temporal": {
+      "observations": 9,
+      "cases": 3,
+      "welfare_gain_mean_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -0.575058443692458,
+        "MADEA-PG": 16.041059630869423,
+        "PLASMA-Welfare": 21.1754861204694,
+        "one-shot-pg": 15.648845705877514,
+        "hierarchical-one-shot-pg": 17.33420116560885
+      },
+      "welfare_gain_min_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -2.6196779195358566,
+        "MADEA-PG": 9.059318885007063,
+        "PLASMA-Welfare": 15.89279396066563,
+        "one-shot-pg": 9.23726889028993,
+        "hierarchical-one-shot-pg": 4.4149386365277765
+      },
+      "welfare_gain_max_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": 1.7856305092108116,
+        "MADEA-PG": 25.844783678058004,
+        "PLASMA-Welfare": 30.746741854101177,
+        "one-shot-pg": 25.952988299382973,
+        "hierarchical-one-shot-pg": 34.19960866022491
+      },
+      "winner_including_ties": {
+        "MADEA": 0,
+        "MADEA-one-shot": 0,
+        "MADEA-PG": 0,
+        "PLASMA-Welfare": 5,
+        "one-shot-pg": 0,
+        "hierarchical-one-shot-pg": 4
+      }
+    }
+  },
+  "pg_initial_vs_madea_max_difference": 0.0,
+  "pg_initial_matches_madea": true,
+  "pg_reasons": {
+    "no improving proposal": 41
+  },
+  "one_shot_pg_initial_vs_one_shot_max_difference": 0.0,
+  "one_shot_pg_initial_matches_one_shot": true,
+  "one_shot_pg_reasons": {
+    "no improving proposal": 41
+  },
+  "hierarchical_one_shot_pg_refinement_monotone": true,
+  "hierarchical_one_shot_pg_reasons": {
+    "time budget exhausted": 27,
+    "no improving proposal": 14
+  },
+  "hierarchical_one_shot_pg_timestep_counts": {
+    "total": 41,
+    "improved": 14,
+    "zero_budget": 27
+  },
+  "hierarchical_one_shot_pg_vs_one_shot_pg": {
+    "static": {
+      "mean_welfare_change_pct": -1.7782599680318978,
+      "median_time_ratio": 6.242284717426374
+    },
+    "stress": {
+      "mean_welfare_change_pct": -11.828235794706236,
+      "median_time_ratio": 6.846241571346862
+    },
+    "temporal": {
+      "mean_welfare_change_pct": 1.3698119409500362,
+      "median_time_ratio": 8.452966489173027
+    }
+  },
+  "pilot_controls": 10
+}

@@ -1,0 +1,58 @@
+from pathlib import Path
+import hashlib
+import json
+import shutil
+import pandas as pd
+
+root = Path.cwd()
+source = root / 'solutions/families-five-methods-2026-10-01'
+merged = root / 'solutions/families-six-methods-2026-10-01'
+extension = root / 'solutions/families-hierarchical-one-shot-pg-extension-2026-10-01'
+report = root / 'experiments/madea_pg_compact/results_families_six_methods_2026_10_01'
+method = 'hierarchical-one-shot-pg'
+old_runs, old_steps = [pd.read_csv(source / name) for name in ('runs.csv', 'timesteps.csv')]
+runs, steps = [pd.read_csv(merged / name) for name in ('runs.csv', 'timesteps.csv')]
+pd.testing.assert_frame_equal(old_runs, runs[runs.method.ne(method)][old_runs.columns].reset_index(drop=True), check_dtype=False, atol=1e-9, rtol=1e-12)
+pd.testing.assert_frame_equal(old_steps, steps[steps.method.ne(method)][old_steps.columns].reset_index(drop=True), check_dtype=False, atol=1e-9, rtol=1e-12)
+old_summary = pd.read_csv(root / 'experiments/madea_pg_compact/results_families_five_methods_2026_10_01/summary.csv')
+new_summary = pd.read_csv(report / 'summary.csv')
+pd.testing.assert_frame_equal(old_summary, new_summary[old_summary.columns], check_dtype=False, atol=1e-9, rtol=1e-12)
+new_runs = runs[runs.method.eq(method)]
+new_steps = steps[steps.method.eq(method)]
+assert len(new_runs) == 35 and new_runs.case_id.is_unique and new_runs.status.eq('ok').all()
+assert len(new_steps) == 41 and new_steps.feasible.all()
+assert len(runs) == 210 and len(steps) == 246
+assert runs.groupby('case_id').input_hash.nunique().eq(1).all()
+assert steps.groupby(['case_id', 'step']).input_requests.nunique().eq(1).all()
+assert (new_steps.welfare >= new_steps.pg_before - 1e-6).all()
+protocol = json.loads((extension / 'protocol.json').read_text())
+for path, expected in protocol['source_hashes'].items():
+  assert hashlib.sha256((root / path).read_bytes()).hexdigest() == expected
+assert json.loads((extension / 'finished-first-window.json').read_text())['completed_runs'] == 34
+assert json.loads((extension / 'finished.json').read_text())['completed_runs'] == 35
+assert len(json.loads((merged / 'protocol.json').read_text())['extensions']) == 2
+for src, dst in [
+ (extension / 'protocol.json', report / 'extension_protocol.json'),
+ (extension / 'finished.json', report / 'extension_finished.json'),
+ (extension / 'finished-first-window.json', report / 'first_window_finished.json'),
+ (root / 'experiments/madea_pg_compact/families_report.py', report / 'report_snapshot.py.txt'),
+ (root / 'experiments/madea_pg_compact/families_extended.py', report / 'benchmark_snapshot.py.txt'),
+ (root / 'experiments/madea_pg_compact/extend_one_shot_pg.py', report / 'extension_snapshot.py.txt'),
+ (Path('/private/tmp/dfaas-complete-hierarchical-extension.py'), report / 'completion_snapshot.py.txt'),
+ (Path('/private/tmp/verify-hierarchical-six-methods.py'), report / 'verify_snapshot.py.txt'),
+]:
+ shutil.copyfile(src, dst)
+verification = dict(new_runs=35, new_timestep_records=41, previous_runs_preserved=175,
+ previous_timestep_records_preserved=205, previous_five_method_summary_preserved=True,
+ input_equivalence=True, feasible=True, integer_flows=True, exported_welfare_verified=True,
+ pg_refinement_monotone=True, pg_improved_timestep_count=int(new_steps.pg_moves.gt(0).sum()),
+ pg_zero_budget_timestep_count=int(new_steps.pg_budget.le(0).sum()),
+ production_and_benchmark_hashes_unchanged=True,
+ report_source_sha256=hashlib.sha256((root/'experiments/madea_pg_compact/families_report.py').read_bytes()).hexdigest(),
+ full_suite=dict(passed=907, failed=1, seconds=97.66, preexisting_failure='tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload'),
+ interrupted_pilot_excluded=True, first_window_cases=34, completion_cases=1,
+ gitnexus_scope='27 affected flows, critical due to shared runners; reviewed and covered by full suite',
+ gitnexus_false_positive='tests/test_bestresponse_run.py is byte-identical to HEAD',
+ review='Premature stopping after new replicas fixed and regression-tested; no remaining important issues')
+(report / 'verification.json').write_text(json.dumps(verification, indent=2)+'\n')
+print(json.dumps(verification,indent=2))

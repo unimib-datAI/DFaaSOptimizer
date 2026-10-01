@@ -1,0 +1,816 @@
+{
+  "config": {
+    "base_solution_folder": "solutions/madea-pg-compact",
+    "verbose": 0,
+    "seed": 4850,
+    "max_steps": 1,
+    "min_run_time": 0,
+    "max_run_time": 0,
+    "run_time_step": 1,
+    "solver_name": "gurobi",
+    "solver_options": {
+      "general": {
+        "TimeLimit": 30,
+        "MIPGap": 1e-09,
+        "Threads": 1,
+        "Seed": 0,
+        "OutputFlag": 0
+      },
+      "auction": {
+        "eta": 0.0,
+        "epsilon": 0.001,
+        "zeta": 0.01,
+        "latency_weight": 0.0,
+        "fairness_weight": 0.0,
+        "unit_bids": true
+      },
+      "coordinator": {
+        "sorting_rule": "product"
+      },
+      "update_neighborhood": false,
+      "start_from_last_pi": false,
+      "use_detailed_pi": false,
+      "madea_pg": {
+        "max_sweeps": 5,
+        "epsilon": 1e-06,
+        "time_limit_per_node": 0.25
+      },
+      "plasma_welfare": {
+        "W": 1.0,
+        "rounds_per_step": 20,
+        "epsilon": 1e-06,
+        "hb_latency_rounds": 1,
+        "hb_loss": 0.0,
+        "staleness_rounds": 3
+      }
+    },
+    "checkpoint_interval": 1,
+    "max_iterations": 100,
+    "plot_interval": 100,
+    "patience": 10,
+    "sw_patience": 200,
+    "limits": {
+      "instance_type": "random",
+      "Nn": {
+        "min": 10,
+        "max": 10
+      },
+      "Nf": {
+        "min": 5,
+        "max": 5
+      },
+      "demand": {
+        "min": 0.2,
+        "max": 0.5,
+        "speedup_factors": {
+          "4096": 0.5,
+          "8192": 1.0,
+          "16384": 1.2,
+          "24576": 1.4,
+          "32768": 1.4
+        }
+      },
+      "memory_requirement": {
+        "values_from": [
+          128,
+          256,
+          512,
+          1024
+        ]
+      },
+      "memory_capacity": {
+        "repeated_values": [
+          [
+            0.125,
+            4096
+          ],
+          [
+            0.125,
+            8192
+          ],
+          [
+            0.375,
+            16384
+          ],
+          [
+            0.25,
+            24576
+          ],
+          [
+            0.125,
+            32768
+          ]
+        ],
+        "min": 4096,
+        "max": 4096
+      },
+      "neighborhood": {
+        "type": "planar",
+        "degree": 3
+      },
+      "max_utilization": {
+        "min": 0.8,
+        "max": 0.8
+      },
+      "load": {
+        "trace_type": "fixed_sum",
+        "values": [
+          "auto"
+        ],
+        "edge_exposed_fraction": 1.0
+      },
+      "weights": {
+        "alpha": {
+          "min": 1,
+          "max": 10
+        },
+        "beta_multiplier": {
+          "min": 0.1,
+          "max": 1.5
+        },
+        "gamma": {
+          "min": 1,
+          "max": 1
+        },
+        "delta_multiplier": {
+          "min": 1.0,
+          "max": 1.0
+        },
+        "edge_network_latency": {
+          "min": 0.005,
+          "max": 1.0
+        },
+        "edge_bandwidth": {
+          "min": 100,
+          "max": 100
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 5,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f5-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f5-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 5,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f5-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 10,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f10-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f10-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 10,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f10-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 5,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f5-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f5-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 5,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f5-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 10,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f10-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f10-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 10,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f10-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 5,
+      "seed": 99,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f5-s99-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 99,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f5-s99-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 5,
+      "seed": 99,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f5-s99-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 10,
+      "seed": 99,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f10-s99-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 99,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f10-s99-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 10,
+      "seed": 99,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f10-s99-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 5,
+      "seed": 2026,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f5-s2026-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 2026,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f5-s2026-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 5,
+      "seed": 2026,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f5-s2026-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 10,
+      "seed": 2026,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f10-s2026-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 2026,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f10-s2026-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 10,
+      "seed": 2026,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f10-s2026-l1-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        0.75
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f5-s7-l0.75-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.5
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f5-s7-l1.5-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        0.75
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f10-s7-l0.75-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.5
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f10-s7-l1.5-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        0.75
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f5-s42-l0.75-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.5
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f5-s42-l1.5-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        0.75
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f10-s42-l0.75-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.5
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f10-s42-l1.5-r0"
+    },
+    {
+      "phase": "temporal",
+      "nodes": 40,
+      "functions": 5,
+      "seed": 7,
+      "steps": 3,
+      "profile": [
+        0.75,
+        1.25,
+        1.0
+      ],
+      "repeat": 0,
+      "id": "temporal-n40-f5-s7-l0.75-r0"
+    },
+    {
+      "phase": "temporal",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 7,
+      "steps": 3,
+      "profile": [
+        0.75,
+        1.25,
+        1.0
+      ],
+      "repeat": 0,
+      "id": "temporal-n80-f5-s7-l0.75-r0"
+    },
+    {
+      "phase": "temporal",
+      "nodes": 40,
+      "functions": 10,
+      "seed": 7,
+      "steps": 3,
+      "profile": [
+        0.75,
+        1.25,
+        1.0
+      ],
+      "repeat": 0,
+      "id": "temporal-n40-f10-s7-l0.75-r0"
+    }
+  ],
+  "parallelism": {
+    "hierarchical-one-shot-pg": 0
+  },
+  "available_logical_cpus": 11,
+  "deadline_utc": "2026-10-01T12:46:40.008370+00:00",
+  "started_utc": "2026-10-01T12:16:40.008540+00:00",
+  "source_hashes": {
+    "run_faasmacro.py": "fa08f99ecdbee8f6de88c07d9b58e7c0e54009d95f0fc2661cd928aba496c0bb",
+    "run_faasmadea.py": "2ee34ca47d98b1758048369931c63b8e56a9ebe105c788f9954d6cdd807e546a",
+    "decentralized_auction.py": "d9075fe328612b8344c205ca6ae8bb14413804cff297e07d798fe88d472f825e",
+    "madea_pg.py": "293cd31a166acf2b0987d6b4e1329157b8d469a7d765cced421fb90de7f8e726",
+    "decentralized_potentialgame.py": "68aaa1d08aa1a4683d952ba4147c96a2d0da90f289d1f81423efb65d3b9f54bf",
+    "models/local_sp.py": "1aa863f5ef9388550f317630348554998adf79c7314fd3c4d410d02c441f8f18",
+    "models/sp.py": "8e4225847f453d82a918e3788a1107e6db034d51eb7d21f2c65985d61198c259",
+    "plasma/welfare.py": "12b4bb1c3e21d6554815188b25075296e509da355d56471239373f20659f1c7e",
+    "plasma/runner.py": "26f6bc71ccf93915c77fe0f0c207e1d484c7deca1f2215b1c28af48b2a70f013",
+    "plasma/core/sbm.py": "e5f5d9e675d8d1913201e357f29104ab7acf0eea36d9ca2672520f205b15da3c",
+    "generators/generate_load.py": "050ebcded5bf490b787f555bdc698bfebce66ebd17bd39bdb8b93bb30f8721b5",
+    "generators/generate_data.py": "7bfe06a043106fab098d6f45c0f38408fc4f0f141f575ae34d1b507c2cece034",
+    "experiments/madea_pg_compact/families_extended.py": "13c4e12e4ced37cd9c00f536af678a2245664a34bcdd10bd16c8a93fedd0b797",
+    "one_shot_pg.py": "b189b54f0bc009d4fc07fc3c6c7311665415dd2381810d277d38885172367356",
+    "experiments/madea_pg_compact/extend_one_shot_pg.py": "0cecccec49d73de84b135b0fbb84b30cfe531bc26fc298f53399d0699f920614",
+    "hierarchical_auction/__init__.py": "433c0e8dcf15b376ac1243ca3f4c3bb4fb81fba1c16ce306a2d8043504a230bb",
+    "hierarchical_auction/engine.py": "1f900820c6da3ba9f36b4c8492fdcb227115683310e83b5df03189ffb934a48a",
+    "hierarchical_auction/flow_mapper.py": "ddefdcf579f2b3a7f203a6d06940eaa1cc0ed9adbf7de3cf7a2ffc8bf3c73e44",
+    "hierarchical_auction/iterative_engine.py": "2d2276b4b33aeac9ada299030bfce698d6d0fe1be8b9ebe80037f6c0eedc31ef",
+    "hierarchical_auction/madea_cycles_runner.py": "2efbb7986fdaaf1ee800109367e2f5e90c2a8e5e83873aa10c1fbf9a5cab911a",
+    "hierarchical_auction/madea_level_cycles_runner.py": "d26f7d43d76a30a2b3e9aed1da79df192125c4964068b7f78bddf13da980f702",
+    "hierarchical_auction/madea_runner.py": "ac0624ee1cc1a5121844a72b970289ec5d76cfb2194ed354df7e34a4ce3e26b7",
+    "hierarchical_auction/pricing.py": "93dd802a0bc3dc7519cc7976aa5e6a0ab67c0042f2c9145bc1a94d84e9810aa9",
+    "hierarchical_auction/runner.py": "dcf3f487143becc30213081d3479b27bdcd7348f8e93f920ae35771f98486082",
+    "hierarchical_auction/structure.py": "8c69febac7b64902938113eaa259b0c87f8502767ca21a2fb7703e806a9c73b7",
+    "hierarchical_auction/structure_graph.py": "fa9d17f0ea102562457e2ef75471553bdbb45f8fb5a3e5d9b72072da6dbaf57d",
+    "hierarchical_auction/token_manager.py": "c4efa3d24a334ba07b3c8c0926b6c007e742c0b9f0d37913c6522b09e6f22262",
+    "hierarchical_auction/types.py": "8839beaa368546dd6b526ac0ee46e85314e1bbf5c88d1fec83248fc4a0641344"
+  },
+  "runtime_accounting": "actual full runner wall time including pool startup/shutdown; no replay or observer inside decision loop",
+  "native_limits": "MADEA and one-shot <=100 iterations; general TimeLimit=max(30,0.5*N); PG <=5 sweeps and 0.25 seconds/node bounded by remaining native time; PLASMA 20 rounds/step",
+  "note": "Different stopping criteria; not an equal-wall-budget comparison. fixed_sum integer rounding is unchanged; actual input totals are recorded.",
+  "instance_source": "solutions/families-planar-hour-2026-10-01-adaptive",
+  "previous_measurements": "solutions/families-five-methods-2026-10-01",
+  "hierarchy": {
+    "max_depth": 3,
+    "engine": "IterativeHierarchicalAuctionEngine",
+    "refinement": "once after hierarchy",
+    "stopping_budget": "actual elapsed time per timestep; max(30,0.5*N) seconds"
+  },
+  "completion_session": {
+    "config": {
+      "base_solution_folder": "solutions/madea-pg-compact",
+      "verbose": 0,
+      "seed": 4850,
+      "max_steps": 1,
+      "min_run_time": 0,
+      "max_run_time": 0,
+      "run_time_step": 1,
+      "solver_name": "gurobi",
+      "solver_options": {
+        "general": {
+          "TimeLimit": 30,
+          "MIPGap": 1e-09,
+          "Threads": 1,
+          "Seed": 0,
+          "OutputFlag": 0
+        },
+        "auction": {
+          "eta": 0.0,
+          "epsilon": 0.001,
+          "zeta": 0.01,
+          "latency_weight": 0.0,
+          "fairness_weight": 0.0,
+          "unit_bids": true
+        },
+        "coordinator": {
+          "sorting_rule": "product"
+        },
+        "update_neighborhood": false,
+        "start_from_last_pi": false,
+        "use_detailed_pi": false,
+        "madea_pg": {
+          "max_sweeps": 5,
+          "epsilon": 1e-06,
+          "time_limit_per_node": 0.25
+        },
+        "plasma_welfare": {
+          "W": 1.0,
+          "rounds_per_step": 20,
+          "epsilon": 1e-06,
+          "hb_latency_rounds": 1,
+          "hb_loss": 0.0,
+          "staleness_rounds": 3
+        }
+      },
+      "checkpoint_interval": 1,
+      "max_iterations": 100,
+      "plot_interval": 100,
+      "patience": 10,
+      "sw_patience": 200,
+      "limits": {
+        "instance_type": "random",
+        "Nn": {
+          "min": 10,
+          "max": 10
+        },
+        "Nf": {
+          "min": 5,
+          "max": 5
+        },
+        "demand": {
+          "min": 0.2,
+          "max": 0.5,
+          "speedup_factors": {
+            "4096": 0.5,
+            "8192": 1.0,
+            "16384": 1.2,
+            "24576": 1.4,
+            "32768": 1.4
+          }
+        },
+        "memory_requirement": {
+          "values_from": [
+            128,
+            256,
+            512,
+            1024
+          ]
+        },
+        "memory_capacity": {
+          "repeated_values": [
+            [
+              0.125,
+              4096
+            ],
+            [
+              0.125,
+              8192
+            ],
+            [
+              0.375,
+              16384
+            ],
+            [
+              0.25,
+              24576
+            ],
+            [
+              0.125,
+              32768
+            ]
+          ],
+          "min": 4096,
+          "max": 4096
+        },
+        "neighborhood": {
+          "type": "planar",
+          "degree": 3
+        },
+        "max_utilization": {
+          "min": 0.8,
+          "max": 0.8
+        },
+        "load": {
+          "trace_type": "fixed_sum",
+          "values": [
+            "auto"
+          ],
+          "edge_exposed_fraction": 1.0
+        },
+        "weights": {
+          "alpha": {
+            "min": 1,
+            "max": 10
+          },
+          "beta_multiplier": {
+            "min": 0.1,
+            "max": 1.5
+          },
+          "gamma": {
+            "min": 1,
+            "max": 1
+          },
+          "delta_multiplier": {
+            "min": 1.0,
+            "max": 1.0
+          },
+          "edge_network_latency": {
+            "min": 0.005,
+            "max": 1.0
+          },
+          "edge_bandwidth": {
+            "min": 100,
+            "max": 100
+          }
+        }
+      }
+    },
+    "cases": [
+      {
+        "phase": "temporal",
+        "nodes": 40,
+        "functions": 10,
+        "seed": 7,
+        "steps": 3,
+        "profile": [
+          0.75,
+          1.25,
+          1.0
+        ],
+        "repeat": 0,
+        "id": "temporal-n40-f10-s7-l0.75-r0"
+      }
+    ],
+    "parallelism": {
+      "hierarchical-one-shot-pg": 0
+    },
+    "available_logical_cpus": 11,
+    "deadline_utc": "2026-10-01T12:50:38.258154+00:00",
+    "started_utc": "2026-10-01T12:48:38.258690+00:00",
+    "source_hashes": {
+      "run_faasmacro.py": "fa08f99ecdbee8f6de88c07d9b58e7c0e54009d95f0fc2661cd928aba496c0bb",
+      "run_faasmadea.py": "2ee34ca47d98b1758048369931c63b8e56a9ebe105c788f9954d6cdd807e546a",
+      "decentralized_auction.py": "d9075fe328612b8344c205ca6ae8bb14413804cff297e07d798fe88d472f825e",
+      "madea_pg.py": "293cd31a166acf2b0987d6b4e1329157b8d469a7d765cced421fb90de7f8e726",
+      "decentralized_potentialgame.py": "68aaa1d08aa1a4683d952ba4147c96a2d0da90f289d1f81423efb65d3b9f54bf",
+      "models/local_sp.py": "1aa863f5ef9388550f317630348554998adf79c7314fd3c4d410d02c441f8f18",
+      "models/sp.py": "8e4225847f453d82a918e3788a1107e6db034d51eb7d21f2c65985d61198c259",
+      "plasma/welfare.py": "12b4bb1c3e21d6554815188b25075296e509da355d56471239373f20659f1c7e",
+      "plasma/runner.py": "26f6bc71ccf93915c77fe0f0c207e1d484c7deca1f2215b1c28af48b2a70f013",
+      "plasma/core/sbm.py": "e5f5d9e675d8d1913201e357f29104ab7acf0eea36d9ca2672520f205b15da3c",
+      "generators/generate_load.py": "050ebcded5bf490b787f555bdc698bfebce66ebd17bd39bdb8b93bb30f8721b5",
+      "generators/generate_data.py": "7bfe06a043106fab098d6f45c0f38408fc4f0f141f575ae34d1b507c2cece034",
+      "experiments/madea_pg_compact/families_extended.py": "13c4e12e4ced37cd9c00f536af678a2245664a34bcdd10bd16c8a93fedd0b797"
+    },
+    "runtime_accounting": "actual full runner wall time including pool startup/shutdown; no replay or observer inside decision loop",
+    "native_limits": "MADEA and one-shot <=100 iterations; general TimeLimit=max(30,0.5*N); PG <=5 sweeps and 0.25 seconds/node bounded by remaining native time; PLASMA 20 rounds/step",
+    "note": "Different stopping criteria; not an equal-wall-budget comparison. fixed_sum integer rounding is unchanged; actual input totals are recorded."
+  },
+  "completion_note": "The first 30-minute window completed 34 cases; the remaining three-timestep case was run separately with unchanged production code and original input files."
+}
