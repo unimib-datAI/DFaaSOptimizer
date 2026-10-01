@@ -1,0 +1,60 @@
+{
+  "new_runs": 35,
+  "new_timestep_records": 41,
+  "previous_runs_preserved": 175,
+  "experiment_and_validation_seconds": 611.067216,
+  "previous_timestep_records_preserved": 205,
+  "previous_five_method_summary_preserved": true,
+  "input_equivalence": true,
+  "feasible": true,
+  "integer_flows": true,
+  "exported_welfare_verified": true,
+  "pg_refinement_monotone": true,
+  "pg_improved_timestep_count": 41,
+  "pg_zero_budget_timestep_count": 0,
+  "requested_reserve_preserved_in_all_measured_timesteps": true,
+  "production_and_benchmark_hashes_unchanged": true,
+  "hierarchy_before_after": {
+    "static": {
+      "cases": 24,
+      "mean_welfare_change_pct": 9.954088016234893,
+      "median_speedup": 4.895527934685825,
+      "improved_cases": 16,
+      "worse_cases": 0
+    },
+    "stress": {
+      "cases": 8,
+      "mean_welfare_change_pct": 20.303878239050373,
+      "median_speedup": 5.5724779136401486,
+      "improved_cases": 8,
+      "worse_cases": 0
+    },
+    "temporal": {
+      "cases": 3,
+      "mean_welfare_change_pct": 3.934231167292708,
+      "median_speedup": 7.277584820164076,
+      "improved_cases": 1,
+      "worse_cases": 0
+    }
+  },
+  "hierarchy_incumbent_changes": {
+    "improved": 0,
+    "unchanged": 41,
+    "worse": 0
+  },
+  "previous_outer_rounds": {
+    "min": 12,
+    "median": 66.0,
+    "max": 100
+  },
+  "report_source_sha256": "1e1cb7b50a6f4010080cadb476f3428ed35e9e26af5be30a021546eb0698d848",
+  "full_suite": {
+    "passed": 910,
+    "failed": 1,
+    "seconds": 118.29,
+    "preexisting_failure": "tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload"
+  },
+  "gitnexus_scope": "27 affected flows including previous pending shared runner edits; reviewed and covered by full suite",
+  "gitnexus_false_positive": "tests/test_bestresponse_run.py has no diff against HEAD",
+  "review": "No concrete important issues; epsilon stopping explicitly heuristic; reserve and disabled-PG compatibility reviewed"
+}

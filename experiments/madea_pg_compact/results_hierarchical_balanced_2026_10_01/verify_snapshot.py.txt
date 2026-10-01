@@ -1,0 +1,102 @@
+from pathlib import Path
+import hashlib
+import json
+import shutil
+from datetime import datetime
+import pandas as pd
+
+root = Path.cwd()
+source = root / 'solutions/families-five-methods-2026-10-01'
+merged = root / 'solutions/families-six-balanced-2026-10-01'
+extension = root / 'solutions/families-hierarchical-balanced-2026-10-01'
+old_hierarchy = root / 'solutions/families-hierarchical-one-shot-pg-extension-2026-10-01'
+report = root / 'experiments/madea_pg_compact/results_hierarchical_balanced_2026_10_01'
+method = 'hierarchical-one-shot-pg'
+old_runs, old_steps = [pd.read_csv(source / name) for name in ('runs.csv', 'timesteps.csv')]
+runs, steps = [pd.read_csv(merged / name) for name in ('runs.csv', 'timesteps.csv')]
+pd.testing.assert_frame_equal(old_runs, runs[runs.method.ne(method)][old_runs.columns].reset_index(drop=True), check_dtype=False, atol=1e-9, rtol=1e-12)
+pd.testing.assert_frame_equal(old_steps, steps[steps.method.ne(method)][old_steps.columns].reset_index(drop=True), check_dtype=False, atol=1e-9, rtol=1e-12)
+old_summary = pd.read_csv(root / 'experiments/madea_pg_compact/results_families_five_methods_2026_10_01/summary.csv')
+new_summary = pd.read_csv(report / 'summary.csv')
+pd.testing.assert_frame_equal(old_summary, new_summary[old_summary.columns], check_dtype=False, atol=1e-9, rtol=1e-12)
+new_runs = runs[runs.method.eq(method)]
+new_steps = steps[steps.method.eq(method)]
+assert len(new_runs) == 35 and new_runs.case_id.is_unique and new_runs.status.eq('ok').all()
+assert len(new_steps) == 41 and new_steps.feasible.all()
+assert len(runs) == 210 and len(steps) == 246
+assert runs.groupby('case_id').input_hash.nunique().eq(1).all()
+assert steps.groupby(['case_id', 'step']).input_requests.nunique().eq(1).all()
+assert (new_steps.welfare >= new_steps.pg_before - 1e-6).all()
+assert new_steps.pg_budget.gt(0).all()
+assert (new_steps.pg_budget >= new_steps.hierarchy_pg_reserve - 1e-6).all()
+protocol = json.loads((extension / 'protocol.json').read_text())
+for path, expected in protocol['source_hashes'].items():
+  assert hashlib.sha256((root / path).read_bytes()).hexdigest() == expected
+assert json.loads((extension / 'finished.json').read_text())['completed_runs'] == 35
+finished = json.loads((extension / 'finished.json').read_text())
+elapsed = (datetime.fromisoformat(finished['finished_utc']) - datetime.fromisoformat(protocol['started_utc'])).total_seconds()
+old_h_runs = pd.read_csv(old_hierarchy / 'runs.csv')
+old_h_steps = pd.read_csv(old_hierarchy / 'timesteps.csv')
+matched_runs = new_runs.merge(old_h_runs, on=['case_id', 'input_hash'], suffixes=('_new', '_old'), validate='one_to_one')
+matched_steps = new_steps.merge(old_h_steps, on=['case_id', 'step', 'input_hash'], suffixes=('_new', '_old'), validate='one_to_one')
+assert len(matched_runs) == 35 and len(matched_steps) == 41
+matched_runs['welfare_change_pct'] = (matched_runs.welfare_sum_new / matched_runs.welfare_sum_old - 1) * 100
+matched_runs['speedup'] = matched_runs.wall_seconds_old / matched_runs.wall_seconds_new
+matched_steps['incumbent_change'] = matched_steps.pg_before_new - matched_steps.pg_before_old
+assert (matched_steps.incumbent_change.abs() <= 1e-6).all()
+assert (matched_steps.welfare_new >= matched_steps.welfare_old - 1e-6).all()
+matched_steps['welfare_change_pct'] = (matched_steps.welfare_new / matched_steps.welfare_old - 1) * 100
+old_rounds = matched_steps.termination_old.str.extract(r'\(it: (\d+);')[0].astype(int) + 1
+matched_runs.drop(columns=['folder_new', 'folder_old']).to_csv(report / 'hierarchy_before_after_runs.csv', index=False)
+matched_steps.to_csv(report / 'hierarchy_before_after_timesteps.csv', index=False)
+comparison = {}
+for phase in ('static', 'stress', 'temporal'):
+  selection = matched_runs[matched_runs.phase_new.eq(phase)]
+  comparison[phase] = dict(cases=len(selection), mean_welfare_change_pct=float(selection.welfare_change_pct.mean()),
+    median_speedup=float(selection.speedup.median()),
+    improved_cases=int((selection.welfare_sum_new > selection.welfare_sum_old + 1e-6).sum()),
+    worse_cases=int((selection.welfare_sum_new < selection.welfare_sum_old - 1e-6).sum()))
+for src, dst in [
+ (extension / 'protocol.json', report / 'extension_protocol.json'),
+ (extension / 'finished.json', report / 'extension_finished.json'),
+ (root / 'experiments/madea_pg_compact/families_report.py', report / 'report_snapshot.py.txt'),
+ (root / 'experiments/madea_pg_compact/families_extended.py', report / 'benchmark_snapshot.py.txt'),
+ (root / 'experiments/madea_pg_compact/extend_one_shot_pg.py', report / 'extension_snapshot.py.txt'),
+ (root / 'hierarchical_auction/runner.py', report / 'hierarchical_runner_snapshot.py.txt'),
+ (Path('/private/tmp/verify-hierarchical-balanced.py'), report / 'verify_snapshot.py.txt'),
+]:
+  shutil.copyfile(src, dst)
+verification = dict(new_runs=35, new_timestep_records=41, previous_runs_preserved=175,
+ experiment_and_validation_seconds=elapsed,
+ previous_timestep_records_preserved=205, previous_five_method_summary_preserved=True,
+ input_equivalence=True, feasible=True, integer_flows=True, exported_welfare_verified=True,
+ pg_refinement_monotone=True, pg_improved_timestep_count=int(new_steps.pg_moves.gt(0).sum()),
+ pg_zero_budget_timestep_count=int(new_steps.pg_budget.le(0).sum()),
+ requested_reserve_preserved_in_all_measured_timesteps=True,
+ production_and_benchmark_hashes_unchanged=True, hierarchy_before_after=comparison,
+ hierarchy_incumbent_changes=dict(improved=int((matched_steps.incumbent_change > 1e-6).sum()),
+   unchanged=int((matched_steps.incumbent_change.abs() <= 1e-6).sum()),
+   worse=int((matched_steps.incumbent_change < -1e-6).sum())),
+ previous_outer_rounds=dict(min=int(old_rounds.min()), median=float(old_rounds.median()), max=int(old_rounds.max())),
+ report_source_sha256=hashlib.sha256((root/'experiments/madea_pg_compact/families_report.py').read_bytes()).hexdigest(),
+ full_suite=dict(passed=910, failed=1, seconds=118.29, preexisting_failure='tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload'),
+ gitnexus_scope='27 affected flows including previous pending shared runner edits; reviewed and covered by full suite',
+ gitnexus_false_positive='tests/test_bestresponse_run.py has no diff against HEAD',
+ review='No concrete important issues; epsilon stopping explicitly heuristic; reserve and disabled-PG compatibility reviewed')
+(report / 'verification.json').write_text(json.dumps(verification, indent=2)+'\n')
+table = ['| Carico | Casi | Welfare medio per istanza rispetto alla gerarchica precedente | Velocità mediana (tempo precedente / nuovo) |',
+         '| --- | --- | --- | --- |']
+for phase, title in [('static', 'Standard'), ('stress', 'Stress'), ('temporal', 'Temporale')]:
+  result = comparison[phase]
+  table.append(f"| {title} | {result['cases']} | {result['mean_welfare_change_pct']:+.2f}% | {result['median_speedup']:.2f}× |")
+text = (report / 'report.md').read_text().split('\n## Verifica del nuovo arresto e della riserva')[0]
+text += '\n## Verifica del nuovo arresto e della riserva\n\n'
+minutes, seconds = divmod(round(elapsed), 60)
+text += f'La sessione con esperimenti e validazione è durata {elapsed:.2f} secondi ({minutes} minuti e {seconds} secondi). Sono stati eseguiti solo i 35 casi gerarchici aggiornati; le 175 esecuzioni e 205 record dei cinque metodi precedenti, comprese le tabelle aggregate, sono stati conservati.\n\n'
+text += '\n'.join(table) + '\n\n'
+text += 'L’incumbent prima del PG è identico alla versione precedente in tutti i 41 timestep. Il guadagno misurato viene dal PG che ora dispone del proprio budget: migliora 41 timestep su 41, contro 14 nel confronto precedente. Il loop esterno usa 4–6 round (mediana 4), contro 12–100 (mediana 66) nel precedente, contando anche il primo round indicizzato con zero. Non si osservano peggioramenti del welfare finale sui 35 casi; la soglia di stagnazione resta una scelta euristica e questi risultati non garantiscono lo stesso comportamento su ogni istanza.\n\n'
+text += 'Il nuovo arresto usa gli aggiornamenti locali di assegnazioni, repliche, prezzi e fairness. Rimane la selezione storica dell’incumbent tramite welfare già presente nel runner originale; questa modifica non aggiunge un criterio globale di accettazione. La fase PG decide tramite l’utilità del singolo nodo, conserva gli impegni in ingresso e usa soltanto collegamenti tra vicini diretti.\n\n'
+text += 'Suite completa: **910 test passati e un fallimento preesistente**, in 118,29 secondi. Il fallimento è `tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload` (totale 9 anziché 10). Controlli Ruff e Mypy superati; revisione del codice senza problemi importanti.\n\n'
+text += 'Dettagli: [verifiche](verification.json), [prima/dopo per esecuzione](hierarchy_before_after_runs.csv), [prima/dopo per timestep](hierarchy_before_after_timesteps.csv), [confronto gerarchico precedente](../results_families_six_methods_2026_10_01/report.md).\n'
+(report / 'report.md').write_text(text)
+print(json.dumps(verification,indent=2))

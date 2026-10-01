@@ -1,0 +1,32 @@
+{
+  "corrected_instances": 35,
+  "compared_cases": 12,
+  "successful_runs": 84,
+  "valid_timestep_results": 112,
+  "economic_condition": "alpha > beta; beta/alpha in [0.1,0.9]",
+  "active_coefficients": 67800,
+  "violations_before": 20160,
+  "violations_after": 0,
+  "actual_ratio_min": 0.104,
+  "actual_ratio_max": 0.899,
+  "identical_physical_inputs_and_original_traces": true,
+  "original_inputs_preserved": true,
+  "changed_input_parameters": [
+    "beta",
+    "delta"
+  ],
+  "algorithm_code_unchanged_by_this_correction": true,
+  "sequential_for_all_methods": true,
+  "experiment_seconds_including_preparation": 1324.251636,
+  "suite_passed": 917,
+  "suite_failed": 1,
+  "suite_seconds": 104.03,
+  "preexisting_failure": "test_integer_fixed_sum_traces_preserve_system_workload",
+  "ruff": true,
+  "mypy": true,
+  "git_diff_check": true,
+  "review": "fixed parallelism text; no other concrete findings",
+  "report_generator_sha256": "fa1c811a602a3c0ef820e3e86a6674b160368b1e922e753e8b02be229c2e4428",
+  "report_generator_note": "report_generator.py.txt produced this report; the experiment retained its earlier report-source snapshot and hash",
+  "sample_note": "8 standard cases, 2 stress cases (0.75 and 1.5, different function counts), 2 temporal sequences; 1-2 seeds per standard size/function group; no full 35-case rerun"
+}
