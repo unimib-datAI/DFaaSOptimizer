@@ -1,0 +1,46 @@
+{
+  "screening_cases": 8,
+  "independent_holdout_cases": 0,
+  "stages": {
+    "baseline": {
+      "ok": 7,
+      "timeout": 1
+    },
+    "reserve": {
+      "ok": 7,
+      "timeout": 1
+    },
+    "wall": {
+      "ok": 8
+    },
+    "stagnation": {
+      "ok": 8
+    },
+    "wall-reserve": {
+      "ok": 8
+    },
+    "wall-reserve-conservative": {
+      "ok": 8
+    },
+    "selected": {
+      "ok": 8
+    }
+  },
+  "selected_valid_timesteps": 10,
+  "comparable_baseline_cases": 7,
+  "unchanged_welfare_comparable_cases": true,
+  "median_speedup_comparable_cases": 1.1509130674314045,
+  "large_case_welfare_vs_wall_only_pct": 18.481425936924012,
+  "suite": {
+    "passed": 916,
+    "failed": 1,
+    "seconds": 102.19,
+    "failure": "tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload",
+    "preexisting_failure": true,
+    "ruff": true,
+    "mypy": true,
+    "git_diff_check": true,
+    "targeted_control_tests": 6,
+    "static_review": "no concrete findings"
+  }
+}

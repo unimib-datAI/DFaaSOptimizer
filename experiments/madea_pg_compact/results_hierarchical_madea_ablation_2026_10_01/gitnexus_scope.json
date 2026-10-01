@@ -1,0 +1,114 @@
+{
+  "scope": "all",
+  "includes_prior_pending_changes": true,
+  "summary": {
+    "changed_count": 17,
+    "affected_count": 35,
+    "changed_files": 9,
+    "risk_level": "critical"
+  },
+  "changed_symbols": [
+    {
+      "id": "Function:decentralized_auction.py:run",
+      "name": "run",
+      "filePath": "decentralized_auction.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/MADEA-PG-miglioramenti.md:L1:Cambiamenti in MADEA-PG e nelle varianti collegate",
+      "name": "Cambiamenti in MADEA-PG e nelle varianti collegate",
+      "filePath": "docs/MADEA-PG-miglioramenti.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/MADEA-PG-miglioramenti.md:L119:Parallelismo in PLASMA-Welfare",
+      "name": "Parallelismo in PLASMA-Welfare",
+      "filePath": "docs/MADEA-PG-miglioramenti.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:docs/MADEA-PG-miglioramenti.md:L147:One-shot-PG",
+      "name": "One-shot-PG",
+      "filePath": "docs/MADEA-PG-miglioramenti.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:experiments/madea_pg_compact/README.md:L1:MADEA-PG compact proposal experiments",
+      "name": "MADEA-PG compact proposal experiments",
+      "filePath": "experiments/madea_pg_compact/README.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Section:experiments/madea_pg_compact/README.md:L50:Extended planar family comparison",
+      "name": "Extended planar family comparison",
+      "filePath": "experiments/madea_pg_compact/README.md",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:hierarchical_auction/madea_cycles_runner.py:_run",
+      "name": "_run",
+      "filePath": "hierarchical_auction/madea_cycles_runner.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:hierarchical_auction/runner.py:run",
+      "name": "run",
+      "filePath": "hierarchical_auction/runner.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Property:hierarchical_auction/runner.py:obj_dict",
+      "name": "obj_dict",
+      "filePath": "hierarchical_auction/runner.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Property:hierarchical_auction/runner.py:tc_dict",
+      "name": "tc_dict",
+      "filePath": "hierarchical_auction/runner.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Property:hierarchical_auction/runner.py:runtime_list",
+      "name": "runtime_list",
+      "filePath": "hierarchical_auction/runner.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Property:remote_experiments/jobs.py:SCRIPT_BY_ALGORITHM",
+      "name": "SCRIPT_BY_ALGORITHM",
+      "filePath": "remote_experiments/jobs.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:run.py:parse_arguments",
+      "name": "parse_arguments",
+      "filePath": "run.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:run.py:run",
+      "name": "run",
+      "filePath": "run.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:tests/test_bestresponse_run.py:test_run_br_o_uses_fixed_replicas_and_does_not_mutate_options",
+      "name": "test_run_br_o_uses_fixed_replicas_and_does_not_mutate_options",
+      "filePath": "tests/test_bestresponse_run.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:run_faasmadea.py:run_madea_cycle",
+      "name": "run_madea_cycle",
+      "filePath": "run_faasmadea.py",
+      "change_type": "touched"
+    },
+    {
+      "id": "Function:tests/test_remote_experiments_jobs.py:test_all_algorithms_are_mapped",
+      "name": "test_all_algorithms_are_mapped",
+      "filePath": "tests/test_remote_experiments_jobs.py",
+      "change_type": "touched"
+    }
+  ]
+}
