@@ -1,0 +1,32 @@
+[
+  {
+    "mode": "warm",
+    "processes": 2,
+    "steps": 2,
+    "nodes": 40,
+    "functions": 5,
+    "seed": 7,
+    "planar": true,
+    "wall_seconds": 8.879175291978754,
+    "welfare": [
+      1005.049934014927,
+      992.986074497215
+    ],
+    "exact_match": true
+  },
+  {
+    "mode": "cold",
+    "processes": 2,
+    "steps": 2,
+    "nodes": 40,
+    "functions": 5,
+    "seed": 7,
+    "planar": true,
+    "wall_seconds": 163.5043340419652,
+    "welfare": [
+      1005.049934014927,
+      992.986074497215
+    ],
+    "exact_match": true
+  }
+]

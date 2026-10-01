@@ -1,0 +1,20 @@
+{
+  "cases": 4,
+  "runs": 12,
+  "functions": 5,
+  "steps": 1,
+  "sequential": true,
+  "all_feasible": true,
+  "all_integer": true,
+  "all_shared_input_hashes": true,
+  "all_pg_matched_baseline": true,
+  "all_pg_uncensored": true,
+  "welfare_winners": {
+    "PLASMA-Welfare": 3,
+    "MADEA-PG": 1
+  },
+  "pg_gain_mean_pct": 22.719192622375385,
+  "plasma_gain_mean_pct": 28.27907804072256,
+  "criteria": "MADEA native stop up to 100 iterations; PG up to 5 sweeps and 0.25s/node; PLASMA-Welfare 20 rounds; not equal wall-time budgets",
+  "method_note": "PLASMA-Welfare is the implemented improved PLASMA family, not an algorithm named PLASMA-PG"
+}

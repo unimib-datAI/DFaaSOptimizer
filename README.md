@@ -253,6 +253,16 @@ PG proposals pass only the proposing node's parameters and aggregate inbound
 commitments to this backend, avoiding a copy of the full network and its flow
 dictionary. Unsupported inputs retain the original full-data solver path.
 
+The shared local-solver runners keep one lazily created process pool for the whole
+run, including iterations, hierarchical cycles and timesteps. `-j -1` uses the CPUs
+available to the process (CPU affinity where supported), capped by the number of
+agents in the first parallel batch; `-j N` overrides the worker count and `-j 0`
+keeps sequential solving. The pool size stays fixed until the run ends. Each chunk
+carries current data, prices, model and solver options; workers never reuse an
+earlier batch's inputs. Normal completion closes the pool; errors terminate it.
+Direct `solve_subproblem` calls can share a pool inside `parallel_solver_session()`.
+This parallelizes independent local solves; PG move acceptance remains sequential.
+
 `benchmark_madea_pg_compact.py` compares compact/full proposals on shared planar
 degree-3 instances, separately with DP and node-local Gurobi initialization.
 Run `.venv/bin/python benchmark_madea_pg_compact.py --seconds 3600`;

@@ -11,6 +11,7 @@ from run_centralized_model import (
 )
 from postprocessing import load_solution
 from run_faasmacro import (
+  parallel_solver_run,
   combine_solutions,
   compute_social_welfare,
   decode_solutions,
@@ -181,6 +182,7 @@ def parse_arguments() -> argparse.Namespace:
   return parser.parse_known_args()[0]
 
 
+@parallel_solver_run
 def run(
     config: dict,
     parallelism: int,

@@ -29,6 +29,7 @@ from run_centralized_model import (
   save_solution,
 )
 from run_faasmacro import (
+  parallel_solver_run,
   combine_solutions,
   compute_centralized_objective,
   compute_social_welfare,
@@ -59,6 +60,7 @@ def run(
   )
 
 
+@parallel_solver_run
 def _run(
     config: dict[str, Any],
     parallelism: int,

@@ -30,10 +30,12 @@ from models.sp import (
 from heuristic_coordinator import GreedyCoordinator
 
 import multiprocessing as mpp
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from collections import deque
 from copy import deepcopy
-from functools import partial
+from functools import wraps
 from typing import Tuple
 import pandas as pd
 import numpy as np
@@ -48,6 +50,74 @@ _sp_data = None
 _solver_options = None
 _solver_name = None
 _sp = None
+_parallel_session: ContextVar[dict | None] = ContextVar('parallel_sp_session', default=None)
+
+
+@contextmanager
+def parallel_solver_session():
+  """Own one lazy process pool; nested runners reuse it until the outer run ends."""
+  current = _parallel_session.get()
+  if current is not None:
+    yield current
+    return
+  state: dict = {'pool': None, 'workers': 0}
+  token = _parallel_session.set(state)
+  try:
+    yield state
+  except BaseException:
+    if state['pool'] is not None:
+      state['pool'].terminate()
+    raise
+  else:
+    if state['pool'] is not None:
+      state['pool'].close()
+  finally:
+    if state['pool'] is not None:
+      state['pool'].join()
+    _parallel_session.reset(token)
+
+
+def parallel_solver_run(runner):
+  """Keep local-solver workers warm across all batches and timesteps of a run."""
+  @wraps(runner)
+  def wrapped(*args, **kwargs):
+    with parallel_solver_session():
+      return runner(*args, **kwargs)
+  return wrapped
+
+
+def _available_cpu_count():
+  try:
+    return max(1, len(os.sched_getaffinity(0)))
+  except (AttributeError, OSError):
+    return os.cpu_count() or 1
+
+
+def _solve_parallel_batch(task):
+  data, options, solver, model, agents, prices = task
+  # Each task carries the current snapshot, even if this worker ran another model.
+  init_parallel_worker(data, options, solver, model)
+  return [solve_single_agent(agent, prices) for agent in agents]
+
+
+def _solve_agents_parallel(data, agents, model, solver, options, parallelism, prices=None):
+  agents = list(agents)
+  if not agents:
+    return {}
+  state = _parallel_session.get()
+  if state is None:
+    with parallel_solver_session():
+      return _solve_agents_parallel(data, agents, model, solver, options, parallelism, prices)
+  if state['pool'] is None:
+    available = _available_cpu_count() if parallelism < 0 else parallelism
+    state['workers'] = max(1, min(available, len(agents)))
+    state['pool'] = mpp.Pool(processes=state['workers'])
+  count = min(state['workers'], len(agents))
+  # One fresh snapshot per chunk, rather than serializing the network per node.
+  tasks = [(data, options, solver, model, agents[i::count], prices) for i in range(count)]
+  results = state['pool'].map(_solve_parallel_batch, tasks, chunksize=1)
+  by_agent = dict(item for batch in results for item in batch)
+  return {agent: by_agent[agent] for agent in agents}
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -250,15 +320,9 @@ def compute_social_welfare(
   # solve for all agents
   agents_sol = {}
   if parallelism != 0:
-    results = []
-    n_proc = mpp.cpu_count() if parallelism < 0 else parallelism
-    with mpp.Pool(
-        processes = n_proc,
-        initializer = init_parallel_worker,
-        initargs = (spr_data, solver_options, solver_name, spr),
-      ) as pool:
-      results = pool.map(solve_single_agent, agents)
-    agents_sol = {agent: sol for agent, sol in results}
+    agents_sol = _solve_agents_parallel(
+      spr_data, agents, spr, solver_name, solver_options, parallelism,
+    )
   else:
     for agent in agents:
       spr_data[None]["whoami"] = {None: agent + 1}
@@ -565,15 +629,9 @@ def solve_subproblem(
   # solve for all agents
   agents_sol = {}
   if parallelism != 0:
-    results = []
-    n_proc = mpp.cpu_count() if parallelism < 0 else parallelism
-    with mpp.Pool(
-        processes = n_proc,
-        initializer = init_parallel_worker,
-        initargs = (sp_data, solver_options, solver_name, sp),
-      ) as pool:
-      results = pool.map(partial(solve_single_agent, detailed_pi=detailed_pi), agents)
-    agents_sol = {agent: sol for agent, sol in results}
+    agents_sol = _solve_agents_parallel(
+      sp_data, agents, sp, solver_name, solver_options, parallelism, detailed_pi,
+    )
   else:
     for agent in agents:
       # generate instance
@@ -656,6 +714,7 @@ def update_prices(
   return pi, detailed_pi
 
 
+@parallel_solver_run
 def run(
     config: dict, 
     parallelism: int,

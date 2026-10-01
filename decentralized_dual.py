@@ -25,6 +25,7 @@ from run_centralized_model import (
   update_data,
 )
 from run_faasmacro import (
+  parallel_solver_run,
   combine_solutions,
   compute_social_welfare,
   decode_solutions,
@@ -284,6 +285,7 @@ def _capacity_state(
   return capacity, residual_capacity, ell, blackboard
 
 
+@parallel_solver_run
 def run(
     config: dict,
     parallelism: int,

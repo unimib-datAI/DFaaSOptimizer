@@ -12,6 +12,7 @@ from run_centralized_model import (
   update_data
 )
 from run_faasmacro import (
+  parallel_solver_run,
   compute_centralized_objective,
   compute_social_welfare,
   combine_solutions, 
@@ -226,6 +227,7 @@ def start_additional_replicas(
   return additional_replicas, residual_capacity
 
 
+@parallel_solver_run
 def run(
     config: dict, 
     parallelism: int,

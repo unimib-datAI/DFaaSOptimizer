@@ -27,6 +27,7 @@ from run_centralized_model import (
   save_solution,
 )
 from run_faasmacro import (
+  parallel_solver_run,
   combine_solutions,
   compute_centralized_objective,
   compute_social_welfare,
@@ -94,6 +95,7 @@ def parse_arguments() -> argparse.Namespace:
   return parser.parse_known_args()[0]
 
 
+@parallel_solver_run
 def run(
     config: dict[str, Any],
     parallelism: int = -1,

@@ -40,6 +40,7 @@ from run_centralized_model import (
   save_solution,
 )
 from run_faasmacro import (
+  parallel_solver_run,
   combine_solutions,
   compute_centralized_objective,
   compute_social_welfare,
@@ -106,6 +107,7 @@ def _extract_latency(graph: Any) -> FloatArray:
   return nx_adjacency_matrix(graph, weight="network_latency").toarray()
 
 
+@parallel_solver_run
 def run(
   config: dict[str, Any],
   parallelism: int = -1,

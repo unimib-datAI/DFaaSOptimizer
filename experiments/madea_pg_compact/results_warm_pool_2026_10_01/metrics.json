@@ -1,0 +1,23 @@
+{
+  "batch_warm_4_seconds": 0.1738535414915532,
+  "batch_sequential_seconds": 0.2410059169633314,
+  "batch_warm_4_speedup_vs_sequential": 1.3862583120001664,
+  "runner_warm_seconds": 8.879175291978754,
+  "runner_cold_seconds": 163.5043340419652,
+  "runner_speedup": 18.41436041809776,
+  "all_allocations_match": true,
+  "full_suite": {
+    "passed": 896,
+    "failed": 1,
+    "seconds": 84.31,
+    "preexisting_failure": "tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload"
+  },
+  "platform": "macOS-27.0-arm64-arm-64bit",
+  "source_hashes": {
+    "run_faasmacro.py": "fa08f99ecdbee8f6de88c07d9b58e7c0e54009d95f0fc2661cd928aba496c0bb",
+    "run_faasmadea.py": "a1ed473ac1f569fc3fe854fd149af30b46268b651f0d5a5f9a4809fda193e35e",
+    "hierarchical_auction/madea_cycles_runner.py": "2efbb7986fdaaf1ee800109367e2f5e90c2a8e5e83873aa10c1fbf9a5cab911a",
+    "experiments/madea_pg_compact/warm_pool.py": "bd014a27354351d2b62090e7f4a7c41af6d9abec8e9c672edb870f196c5d74fa",
+    "experiments/madea_pg_compact/warm_pool_runner.py": "529a3c6a9acfc109a69863d9a9ac414b4da7373c4d24fd055d30a64f0c622508"
+  }
+}
