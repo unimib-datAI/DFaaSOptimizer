@@ -18,6 +18,7 @@ from models.model import (
   TightLoadManagementModel,
   PYO_VAR_TYPE
 )
+from models.selfish import SelfishLoadManagementModel
 
 from networkx import draw_networkx, kamada_kawai_layout, Graph, is_planar
 from matplotlib import colors as mcolors
@@ -543,7 +544,10 @@ def run(
   model_variant = config.get("model_variant", "default")
   models = [
     TightLoadManagementModel() if model_variant == "tight"
-    else LoadManagementModel()
+    else (
+      SelfishLoadManagementModel() if model_variant == "selfish" else 
+      LoadManagementModel()
+    )
   ]
   # generate base instance data and load traces
   base_instance_data, input_requests_traces, agents, _ = init_problem(

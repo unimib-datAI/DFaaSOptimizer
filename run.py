@@ -3,6 +3,7 @@ from run_centralized_model import load_configuration
 from run_centralized_model import run as run_centralized
 from run_faasmacro import run as run_iterations
 from run_faasmadea import run as run_auction
+from decentralized_auction import run as run_auction_one_shot
 from hierarchical_auction.runner import run as run_hierarchical
 from hierarchical_auction.madea_runner import run as run_hierarchical_madea
 from hierarchical_auction.madea_cycles_runner import run as run_hierarchical_madea_cycles
@@ -35,10 +36,11 @@ logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 METHOD_RESULT_MODELS = {
   "centralized": ("LoadManagementModel", "LoadManagementModel"),
-  "selfish-centralized": ("LSP", "Selfish-LMM"),
+  "selfish-distributed": ("LSP", "Selfish-DLMM"),
   "faas-macro": ("LSP", "FaaS-MACrO"),
   "faas-macro-v0": ("LSP", "FaaS-MACrO(v0)"),
   "faas-madea": ("LSPc", "FaaS-MADeA"),
+  "faas-madea-1s": ("LSPc", "FaaS-MADeA(1s)"),
   "faas-madea-pg": ("LSPc", "FaaS-MADeA-PG"),
   "hierarchical-madea-level-cycles-pg": ("LSPc", "HierarchicalMADeALevelCyclesPG"),
   "hierarchical": ("LSPc", "HierarchicalAuction"),
@@ -64,7 +66,11 @@ METHOD_RESULT_MODELS = {
 # on-disk files by the actual saved name, so it probes the folder. This also
 # works when re-postprocessing solution_folders loaded from an earlier run whose
 # variant the current config no longer reflects.
-CENTRALIZED_MODEL_KEYS = ("LoadManagementModel", "TightLoadManagementModel")
+CENTRALIZED_MODEL_KEYS = (
+  "LoadManagementModel", 
+  "TightLoadManagementModel",
+  "SelfishLoadManagementModel"
+)
 
 
 def resolve_centralized_model_key(folder: str, default: str) -> str:
@@ -100,10 +106,11 @@ def parse_arguments() -> argparse.Namespace:
     nargs = "+",
     choices = [
       "centralized", 
-      "selfish-centralized", 
+      "selfish-distributed", 
       "faas-macro-v0", 
       "faas-macro", 
       "faas-madea",
+      "faas-madea-1s",
       "faas-madea-pg",
       "hierarchical-madea-level-cycles-pg",
       "hierarchical",
@@ -975,10 +982,11 @@ def run(
   solution_folders = {
     "experiments_list": [],
     "centralized": [],
-    "selfish-centralized": [],
+    "selfish-distributed": [],
     "faas-macro": [],
     "faas-macro-v0": [],
     "faas-madea": [],
+    "faas-madea-1s": [],
     "hierarchical": [],
     "hierarchical-madea": [],
     "hierarchical-madea-cycles": [],
@@ -1003,10 +1011,11 @@ def run(
   for exp_value, seed in tqdm(experiments_list):
     # check if the experiment is still to run
     run_c = False # -- centralized
-    run_sc = False # -- selfish-centralized
+    run_sc = False # -- selfish-distributed
     run_i = False # -- faasmacro
     run_i_v0 = False # -- faasmacro (v0)
     run_a = False # -- faasmadea
+    run_a1s = False # -- faasmadea (one-shot)
     run_h = False # -- hierarchical
     run_hm = False # -- hierarchical MADeA
     run_hmc = False # -- complete MADEA cycles followed by hierarchy
@@ -1031,10 +1040,10 @@ def run(
           solution_folders["centralized"][experiment_idx] is None
         )):
         run_c = True
-      if (not generate_only and "selfish-centralized" in methods) and ((
-          len(solution_folders["selfish-centralized"]) <= experiment_idx
+      if (not generate_only and "selfish-distributed" in methods) and ((
+          len(solution_folders["selfish-distributed"]) <= experiment_idx
         ) or (
-          solution_folders["selfish-centralized"][experiment_idx] is None
+          solution_folders["selfish-distributed"][experiment_idx] is None
         )):
         run_sc = True
       if (not generate_only and "faas-macro" in methods) and ((
@@ -1055,6 +1064,12 @@ def run(
           solution_folders["faas-madea"][experiment_idx] is None
         )):
         run_a = True
+      if (not generate_only and "faas-madea-1s" in methods) and ((
+          len(solution_folders["faas-madea-1s"]) <= experiment_idx
+        ) or (
+          solution_folders["faas-madea-1s"][experiment_idx] is None
+        )):
+        run_a1s = True
       if (not generate_only and "hierarchical" in methods) and ((
           len(solution_folders["hierarchical"]) <= experiment_idx
         ) or (
@@ -1135,10 +1150,11 @@ def run(
         run_pl = True
     except ValueError:
       run_c = "centralized" in methods
-      run_sc = "selfish-centralized" in methods
+      run_sc = "selfish-distributed" in methods
       run_i = "faas-macro" in methods
       run_i_v0 = "faas-macro-v0" in methods
       run_a = "faas-madea" in methods
+      run_a1s = "faas-madea-1s" in methods
       run_h = "hierarchical" in methods
       run_hm = "hierarchical-madea" in methods
       run_hmc = "hierarchical-madea-cycles" in methods
@@ -1165,9 +1181,10 @@ def run(
       )
     }
     # if the experiment is still to run...
-    if (run_c or run_sc or run_i or run_i_v0 or run_a or run_h or run_hm or run_hmc or run_hmlc or \
-        run_d or run_p or run_brs or run_brr or run_bro or run_pgs or \
-          run_pgr or run_g or run_pl or generate_only or pending_refinements
+    if (run_c or run_sc or run_i or run_i_v0 or run_a or run_a1s or run_h or \
+        run_hm or run_hmc or run_hmlc or run_d or run_p or run_brs or \
+          run_brr or run_bro or run_pgs or run_pgr or run_g or run_pl or \
+            generate_only or pending_refinements
       ):
       # -- update configuration
       config = deepcopy(base_config)
@@ -1194,8 +1211,8 @@ def run(
             old_exp_path = old_instance_paths["centralized"][
               old_exp_idx
             ]
-          elif "selfish-centralized" in old_instance_paths:
-            old_exp_path = old_instance_paths["selfish-centralized"][
+          elif "selfish-distributed" in old_instance_paths:
+            old_exp_path = old_instance_paths["selfish-distributed"][
               old_exp_idx
             ]
           elif "faas-macro" in old_instance_paths:
@@ -1208,6 +1225,10 @@ def run(
             ]
           elif "faas-madea" in old_instance_paths:
             old_exp_path = old_instance_paths["faas-madea"][
+              old_exp_idx
+            ]
+          elif "faas-madea-1s" in old_instance_paths:
+            old_exp_path = old_instance_paths["faas-madea-1s"][
               old_exp_idx
             ]
           config["limits"]["path"] = old_exp_path
@@ -1243,7 +1264,7 @@ def run(
           disable_plotting = disable_plotting
         )
         set_solution_folder(
-          solution_folders, "selfish-centralized", experiment_idx, sc_folder
+          solution_folders, "selfish-distributed", experiment_idx, sc_folder
         )
       # -- solve iterative model (v0)
       if fix_r:
@@ -1288,6 +1309,16 @@ def run(
         )
         set_solution_folder(
           solution_folders, "faas-madea", experiment_idx, a_folder
+        )
+      if run_a1s:
+        a1s_folder = run_auction_one_shot(
+          config,
+          sp_parallelism,
+          log_on_file = log_on_file,
+          disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "faas-madea-1s", experiment_idx, a1s_folder
         )
       # -- solve hierarchical
       if run_h:

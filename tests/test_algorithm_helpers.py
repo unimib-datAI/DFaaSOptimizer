@@ -159,6 +159,7 @@ def test_evaluate_bids_eta_schedule_and_scalar_and_n_auctions_guard():
 
 def test_decentralized_auction_bid_definition_and_helpers():
   data = _auction_data()
+  data[None]["gamma"] = {(n, f): 0. for n in (1, 2) for f in (1, 2)}
   omega = np.array([[4.0, 0.0], [0.0, 0.0]])
   blackboard = np.array([[0.0, 0.0], [3.0, 0.0]])
   neighborhood = np.array([[0, 1], [1, 0]])
@@ -167,10 +168,11 @@ def test_decentralized_auction_bid_definition_and_helpers():
     "fairness_weight": 0.0,
     "epsilon": 0.1,
     "eta": 0.5,
+    "unit_bids": False,
     "zeta": 0.1,
   }
 
-  bids, memory_bids = decentralized_auction.define_bids(
+  bids, memory_bids, _ = decentralized_auction.define_bids(
     omega,
     blackboard,
     p = np.zeros((2, 2)),
@@ -180,13 +182,13 @@ def test_decentralized_auction_bid_definition_and_helpers():
     auction_options = options,
     latency = np.zeros((2, 2)),
     fairness = np.zeros((2, 2)),
-    delta = np.zeros((2, 2)),
+    force_memory_bids = False,
   )
-  assert memory_bids.empty
+  assert memory_bids.loc[0, "j"] == 1  # one request still needs capacity
   assert bids.loc[0, "j"] == 1
   assert bids.loc[0, "d"] == 3.0
 
-  y, prices = decentralized_auction.evaluate_bids(
+  y, prices, _, _ = decentralized_auction.evaluate_bids(
     bids,
     blackboard,
     data,
@@ -199,7 +201,7 @@ def test_decentralized_auction_bid_definition_and_helpers():
   assert y[0, 1, 0] == 3.0
   assert prices[1, 0] > 0
 
-  no_capacity_bids, memory_bids = decentralized_auction.define_bids(
+  no_capacity_bids, memory_bids, _ = decentralized_auction.define_bids(
     omega,
     np.zeros((2, 2)),
     p = np.zeros((2, 2)),
@@ -209,7 +211,7 @@ def test_decentralized_auction_bid_definition_and_helpers():
     auction_options = options,
     latency = np.zeros((2, 2)),
     fairness = np.zeros((2, 2)),
-    delta = np.zeros((2, 2)),
+    force_memory_bids = False,
   )
   assert no_capacity_bids.empty
   assert memory_bids.loc[0, "j"] == 1
@@ -237,14 +239,16 @@ def test_decentralized_auction_bid_definition_and_helpers():
 
 def test_decentralized_auction_rejects_ping_pong_in_same_round():
   data = _auction_data()
+  data[None]["gamma"] = {(n, f): 0. for n in (1, 2) for f in (1, 2)}
   options = {
     "latency_weight": 0.0,
     "fairness_weight": 0.0,
     "epsilon": 0.1,
     "eta": 0.0,
+    "unit_bids": False,
     "zeta": 0.1,
   }
-  bids, _ = decentralized_auction.define_bids(
+  bids, _, _ = decentralized_auction.define_bids(
     omega = np.ones((2, 2)),
     blackboard = np.ones((2, 2)),
     p = np.zeros((2, 2)),
@@ -254,10 +258,10 @@ def test_decentralized_auction_rejects_ping_pong_in_same_round():
     auction_options = options,
     latency = np.zeros((2, 2)),
     fairness = np.zeros((2, 2)),
-    delta = np.zeros((2, 2)),
+    force_memory_bids = False,
   )
 
-  y, _ = decentralized_auction.evaluate_bids(
+  y, _, _, _ = decentralized_auction.evaluate_bids(
     bids,
     blackboard = np.ones((2, 2)),
     data = data,

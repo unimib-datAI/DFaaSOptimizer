@@ -356,7 +356,8 @@ def evaluate_bids(
     initial_rho: np.array = None,
     r: np.array = None,
     tentatively_start_replicas: bool = False,
-    it: int = 0
+    it: int = 0,
+    may_replace_existing_assignments: bool = True
   ) -> np.array:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
@@ -466,8 +467,10 @@ def evaluate_bids(
             # Leave unserved bids for the reassignment phase below.
             break
           next_bid_idx += 1
-      if not tentatively_start_replicas or (
-          tentatively_start_replicas and rho[j] <= 0
+      if may_replace_existing_assignments and (
+          not tentatively_start_replicas or (
+            tentatively_start_replicas and rho[j] <= 0
+          )
         ):
         # if no additional replicas can start, replace existing assignments
         # -- check who previously won the assignment to j

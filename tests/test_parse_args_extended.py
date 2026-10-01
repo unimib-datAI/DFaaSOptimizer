@@ -22,8 +22,8 @@ def test_decentralized_auction_parse_args_defaults(monkeypatch):
   monkeypatch.setattr("sys.argv", ["prog"])
   from decentralized_auction import parse_arguments
   args = parse_arguments()
-  assert args.config == "manual_config.json"
-  assert args.parallelism == -1
+  assert args.config == "config_files/manual_config.json"
+  assert args.parallelism == 0
   assert args.disable_plotting is False
 
 

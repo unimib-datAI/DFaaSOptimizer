@@ -114,7 +114,9 @@ class LSP_v0(SPAbstractModel):
         ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
       )
     ) + sum(
-      model.pi[f] * model.omega[f] / (model.incoming_load[model.whoami,f] or 1) for f in model.F
+      model.pi[f] * model.omega[f] / (
+        model.incoming_load[model.whoami,f] or 1
+      ) for f in model.F
     )
 
 class LSP(LSP_v0):
@@ -171,7 +173,9 @@ class LSP(LSP_v0):
         ) / (model.incoming_load[model.whoami,f] or 1) for f in model.F
       )
     ) + sum(
-      model.pi[f] * model.omega[f] / (model.incoming_load[model.whoami,f] or 1) for f in model.F
+      model.pi[f] * model.omega[f] / (
+        model.incoming_load[model.whoami,f] or 1
+      ) for f in model.F
     )
 
 class LSP_detailed(SPAbstractModel):
@@ -233,7 +237,9 @@ class LSP_detailed(SPAbstractModel):
 
   @staticmethod
   def maximize_processing(model):
-    """Equivalent to minimizing the original cost, with a positive gain sign."""
+    """
+    Equivalent to minimizing the original cost, with a positive gain sign
+    """
     return -LSP_detailed.minimize_processing_cost(model)
 
   @staticmethod
