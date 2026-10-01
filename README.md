@@ -373,13 +373,24 @@ exclude individually harmful source moves, and the round budget can stop early.
 Allocations are rebuilt for each new workload snapshot; there is no monotonicity
 claim across changing loads.
 
-The implementation is a sequential simulation with rotating node turns, not a
-deployed asynchronous protocol. Heartbeat delay/loss is modeled; reservation,
+The implementation simulates rotating node turns, not a deployed asynchronous
+protocol. Heartbeat delay/loss is modeled; reservation,
 prepare, commit and release RPCs are reliable and atomic within a transaction.
 A distributed deployment needs durable transaction recovery before that assumption
 can be relaxed. Message counts include request/reply pairs and heartbeats, not
 one message per request in a batch. Replica optimization uses integer RAM units
 and does not require Gurobi.
+
+`plasma-welfare` supports `-j 0` (sequential), `-j N` (N processes) and `-j -1`
+(available logical CPUs, capped at the initially active nodes). One pool stays
+alive across rounds and timesteps and closes on completion or failure. Initial
+placements run independently. Negotiations run local DPs together only when their
+closed neighborhoods are disjoint, preserving the original order of conflicting
+turns. Workers receive only the receiver's local state and reserved neighbor
+offers; reservation, prepare, commit and release stay in the simulator process.
+Singleton negotiation plans run inline to avoid IPC overhead. This schedules
+simulation work without selecting allocations globally. The original `plasma`
+method remains single-process.
 
 Options are independent of the original PLASMA options:
 

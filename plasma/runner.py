@@ -15,6 +15,7 @@ from run_centralized_model import (
 from generators.generate_data import update_data
 from utils.centralized import check_feasibility, get_current_load
 from utils.faasmacro import compute_centralized_objective
+from run_faasmacro import parallel_solver_run
 
 from plasma.core.node import NodeParams, PlasmaNode
 from plasma.core.types import PlasmaOptions
@@ -50,13 +51,12 @@ def build_nodes(base_instance_data: dict, opts: PlasmaOptions, seed: int, *, nod
   return nodes
 
 
+@parallel_solver_run
 def run(
     config: dict, parallelism: int, log_on_file: bool = False,
     disable_plotting: bool = False, *, welfare: bool = False,
   ) -> str:
-  # parallelism: accepted for signature compatibility with the other method
-  # runners (decentralized_gcaa.run and friends); PLASMA is a single-process
-  # simulation and does not use it.
+  # The original PLASMA stays single-process; Welfare parallelizes local DP only.
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
   limits = config["limits"]
@@ -88,7 +88,7 @@ def run(
   Nf = d["Nf"][None]
   if welfare:
     nodes = build_nodes(base_instance_data, opts, seed, node_class=WelfareNode)
-    engine = WelfareEngine(nodes, opts, np.random.default_rng(seed))
+    engine = WelfareEngine(nodes, opts, np.random.default_rng(seed), parallelism=parallelism)
   else:
     nodes = build_nodes(base_instance_data, opts, seed)
     engine = PlasmaEngine(nodes, opts, np.random.default_rng(seed))

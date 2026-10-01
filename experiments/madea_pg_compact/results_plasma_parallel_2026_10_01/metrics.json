@@ -1,0 +1,22 @@
+{
+  "successful_runs": 24,
+  "cases": 4,
+  "repeats": 2,
+  "rounds_per_run": 20,
+  "exact_allocations": true,
+  "exact_welfare": true,
+  "exact_message_counts": true,
+  "exact_accepted_trades": true,
+  "median_case_speedup_two_workers": 1.2778735166804376,
+  "median_case_speedup_four_workers": 1.6580733947898691,
+  "timing_note": "Full runner wall time, one machine. Final two timings overlapped briefly with focused tests and GitNexus indexing to meet the requested immediate commit.",
+  "full_suite": {
+    "passed": 874,
+    "skipped": 27,
+    "failed": 1,
+    "known_failure": "test_integer_fixed_sum_traces_preserve_system_workload"
+  },
+  "final_focused_tests": {
+    "passed": 6
+  }
+}

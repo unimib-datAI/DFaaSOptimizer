@@ -4,9 +4,12 @@ The engine transports messages and serializes transactions. Nodes never read
 another node's state or a global objective. Reliable atomic commit is a simulator
 assumption, not a crash-tolerant distributed transaction implementation.
 """
+from contextlib import contextmanager, ExitStack
+from copy import copy
 from dataclasses import dataclass
 from math import isfinite
 from numbers import Integral
+import multiprocessing as mp
 
 import numpy as np
 
@@ -14,6 +17,7 @@ from plasma.core.protocol import HeartbeatCache
 from plasma.core.sbm import minimize_replica_costs
 from plasma.core.types import Heartbeat
 from plasma.engine import PlasmaEngine, StepResult
+from run_faasmacro import parallel_solver_run, parallel_solver_session, _available_cpu_count
 
 
 @dataclass(frozen=True)
@@ -84,7 +88,7 @@ class WelfareNode:
     # Placement requires this window's own demand, supplied by start_window.
     self.r[:] = 0
 
-  def start_window(self, arrivals, epoch):
+  def start_window(self, arrivals, epoch, *, initialize=True):
     values = np.asarray(arrivals)
     if (values.shape != (self.Nf,) or not np.isfinite(values).all()
         or (values < 0).any() or not np.equal(values, np.floor(values)).all()):
@@ -97,7 +101,7 @@ class WelfareNode:
     self.y = np.zeros((len(self.params.nbrs), self.Nf), dtype=int)
     self.incoming = np.zeros(self.Nf, dtype=int)
     self.r[:] = 0
-    if self.alive:
+    if self.alive and initialize:
       plan = self.plan(())
       self.r, self.x = plan.r, plan.x
       self.z = self.load - self.x
@@ -208,40 +212,46 @@ class WelfareNode:
     )
     return Plan(r, x, tuple(tuple(counts) for counts in accepted), gain)
 
-  def negotiate(self, round_, send):
-    if not self.alive:
-      return False
+  @contextmanager
+  def offers(self, round_, send):
+    """Hold neighbor offers until the local plan is committed or abandoned."""
     reservations = []
     try:
-      for neighbor in self.params.nbrs:
+      for neighbor in self.params.nbrs if self.alive else ():
         if self.cache._fresh(neighbor, round_, self.opts.staleness_rounds) is None:
           continue
         offer = send(neighbor, 'reserve', self.epoch)
         if offer is not None:
           reservations.append(offer)
-      if not reservations:
-        return False
-      plan = self.plan(reservations)
-      if plan.gain <= self.opts.epsilon:
-        return False
-      # Every quantity is locked before preparing; no traffic has moved yet.
-      if not all(send(r.sender, 'prepare', r, counts)
-                 for r, counts in zip(reservations, plan.accepted)):
-        return False
-      # ponytail: atomic reliable RPC in this sequential simulator; a deployed
-      # asynchronous version needs durable prepare/commit and recovery.
-      for reservation, counts in zip(reservations, plan.accepted):
-        if not send(reservation.sender, 'commit', reservation, counts):
-          raise RuntimeError('Atomic commit interrupted after successful prepare')
-      self.r, self.x = plan.r, plan.x
-      self.z = self.load - self.y.sum(axis=0) - self.x
-      for reservation, counts in zip(reservations, plan.accepted):
-        for offer, count in zip(reservation.items, counts):
-          self.incoming[offer.function] += count
-      return True
+      yield reservations
     finally:
       for reservation in reservations:
         send(reservation.sender, 'cancel', reservation)
+
+  def accept_plan(self, reservations, plan, send):
+    if plan.gain <= self.opts.epsilon:
+      return False
+    # Every quantity is locked before preparing; no traffic has moved yet.
+    if not all(send(r.sender, 'prepare', r, counts)
+               for r, counts in zip(reservations, plan.accepted)):
+      return False
+    # ponytail: atomic reliable RPC in this simulator; an asynchronous
+    # deployment needs durable prepare/commit and recovery.
+    for reservation, counts in zip(reservations, plan.accepted):
+      if not send(reservation.sender, 'commit', reservation, counts):
+        raise RuntimeError('Atomic commit interrupted after successful prepare')
+    self.r, self.x = plan.r, plan.x
+    self.z = self.load - self.y.sum(axis=0) - self.x
+    for reservation, counts in zip(reservations, plan.accepted):
+      for offer, count in zip(reservation.items, counts):
+        self.incoming[offer.function] += count
+    return True
+
+  def negotiate(self, round_, send):
+    with self.offers(round_, send) as reservations:
+      if not reservations:
+        return False
+      return self.accept_plan(reservations, self.plan(reservations), send)
 
   def make_heartbeat(self):
     self._seq += 1
@@ -256,7 +266,24 @@ class WelfareNode:
       self.cache.store(hb, round_)
 
 
+def _plan_job(node, reservations):
+  # A worker receives one node's state and explicit offers, never the network.
+  local = copy(node)
+  local.cache = HeartbeatCache()
+  local.rng = None
+  return local, reservations
+
+
+def _solve_plan(job):
+  node, reservations = job
+  return node.plan(reservations)
+
+
 class WelfareEngine(PlasmaEngine):
+  def __init__(self, nodes, opts, rng, *, parallelism=0):
+    super().__init__(nodes, opts, rng)
+    self.parallelism = parallelism
+
   def _send(self, source, target, operation, *payload):
     if target not in self.nodes[source].params.nbrs:
       raise ValueError('Messages may only cross a neighbor edge')
@@ -265,21 +292,73 @@ class WelfareEngine(PlasmaEngine):
     self.msg_count += 2  # one request and one reply, batched by neighbor
     return getattr(self.nodes[target], operation)(source, *payload)
 
+  def _negotiation_batches(self, round_):
+    """Keep the original turn order for every pair sharing a participant."""
+    levels, batches = {}, []
+    count = len(self.nodes)
+    for offset in range(count):
+      i = (round_ + offset) % count
+      participants = {i, *self.nodes[i].params.nbrs}
+      level = 1 + max((levels.get(j, -1) for j in participants), default=-1)
+      if level == len(batches):
+        batches.append([])
+      batches[level].append(i)
+      for j in participants:
+        levels[j] = level
+    return batches
+
+  def _parallel_round(self, round_, pool):
+    for batch in self._negotiation_batches(round_):
+      with ExitStack() as stack:
+        pending = []
+        for i in batch:
+          node = self.nodes[i]
+          def send(target, operation, *payload, source=i):
+            return self._send(source, target, operation, *payload)
+          reservations = stack.enter_context(node.offers(round_, send))
+          if reservations:
+            pending.append((node, reservations, send))
+        # A single ready plan is cheaper inline than a process round trip.
+        if len(pending) == 1:
+          node, reservations, send = pending[0]
+          self.accepted_trades += node.accept_plan(reservations, node.plan(reservations), send)
+        elif pending:
+          plans = pool.map(_solve_plan, [_plan_job(n, r) for n, r, _ in pending], chunksize=1)
+          for (node, reservations, send), plan in zip(pending, plans):
+            self.accepted_trades += node.accept_plan(reservations, plan, send)
+
+  @parallel_solver_run
   def run_rounds(self, n_rounds, arrivals):
     if not isinstance(n_rounds, Integral) or n_rounds < 1:
       raise ValueError('n_rounds must be positive')
     for node, load in zip(self.nodes, arrivals):
-      node.start_window(load, self.clock.round)
+      node.start_window(load, self.clock.round, initialize=not self.parallelism)
+    alive = [node for node in self.nodes if node.alive]
+    pool = None
+    if self.parallelism and alive:
+      with parallel_solver_session() as state:
+        if state['pool'] is None:
+          available = _available_cpu_count() if self.parallelism < 0 else self.parallelism
+          state['workers'] = max(1, min(available, len(alive)))
+          state['pool'] = mp.Pool(processes=state['workers'])
+        pool = state['pool']
+      plans = pool.map(_solve_plan, [_plan_job(node, ()) for node in alive], chunksize=1)
+      for node, plan in zip(alive, plans):
+        node.r, node.x = plan.r, plan.x
+        node.z = node.load - node.x
     self.accepted_trades = 0
 
     def on_round(round_):
       # Fixed local turns rotate for fairness, independently of any welfare.
-      count = len(self.nodes)
-      for offset in range(count):
-        i = (round_ + offset) % count
-        self.accepted_trades += self.nodes[i].negotiate(
-          round_, lambda target, operation, *payload: self._send(i, target, operation, *payload),
-        )
+      if pool is not None:
+        self._parallel_round(round_, pool)
+      else:
+        count = len(self.nodes)
+        for offset in range(count):
+          i = (round_ + offset) % count
+          self.accepted_trades += self.nodes[i].negotiate(
+            round_, lambda target, operation, *payload: self._send(i, target, operation, *payload),
+          )
       self._send_heartbeats(round_)
 
     self.clock.run(n_rounds, on_round)

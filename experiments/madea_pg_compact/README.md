@@ -28,5 +28,21 @@ root with the same environment variables above. Small follow-up results are save
 `results_warm_pool_2026_10_01/`; large solutions stay under ignored `solutions/`.
 The cold runner comparison took about 164 seconds on the recorded machine.
 
+`plasma_parallel.py` compares full PLASMA-Welfare runs with `-j 0`, `-j 2` and
+`-j 4` on the four common planar instances used in `compare_families.py`.
+It repeats each mode twice, rotates execution order and checks exact allocations,
+welfare, messages and accepted transactions. Wall time includes pool startup and
+shutdown; all runs use 20 rounds, with a five-minute experiment limit:
+
+```sh
+MPLCONFIGDIR=/tmp/dfaas-mpl XDG_CACHE_HOME=/tmp/dfaas-test-cache .venv/bin/python experiments/madea_pg_compact/plasma_parallel.py
+```
+
+The 24 completed runs are recorded in `results_plasma_parallel_2026_10_01/`.
+Allocations, welfare, messages and accepted transactions match exactly across
+all modes and repetitions. `summary.csv` reports median full-run times by case.
+The last two measurements briefly overlapped final verification; this small
+sample is indicative rather than a controlled hardware scaling study.
+
 See [the Italian summary](../../docs/MADEA-PG-miglioramenti.md) for the final behavior,
 measured gains and full-suite validation.

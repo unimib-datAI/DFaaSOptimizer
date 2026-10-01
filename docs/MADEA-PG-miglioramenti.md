@@ -115,3 +115,31 @@ I dettagli sono nel [report delle proposte compatte](../experiments/madea_pg_com
 e nei [risultati del pool persistente](../experiments/madea_pg_compact/results_warm_pool_2026_10_01/metrics.json).
 Gli script di verifica sono nella cartella
 [degli esperimenti](../experiments/madea_pg_compact/README.md).
+
+## Parallelismo in PLASMA-Welfare
+
+Anche PLASMA-Welfare può usare il pool persistente: `-j 0` mantiene il calcolo
+sequenziale, `-j N` usa N processi e `-j -1` sceglie in base ai core logici
+disponibili, senza superare il numero iniziale di nodi attivi. L'inizializzazione
+dei nodi è indipendente. Durante i round, le DP vengono eseguite insieme soltanto
+quando i rispettivi nodi e vicini non si sovrappongono; le transazioni che
+condividono partecipanti mantengono l'ordine originale. Il processo principale
+gestisce prenotazioni e commit, mentre ciascun worker riceve solo lo stato locale
+del destinatario e le offerte riservate. Non viene aggiunta una scelta globale
+delle allocazioni. La variante PLASMA originale resta sequenziale.
+
+La prova su quattro istanze planari da 40 e 80 nodi, con cinque funzioni e
+20 round, comprende 24 esecuzioni: due ripetizioni con zero, due e quattro
+processi. Allocazioni, welfare, messaggi e scambi accettati sono identici. Con
+quattro processi, i casi da 80 nodi impiegano circa la metà del tempo, includendo
+l'avvio e la chiusura del pool. Le ultime due misure si sono brevemente
+sovrapposte ai controlli finali: il risultato indica un beneficio, ma non è uno
+studio completo della scalabilità hardware.
+
+La suite dopo l'integrazione dei commit remoti e delle modifiche PLASMA ha dato
+874 test passati, 27 saltati e il solo fallimento già noto di `fixed_sum`.
+I sei test finali del parallelismo passano, compresa la cancellazione delle
+offerte e la chiusura dei processi dopo un errore nella DP di negoziazione.
+I [tempi per istanza](../experiments/madea_pg_compact/results_plasma_parallel_2026_10_01/summary.csv)
+e i [dettagli della verifica](../experiments/madea_pg_compact/results_plasma_parallel_2026_10_01/metrics.json)
+sono salvati insieme allo script riproducibile.
