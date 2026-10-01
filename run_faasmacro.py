@@ -16,6 +16,7 @@ from utils.common import load_configuration
 from generators.generate_data import update_data
 from postprocessing import load_solution, plot_history
 
+from models.local_sp import solve_agent_problem
 from models.rmp import RMPAbstractModel, LRMP
 from models.sp import (
   SPAbstractModel, 
@@ -261,9 +262,8 @@ def compute_social_welfare(
   else:
     for agent in agents:
       spr_data[None]["whoami"] = {None: agent + 1}
-      spr_instance = spr.generate_instance(spr_data)
-      agents_sol[agent] = spr.solve(
-        spr_instance, solver_options, solver_name
+      agents_sol[agent] = solve_agent_problem(
+        spr, spr_data, solver_options, solver_name
       )
   # merge solutions
   spr_sol = merge_agents_solutions(
@@ -540,8 +540,7 @@ def solve_single_agent(agent: int, detailed_pi=None):
     local_data[None]["pi"] = {
       f+1: price for f, price in enumerate(detailed_pi[agent])
     }
-  sp_instance = _sp.generate_instance(local_data)
-  result = _sp.solve(sp_instance, _solver_options, _solver_name)
+  result = solve_agent_problem(_sp, local_data, _solver_options, _solver_name)
   return agent, result
 
 
@@ -583,10 +582,8 @@ def solve_subproblem(
       agent_data[None]["whoami"] = {None: agent + 1}
       if detailed_pi is not None:
         agent_data[None]["pi"] = {f+1: detailed_pi[agent,f] for f in range(Nf)}
-      sp_instance = sp.generate_instance(agent_data)
-      # solve
-      agents_sol[agent] = sp.solve(
-        sp_instance, solver_options, solver_name
+      agents_sol[agent] = solve_agent_problem(
+        sp, agent_data, solver_options, solver_name
       )
   # merge solutions
   (

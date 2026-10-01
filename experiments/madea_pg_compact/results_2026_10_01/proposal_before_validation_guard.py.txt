@@ -121,13 +121,8 @@ def propose_node_move(
   guarantees potential monotonicity, not proposal optimality."""
   Nn = sp_data[None]["Nn"][None]
   Nf = sp_data[None]["Nf"][None]
-  values, owner = sp_data[None], node + 1
-  required = [("memory_capacity", owner)]
-  required += [("memory_requirement", f) for f in range(1, Nf + 1)]
-  required += [(parameter, (owner, f)) for parameter in ("incoming_load", "demand")
-               for f in range(1, Nf + 1)]
-  if (type(model) in (LSP_pg, LSP_pg_fixedr)
-      and all(key in values.get(parameter, {}) for parameter, key in required)):
+  if type(model) in (LSP_pg, LSP_pg_fixedr):
+    values, owner = sp_data[None], node + 1
     # Only own parameters and committed inbound totals enter the local DP.
     # Remapping to one node avoids copying the network and rebuilding Nn² flows.
     local = {

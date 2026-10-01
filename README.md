@@ -239,6 +239,32 @@ The external no-progress stopping rule above applies to both cycle variants.
 
 ### MADEA-PG: auction initialization and welfare refinement
 
+All runners share the exact local backend in `models/local_sp.py`: `LSPr_x`
+computes rejections and minimum replicas directly; `LSP`, restricted `LSPr`,
+and their supported v0, capped, fixed-replica and PG variants use local RAM
+dynamic programming (fixed replicas require only per-function calculations).
+The backend preserves each model's objective, flow domains, capacity bounds
+and committed incoming traffic. Sequential runs and multiprocessing workers
+use the same path. The original Pyomo APIs remain available as an oracle and
+fallback for other model classes, continuous-flow modes, unsupported parameters,
+infeasible inputs and large DP state spaces. Solver options apply to that fallback.
+Nodes use their own parameters plus existing incoming commitments and offload caps.
+PG proposals pass only the proposing node's parameters and aggregate inbound
+commitments to this backend, avoiding a copy of the full network and its flow
+dictionary. Unsupported inputs retain the original full-data solver path.
+
+`benchmark_madea_pg_compact.py` compares compact/full proposals on shared planar
+degree-3 instances, separately with DP and node-local Gurobi initialization.
+Run `.venv/bin/python benchmark_madea_pg_compact.py --seconds 3600`;
+the protocol, inputs, feasibility checks and per-move traces are saved under
+`solutions/madea-pg-compact-planar-2026-10-01`. Initialization is replayed only
+in this paired experiment; measured wall time includes its actual solve.
+
+Exact local optimization can choose a different allocation among equal-cost
+optima. These choices are deterministic, but change later auctions and may
+decrease final welfare compared with a MILP solver's tie choices; changing the
+instance seed does not guarantee that this effect cancels out.
+
 Two separate methods reuse the best auction incumbent at each timestep:
 
 | Method | Auction phase | Objective column |

@@ -1,0 +1,166 @@
+[
+  {
+    "nodes": 10,
+    "seed": 4850
+  },
+  {
+    "nodes": 20,
+    "seed": 2026
+  },
+  {
+    "nodes": 40,
+    "seed": 7
+  },
+  {
+    "nodes": 80,
+    "seed": 7
+  },
+  {
+    "nodes": 160,
+    "seed": 7
+  },
+  {
+    "nodes": 40,
+    "seed": 42
+  },
+  {
+    "nodes": 80,
+    "seed": 42
+  },
+  {
+    "nodes": 160,
+    "seed": 42
+  },
+  {
+    "nodes": 40,
+    "seed": 99
+  },
+  {
+    "nodes": 80,
+    "seed": 99
+  },
+  {
+    "nodes": 160,
+    "seed": 99
+  },
+  {
+    "nodes": 40,
+    "seed": 123
+  },
+  {
+    "nodes": 80,
+    "seed": 123
+  },
+  {
+    "nodes": 160,
+    "seed": 123
+  },
+  {
+    "nodes": 40,
+    "seed": 2026
+  },
+  {
+    "nodes": 80,
+    "seed": 2026
+  },
+  {
+    "nodes": 160,
+    "seed": 2026
+  },
+  {
+    "nodes": 40,
+    "seed": 7,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 80,
+    "seed": 7,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 160,
+    "seed": 7,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 40,
+    "seed": 7,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 80,
+    "seed": 7,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 160,
+    "seed": 7,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 40,
+    "seed": 42,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 80,
+    "seed": 42,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 160,
+    "seed": 42,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 40,
+    "seed": 42,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 80,
+    "seed": 42,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 160,
+    "seed": 42,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 40,
+    "seed": 7,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 80,
+    "seed": 7,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 160,
+    "seed": 7,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 40,
+    "seed": 42,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 80,
+    "seed": 42,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 160,
+    "seed": 42,
+    "functions": 10,
+    "degree": 3
+  }
+]

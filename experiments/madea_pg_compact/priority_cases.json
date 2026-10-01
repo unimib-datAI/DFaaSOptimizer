@@ -1,0 +1,93 @@
+[
+  {
+    "nodes": 40,
+    "seed": 7,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 80,
+    "seed": 7,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 160,
+    "seed": 7,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 40,
+    "seed": 42,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 80,
+    "seed": 42,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 160,
+    "seed": 42,
+    "functions": 10,
+    "degree": 3
+  },
+  {
+    "nodes": 80,
+    "seed": 7,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 160,
+    "seed": 7,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 40,
+    "seed": 7,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 80,
+    "seed": 7,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 160,
+    "seed": 7,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 40,
+    "seed": 42,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 80,
+    "seed": 42,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 160,
+    "seed": 42,
+    "load_scale": 0.75
+  },
+  {
+    "nodes": 40,
+    "seed": 42,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 80,
+    "seed": 42,
+    "load_scale": 1.25
+  },
+  {
+    "nodes": 160,
+    "seed": 42,
+    "load_scale": 1.25
+  }
+]

@@ -1,0 +1,27 @@
+{
+  "pytest": {
+    "passed": 887,
+    "failed": 1,
+    "seconds": 74.31,
+    "preexisting_failure": "tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload",
+    "unchanged_generator_and_test": true
+  },
+  "ruff": "passed",
+  "mypy": "passed: 5 files",
+  "git_diff_check": "passed",
+  "gitnexus": {
+    "index_updated": true,
+    "detect_changes_scope": "all",
+    "aggregate_risk": "critical",
+    "reviewed_tracked_diff": true,
+    "new_untracked_files_checked_by_tests_and_linters": true
+  },
+  "branch": "feat/uv-migration-and-extended-tests",
+  "committed": false,
+  "production_source_hashes": {
+    "models/local_sp.py": "1aa863f5ef9388550f317630348554998adf79c7314fd3c4d410d02c441f8f18",
+    "run_faasmacro.py": "1ead99b8f1350f92b009983633c489d1362d9ca54bcf4787ba44ca046de6084b",
+    "decentralized_potentialgame.py": "9d731e336a5be2417609b71a4b76b5770e463fd96be71d643a6200f2a2479b4e",
+    "madea_pg.py": "293cd31a166acf2b0987d6b4e1329157b8d469a7d765cced421fb90de7f8e726"
+  }
+}

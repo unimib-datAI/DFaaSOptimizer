@@ -1,0 +1,19 @@
+{
+  "timestep_records": 43,
+  "successful_timesteps": 42,
+  "timeout_runs": 1,
+  "completed_runs": 14,
+  "paired_runs": 7,
+  "paired_timesteps": 21,
+  "uncensored_exact_pairs": 12,
+  "all_feasible": true,
+  "welfare_improved": 6,
+  "welfare_equal": 15,
+  "welfare_worse": 0,
+  "welfare_gain_max_pct": 12.142481847201058,
+  "wall_speedup_median": 2.9560385847037542,
+  "pg_speedup_median": 14.552022168058345,
+  "full_budget_exhausted": 9,
+  "compact_budget_exhausted": 0,
+  "runtime_accounting": "actual production counters; total wall counted once per 3-step run"
+}

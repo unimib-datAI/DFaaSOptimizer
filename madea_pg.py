@@ -38,7 +38,7 @@ class _InvalidLocalProposal(Exception):
 def refine_solution(data, solution, config, remaining_time=float("inf")):
   """Accept feasible improvements only; return the incumbent on a stalled search.
 
-  Fixed-order node moves preserve other sources' commitments. The local MILP
+  Fixed-order node moves preserve other sources' commitments. The exact local solve
   proposes moves; the node's own normalized utility decides acceptance. No-improvement
   means the proposals stalled, not a certificate of Nash/global optimality.
   """

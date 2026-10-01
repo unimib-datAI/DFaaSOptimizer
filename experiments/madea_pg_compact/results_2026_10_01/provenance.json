@@ -1,0 +1,25 @@
+{
+  "batches": [
+    "solutions/madea-pg-compact-planar-2026-10-01",
+    "solutions/madea-pg-compact-planar-stress-2026-10-01"
+  ],
+  "started_static_runs": 111,
+  "excluded_first_orphan_rows": 1,
+  "combined_rows": 110,
+  "static_source_hashes": {
+    "models/local_sp.py": "1aa863f5ef9388550f317630348554998adf79c7314fd3c4d410d02c441f8f18",
+    "models/sp.py": "a4c2fe773f9b0163059d34fe50b350db529caebc0bc1a4e2141512632e5775f9",
+    "models/model.py": "ffc0cd974fd132dd19ba8139524c6e86316434092bb31c7d2b1e2e42e72220d1",
+    "run_faasmacro.py": "1ead99b8f1350f92b009983633c489d1362d9ca54bcf4787ba44ca046de6084b",
+    "run_faasmadea.py": "21c08bd223f8c55ee616b8c280ccd8e7197db68711437e549cdd1c47e34fe09c",
+    "madea_pg.py": "293cd31a166acf2b0987d6b4e1329157b8d469a7d765cced421fb90de7f8e726",
+    "decentralized_potentialgame.py": "d1fd1b26e0adae42420d56909e00479c7bb18d19dfaf345a64dd305a9ba70bc2",
+    "plasma/core/sbm.py": "e5f5d9e675d8d1913201e357f29104ab7acf0eea36d9ca2672520f205b15da3c",
+    "benchmark_madea_pg_compact.py": "2c9dde71cb4d6587c19b038d2197cc29ba87d316d315a54b2a5ea38e824d798f"
+  },
+  "snapshot_for_post_benchmark_validation_guard": "proposal_before_validation_guard.py.txt",
+  "post_benchmark_change": "required-key guard preserves Pyomo diagnostics; valid proposals unchanged in 240 post-change oracle comparisons",
+  "current_proposal_sha256": "9d731e336a5be2417609b71a4b76b5770e463fd96be71d643a6200f2a2479b4e",
+  "deadline_utc": "2026-10-01 05:47:43",
+  "overall_start_utc": "2026-10-01 04:17:43"
+}

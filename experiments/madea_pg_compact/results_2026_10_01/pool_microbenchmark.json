@@ -1,0 +1,60 @@
+{
+  "nodes": 80,
+  "functions": 10,
+  "seed": 7,
+  "model": "LSP",
+  "start_method": "spawn",
+  "scope": "local DP solve only, same input, no auction/PG commits; timings exclude comparison assertions",
+  "rows": [
+    {
+      "processes": 0,
+      "phase": "sequential",
+      "seconds": 0.13083012506831437
+    },
+    {
+      "processes": 1,
+      "phase": "first_batch_with_startup",
+      "seconds": 1.0130940419621766
+    },
+    {
+      "processes": 1,
+      "phase": "warm_batch",
+      "seconds": 0.12726187496446073
+    },
+    {
+      "processes": 1,
+      "phase": "warm_batch",
+      "seconds": 0.12918499996885657
+    },
+    {
+      "processes": 2,
+      "phase": "first_batch_with_startup",
+      "seconds": 1.8311686249217018
+    },
+    {
+      "processes": 2,
+      "phase": "warm_batch",
+      "seconds": 0.07031412492506206
+    },
+    {
+      "processes": 2,
+      "phase": "warm_batch",
+      "seconds": 0.07035995798651129
+    },
+    {
+      "processes": 4,
+      "phase": "first_batch_with_startup",
+      "seconds": 3.9274012920213863
+    },
+    {
+      "processes": 4,
+      "phase": "warm_batch",
+      "seconds": 0.03879962500650436
+    },
+    {
+      "processes": 4,
+      "phase": "warm_batch",
+      "seconds": 0.03867699997499585
+    }
+  ]
+}
