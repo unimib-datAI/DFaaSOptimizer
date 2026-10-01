@@ -143,3 +143,195 @@ offerte e la chiusura dei processi dopo un errore nella DP di negoziazione.
 I [tempi per istanza](../experiments/madea_pg_compact/results_plasma_parallel_2026_10_01/summary.csv)
 e i [dettagli della verifica](../experiments/madea_pg_compact/results_plasma_parallel_2026_10_01/metrics.json)
 sono salvati insieme allo script riproducibile.
+
+## One-shot-PG
+
+Il nuovo metodo `one-shot-pg` usa l'asta one-shot come punto di partenza e
+applica la stessa fase di raffinamento di MADEA-PG a ogni timestep. Riutilizza
+DP e proposte compatte. Le mosse vengono accettate dal nodo che le propone,
+in base alla sua utilità e alle capacità residue annunciate dai vicini,
+preservando gli impegni in ingresso. Il welfare globale serve solo per
+misurare ed esportare il risultato della fase aggiunta. Il simulatore
+gestisce i turni; non è un'implementazione di un protocollo di rete distribuito.
+
+La configurazione del raffinamento è condivisa: `solver_options.madea_pg`.
+In assenza di un limite esplicito, il budget è 0,25 secondi per nodo;
+viene limitato dal tempo nativo restante dell'asta. Restano al massimo
+cinque sweep e la soglia di miglioramento `epsilon`. Un budget nullo
+mantiene la soluzione one-shot. Il limite controlla l'avvio delle proposte:
+una DP già avviata termina normalmente. Con fallback GLPK, meno di un
+secondo residuo impedisce di avviare una proposta; per istanze piccolissime
+si può impostare un `time_limit` maggiore.
+
+```sh
+MPLCONFIGDIR=/tmp/dfaas-mpl .venv/bin/python one_shot_pg.py -c experiments/madea_pg_compact/config.json -j 0 --disable_plotting
+```
+
+Nel batch si seleziona con `--methods one-shot-pg`. I risultati hanno la
+colonna `One-shot-PG`, un `refinement.csv` per timestep e il `runtime.csv`.
+Il metodo originale `faas-madea-1s` mantiene comportamento ed export
+precedenti. I test verificano ammissibilità, welfare non decrescente,
+identità con la baseline a budget nullo e mosse identiche anche alterando
+il misuratore globale di welfare. La variante può essere ripresa nel batch
+indipendentemente dalla baseline ed è selezionabile nei job remoti.
+
+Il [piccolo confronto planare](../experiments/madea_pg_compact/results_one_shot_pg_2026_10_01/report.md)
+comprende otto istanze e 24 esecuzioni. One-shot-PG migliora la baseline in
+tutti i casi, con un guadagno percentuale medio del 20,1%. Rispetto a MADEA-PG,
+il welfare è mediamente inferiore dello 0,38%, ma è più alto in tre casi;
+il rapporto mediano dei tempi è 0,686, cioè circa il 31% di tempo in meno.
+È una prima misura con due seed e una sola esecuzione per metodo e istanza.
+
+La suite completa dopo questa aggiunta ha dato 902 test passati e tre
+fallimenti preesistenti: il noto `fixed_sum` e due test gerarchici dovuti
+alla chiamata `define_bids(..., delta=...)`. Questi ultimi si riproducono
+anche caricando il runner one-shot da HEAD, senza le modifiche PG.
+I nomi completi e il commit di riferimento sono nella
+[verifica](../experiments/madea_pg_compact/results_one_shot_pg_2026_10_01/verification.json).
+
+One-shot-PG è stato poi eseguito da solo sui 35 input del confronto esteso,
+senza rilanciare gli altri quattro metodi. La
+[tabella aggiornata](../experiments/madea_pg_compact/results_families_five_methods_2026_10_01/report.md)
+include quattro seed per i 24 casi standard, otto casi di carico modificato
+e tre sequenze temporali. In tutti i 41 timestep il punto di partenza coincide
+con one-shot e il welfare non peggiora. Le colonne precedenti sono conservate.
+Nei casi standard il guadagno medio rispetto a one-shot è +20,4%; rispetto
+a MADEA-PG il welfare medio per istanza è inferiore dello 0,52%, con un rapporto
+mediano dei tempi pari a 0,524. Le misure nuove provengono da una sessione
+successiva sulla stessa macchina, come indicato nel protocollo.
+
+## Hierarchical-one-shot-PG
+
+Il metodo `hierarchical-one-shot-pg` riutilizza il runner gerarchico one-shot
+con il motore iterativo dei livelli già impiegato dalla variante MADEA.
+Mantiene l’allocazione locale iniziale durante le aste, accumula le assegnazioni
+accettate senza sostituire quelle precedenti, attraversa i livelli gerarchici
+e infine applica una sola fase PG per timestep. La profondità massima è
+`max_hierarchy_depth`, pari a 3 se non specificata.
+
+Le strutture ampliano il coordinamento, ma gli inoltri restano tra vicini
+diretti: non vengono autorizzati nuovi collegamenti tra nodi lontani.
+La fase PG aggiunta conserva gli impegni in ingresso e decide ogni mossa
+con l’utilità del nodo proponente, senza un criterio globale di accettazione.
+Rimane la selezione storica dell’incumbent tramite welfare già presente
+nel runner gerarchico originale; la nuova fase PG non aggiunge questo meccanismo.
+
+Il budget PG usa le stesse opzioni di one-shot-PG. Il tempo residuo viene
+calcolato sul tempo effettivamente trascorso nel timestep, includendo aste e
+gerarchia. La versione aggiornata riserva al PG il budget richiesto, fino a
+metà del limite totale: con 80 nodi e limite di 40 secondi, la gerarchia dispone
+di 20 secondi e il PG di altri 20. Se il loop si arresta prima, PG mantiene
+comunque il proprio limite configurato. Il controllo avviene tra round e
+proposte: una singola operazione già avviata può consumare parte della riserva
+o terminare oltre il limite.
+
+Il loop esterno si arresta anche dopo due round consecutivi con assegnazioni
+e repliche immutate e variazioni dei prezzi entro l’epsilon dell’asta più la
+tolleranza numerica. Controlla anche la variazione della penalità di fairness,
+quando attiva. Sono segnali ricavabili dagli aggiornamenti locali dei nodi;
+questo nuovo criterio non usa il welfare globale. Si tratta di una soglia
+euristica: piccole variazioni dei prezzi potrebbero produrre effetti dopo
+altri round. Non certifica convergenza o ottimalità. Con budget PG nullo o
+zero sweep, riserva e nuovo arresto sono disattivati.
+
+```sh
+MPLCONFIGDIR=/tmp/dfaas-mpl XDG_CACHE_HOME=/tmp/dfaas-test-cache .venv/bin/python one_shot_pg.py --variant hierarchical -c experiments/madea_pg_compact/config.json -j 0 --disable_plotting
+```
+
+Nel batch si seleziona con `--methods hierarchical-one-shot-pg`; è disponibile
+anche nei job remoti. Gli output usano la colonna `HierarchicalOneShotPG` e
+comprendono `refinement.csv` e `runtime.csv`. Il primo registra anche numero
+di round gerarchici, budget della gerarchia e riserva richiesta per il PG.
+Il runner gerarchico originale
+mantiene il motore non iterativo e il raffinamento disattivato per default.
+Sono state aggiornate le sue chiamate alle funzioni d’asta condivise:
+argomenti e risultati di `define_bids`, `evaluate_bids` e criterio d’arresto,
+oltre all’opzione `unit_bids`. Le aste rispettano gli impegni già accettati.
+Il criterio d’arresto riceve anche il numero di repliche appena avviate:
+non si ferma prima che una successiva asta possa utilizzarle.
+
+I test reali controllano due timestep, allocazioni dei livelli superiori,
+ammissibilità, integrità dei flussi, export coerente con il welfare,
+identità con la baseline gerarchica allo stesso motore quando il budget PG
+è nullo e decisioni PG identiche alterando l’osservatore globale del welfare.
+Verificano anche l’arresto dei round stagnanti su un’istanza planare da 40 nodi,
+la prosecuzione quando cambiano i prezzi e il tempo riservato al PG, simulando
+solo l’orologio del coordinamento e mantenendo reali i modelli locali.
+La suite completa dopo questi cambi ha dato **910 test passati e un fallimento preesistente**, in 118,29 secondi:
+`tests/test_review_optimization_regressions.py::test_integer_fixed_sum_traces_preserve_system_workload`.
+I due precedenti fallimenti gerarchici sono risolti dall’aggiornamento delle chiamate.
+
+Il [primo confronto a sei metodi, prima di riserva e arresto per stagnazione](../experiments/madea_pg_compact/results_families_six_methods_2026_10_01/report.md)
+aggiunge soltanto questa variante sugli stessi 35 input e 41 timestep,
+preservando tutte le cinque colonne precedenti. La prima finestra di 30 minuti
+ha coperto 34 casi; l’ultima sequenza è stata completata separatamente in
+60,23 secondi, senza cambiare il codice. Tutte le soluzioni sono ammissibili.
+Nei 24 casi standard, rispetto a one-shot-PG il guadagno percentuale medio
+per istanza è **−1,78%**, con un rapporto mediano dei tempi di **6,24×**.
+La gerarchia dà risultati migliori nelle istanze da 40 nodi, ma a 80 e
+160 nodi il costo del coordinamento esaurisce il budget: PG migliora la
+soluzione in 14 timestep, mentre in altri 27 non può avviare proposte.
+Nei casi stress il welfare medio per istanza è −11,83% rispetto a one-shot-PG;
+nelle tre sequenze temporali è +1,37%, con tempo mediano 8,45 volte maggiore.
+Questa prima integrazione funziona, ma non conviene complessivamente
+rispetto a one-shot-PG con i budget scelti. Non è stata misurata qui la
+variante gerarchica MADEA-PG: la sua sostituzione non viene quindi validata
+da un confronto diretto tra le due versioni gerarchiche.
+
+Il [confronto aggiornato dopo arresto per stagnazione e riserva PG](../experiments/madea_pg_compact/results_hierarchical_balanced_2026_10_01/report.md)
+ha rieseguito solo questa colonna sugli stessi 35 input, in 10 minuti e
+11 secondi inclusa la validazione. Le altre cinque colonne e i loro aggregati
+sono identici al confronto precedente. Nei 41 timestep l’incumbent prima
+del PG è rimasto identico; il PG ora migliora tutti i 41, senza budget nullo.
+Il loop usa 4–6 round (mediana 4), contro 12–100 (mediana 66), contando il
+primo round indicizzato con zero.
+
+Rispetto alla versione gerarchica precedente, il guadagno percentuale medio
+per istanza è +9,95% sul carico standard, +20,30% nello stress e +3,93%
+nelle sequenze temporali. Il rapporto mediano tra tempo precedente e nuovo
+è rispettivamente 4,90×, 5,57× e 7,28×. Non si osservano peggioramenti sui
+35 casi, ma il criterio resta euristico.
+
+Rispetto a one-shot-PG, il welfare medio per istanza cresce del 7,42% sul
+carico standard, del 5,10% nello stress e del 5,02% nei timestep temporali.
+Il rapporto mediano dei tempi gerarchica/one-shot-PG è 1,29×, 1,21× e 0,99×.
+La variante gerarchica aggiornata ha il welfare maggiore in 15 dei 24 casi
+standard; PLASMA-Welfare negli altri 9. La media dei guadagni rispetto a
+MADEA resta vicina fra questi due metodi (25,98% e 26,27%), quindi non emerge
+un metodo migliore in ogni istanza.
+
+## Gerarchico MADEA-PG: prove separate dei controlli del tempo
+
+Il [confronto degli interventi sul gerarchico MADEA-PG](../experiments/madea_pg_compact/results_hierarchical_madea_ablation_2026_10_01/report.md)
+misura separatamente riserva per il PG, tempo effettivo e arresto locale su
+otto input planari comuni. Sono rimasti soltanto tempo effettivo e riserva:
+la variante aggressiva dell’arresto riduceva il welfare, mentre quella
+conservativa non interveniva nei casi misurati.
+
+La riserva è il budget PG richiesto, limitato a metà del tempo totale del
+timestep. Si applica al ciclo d’asta senza modificare le opzioni del solver
+locale, mantenendo GLPK compatibile anche con riserve frazionarie. I nuovi
+controlli sono disattivati per non-PG, budget PG nullo e zero sweep. MADEA-PG
+piatto e gerarchico one-shot-PG mantengono il comportamento precedente.
+Il report contiene valori assoluti, varianti scartate e limiti del confronto:
+non aggiorna la tabella precedente dei 35 casi usando solo questo campione.
+
+## Istanze con α sempre maggiore di β
+
+Il vecchio intervallo di β/α, 0,1–1,5, consentiva che l’inoltro ricevesse un
+coefficiente superiore all’esecuzione locale. Per il nuovo confronto è stato
+scelto l’intervallo 0,1–0,9. Il driver `rerun_alpha_gt_beta.py` crea nuove copie
+delle 35 istanze, verifica α > β e mantiene identici grafi, risorse, α, γ e
+tracce. Ricalcola anche δ, derivato da β dal generatore. Le istanze precedenti
+restano disponibili; il codice degli algoritmi non cambia. Il confronto viene
+rieseguito per tutte le sette colonne su dodici input comuni, entro 30 minuti.
+
+Il [report con α > β](../experiments/madea_pg_compact/results_families_alpha_gt_beta_2026_10_01/report.md)
+registra 84 esecuzioni riuscite e 112 risultati per timestep, in 22,07 minuti
+inclusa la preparazione. Sugli otto casi standard, rispetto a MADEA i guadagni
+medi sono +0,58% per MADEA-PG, +0,84% per one-shot-PG e +1,02% per il gerarchico
+one-shot-PG. Il gerarchico MADEA-PG dà +0,59%: su questo campione aggiunge poco
+welfare al metodo piatto. PLASMA-Welfare ha il welfare maggiore nei due casi
+stress; nel caso a carico 1,5 dà +8,39% rispetto a MADEA. I valori assoluti,
+i tempi e i risultati temporali sono riportati separatamente. La suite completa
+ha dato 917 test passati e il fallimento preesistente di fixed_sum.
