@@ -107,6 +107,17 @@ def _run(
   )
   Nn = base_data[None]["Nn"][None]
   Nf = base_data[None]["Nf"][None]
+  use_wall_time = False
+  pg_reserve = 0.0
+  if refine_welfare:
+    from madea_pg import refinement_options
+    pg_options = refinement_options(config)
+    requested = (pg_options["time_limit_per_node"] * Nn
+                 if "time_limit_per_node" in pg_options else pg_options["time_limit"])
+    use_wall_time = pg_options["max_sweeps"] > 0 and requested > 0
+    if use_wall_time:
+      pg_reserve = min(requested, time_limit / 2)
+  hierarchy_time_limit = time_limit - pg_reserve
   neighborhood = neigh_dict_to_matrix(base_data[None]["neighborhood"], Nn)
   latency = adjacency_matrix(graph, weight="network_latency").toarray()
   ub = max_run_time + run_time_step if max_run_time == min_run_time else max_run_time
@@ -155,8 +166,10 @@ def _run(
     previous_cycle_progress = None
     completed_cycles = 0
     while True:
-      if state.total_runtime >= time_limit:
-        reason = f"reached time limit: {state.total_runtime} >= {time_limit}"
+      if use_wall_time:
+        state.total_runtime = time.monotonic() - started_at
+      if state.total_runtime >= hierarchy_time_limit:
+        reason = f"reached time limit: {state.total_runtime} >= {hierarchy_time_limit}"
         # The initial local solve may exhaust the budget before the first auction.
         if state.best_centralized_solution is None:
           state.best_centralized_solution = combine_solutions(
@@ -173,13 +186,15 @@ def _run(
         config=config, auction_options=auction_options,
         parallelism=parallelism, log_stream=log_stream,
         started_at=cycle_started_at,
+        **({"wall_started_at": started_at, "auction_time_limit": hierarchy_time_limit}
+           if use_wall_time else {}),
       )
       # Use the actual reason, including its existing priority over other tests.
       reason = state.reason
       if reason == "all load assigned":
         break
-      if state.total_runtime >= time_limit:
-        reason = f"reached time limit: {state.total_runtime} >= {time_limit}"
+      if state.total_runtime >= hierarchy_time_limit:
+        reason = f"reached time limit: {state.total_runtime} >= {hierarchy_time_limit}"
         break
       # Measure the whole hierarchy -> MADEA pass. Route swaps are not
       # progress unless they increase assigned load or improve the incumbent.
@@ -254,6 +269,8 @@ def _run(
 
     if refine_welfare:
       from madea_pg import refine_solution
+      if use_wall_time:
+        state.total_runtime = time.monotonic() - started_at
       state.best_centralized_solution, refinement = refine_solution(
         sp_data, state.best_centralized_solution, config, time_limit - state.total_runtime,
       )

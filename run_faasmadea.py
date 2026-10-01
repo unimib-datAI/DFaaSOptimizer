@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import time
 
 from postprocessing import load_solution
 from run_centralized_model import (
@@ -620,17 +621,20 @@ def compute_offloaded_demand(y: np.ndarray) -> np.ndarray:
 def run_madea_cycle(
     state: MadeaState, *, sp_x, sp_omega, sp_data, data, agents, loadt,
     neighborhood, latency, config, auction_options, parallelism,
-    log_stream, started_at,
+    log_stream, started_at, wall_started_at=None, auction_time_limit=None,
   ) -> MadeaState:
   """Run the production MADEA loop to its actual stopping criterion.
 
   This phase never invokes the hierarchy. The caller may update the returned
   state and start another cycle, with fresh local convergence history.
+  PG callers may cap elapsed auction time without changing local solver options.
   """
   Nn, Nf = sp_x.shape
   solver_name = config["solver_name"]
   general_solver_options = config.get("solver_options", {}).get("general", {})
   time_limit = general_solver_options.get("TimeLimit", np.inf)
+  if auction_time_limit is not None:
+    time_limit = auction_time_limit
   tolerance = config.get("tolerance", 1e-6)
   max_iterations = config["max_iterations"]
   patience = config.get("patience", 1)
@@ -856,6 +860,8 @@ def run_madea_cycle(
       relative_objective_gap(prev_cobj, cycle_best_centralized_cost)
     )
     # check termination criteria
+    if wall_started_at is not None:
+      total_runtime = time.monotonic() - wall_started_at
     s = datetime.now()
     stop_searching, why_stop_searching = check_stopping_criteria(
       it,
@@ -888,6 +894,8 @@ def run_madea_cycle(
   state.y, state.omega, state.p, state.fairness = y, omega, p, fairness
   state.sp_r, state.sp_rho = sp_r, sp_rho
   state.total_runtime = total_runtime
+  if wall_started_at is not None:
+    state.total_runtime = time.monotonic() - wall_started_at
   state.best_centralized_solution = best_centralized_solution
   state.best_centralized_cost = best_centralized_cost
   state.best_centralized_it = best_centralized_it
