@@ -77,7 +77,8 @@ def run(
     config: dict,
     parallelism: int,
     log_on_file: bool = False,
-    disable_plotting: bool = False
+    disable_plotting: bool = False,
+    *, refine_welfare: bool = False,
   ):
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
@@ -129,6 +130,8 @@ def run(
   spc_complete_solution = init_complete_solution()
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
+  refinement_history = []
+  runtime_list = []
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
       print(f"t = {t}", file = log_stream, flush = True)
@@ -376,13 +379,20 @@ def run(
           sp_complete_solution,
           None
         )
-        spc_complete_solution, _, _ = decode_solutions(
+        if refine_welfare:
+          from madea_pg import refine_solution
+          best_centralized_solution, refinement = refine_solution(
+            sp_data, best_centralized_solution, config, time_limit - total_runtime,
+          )
+          total_runtime += refinement["seconds"]
+          refinement_history.append({"time": t, **refinement})
+        spc_complete_solution, _, objc = decode_solutions(
           sp_data,
           best_centralized_solution,
           spc_complete_solution,
           None
         )
-        obj_dict["LSPr_final"].append(objf)
+        obj_dict["LSPr_final"].append(objc if refine_welfare else objf)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} "
           f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
@@ -398,6 +408,7 @@ def run(
             spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
           )
     ee = datetime.now()
+    runtime_list.append(total_runtime)
     if verbose > 0:
       print(
         f"    TOTAL RUNTIME [s] = {total_runtime} "
@@ -443,7 +454,11 @@ def run(
     solution_folder
   )
   # save objective function values
-  pd.DataFrame(obj_dict["LSPr_final"], columns = ["FaaS-MADeA"]).to_csv(
+  result_name = "One-shot-PG" if refine_welfare else "FaaS-MADeA"
+  if refine_welfare:
+    pd.DataFrame(refinement_history).to_csv(os.path.join(solution_folder, "refinement.csv"), index=False)
+    pd.DataFrame({"tot": runtime_list}).to_csv(os.path.join(solution_folder, "runtime.csv"), index=False)
+  pd.DataFrame(obj_dict["LSPr_final"], columns = [result_name]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index = False
   )
   # save models termination condition

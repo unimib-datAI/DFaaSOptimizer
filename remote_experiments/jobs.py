@@ -17,6 +17,8 @@ SCRIPT_BY_ALGORITHM: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
   "faas-macro-v0": (("run_faasmacro.py",), ("--v0",)),
   "faas-madea":    (("run_faasmadea.py",), ()),
   "faas-madea-pg": (("madea_pg.py",), ()),
+  "one-shot-pg": (("one_shot_pg.py",), ()),
+  "hierarchical-one-shot-pg": (("one_shot_pg.py",), ("--variant", "hierarchical")),
   "hierarchical-madea-level-cycles-pg": (("madea_pg.py",), ("--variant", "hierarchical")),
   "hierarchical":  (("-m", "hierarchical_auction.runner"), ()),
   "hierarchical-madea": (("-m", "hierarchical_auction.madea_runner"), ()),

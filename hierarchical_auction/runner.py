@@ -10,6 +10,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from collections.abc import Mapping
 from copy import deepcopy
 from datetime import datetime
@@ -113,6 +114,9 @@ def run(
   parallelism: int = -1,
   log_on_file: bool = False,
   disable_plotting: bool = False,
+  *,
+  engine_class: type[HierarchicalAuctionEngine] = HierarchicalAuctionEngine,
+  refine_welfare: bool = False,
 ) -> str:
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
@@ -124,6 +128,7 @@ def run(
   solver_options = config.get("solver_options", {})
   general_solver_options = solver_options.get("general", {})
   auction_options = build_auction_options(config)
+  auction_options["unit_bids"] = solver_options.get("auction", {}).get("unit_bids", False)
   time_limit = general_solver_options.get("TimeLimit", float("inf"))
   tolerance = config.get("tolerance", 1e-6)
 
@@ -151,6 +156,16 @@ def run(
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
 
+  pg_reserve = 0.0
+  if refine_welfare:
+    from madea_pg import refinement_options
+    pg_options = refinement_options(config)
+    if pg_options["max_sweeps"] > 0:
+      requested = (pg_options["time_limit_per_node"] * Nn
+                   if "time_limit_per_node" in pg_options else pg_options["time_limit"])
+      pg_reserve = min(requested, time_limit / 2)
+  hierarchy_time_limit = time_limit - pg_reserve
+
   neighborhood = neigh_dict_to_matrix(
     base_instance_data[None]["neighborhood"], Nn,
   )
@@ -161,8 +176,10 @@ def run(
   obj_dict: dict[str, list[Any]] = {"LSPr_final": []}
   tc_dict: dict[str, list[Any]] = {"LSPr": []}
   runtime_list: list[float] = []
+  refinement_history = []
 
   for t in range(min_run_time, ub, run_time_step):
+    started = time.monotonic()
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
 
@@ -193,7 +210,8 @@ def run(
     best_centralized_solution: dict | None = None
     best_centralized_cost = -np.inf
     best_centralized_it = -1
-    engine = HierarchicalAuctionEngine(
+    stagnant_rounds = 0
+    engine = engine_class(
       neighborhood=neighborhood,
       num_functions=Nf,
       service_quantum=np.ones(Nf),
@@ -205,6 +223,10 @@ def run(
       if verbose > 0:
         print(f"    it = {it}", file=log_stream, flush=True)
 
+      if pg_reserve > 0:
+        previous_y, previous_r, previous_p = y.copy(), sp_r.copy(), p.copy()
+        previous_fairness = fairness.copy()
+
       capacity, blackboard, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data,
       )
@@ -213,18 +235,20 @@ def run(
       if isinstance(level1_options.get("eta"), list):
         level1_options["eta"] = level1_options["eta"][0]
 
-      bids, memory_bids = define_bids(
+      bids, memory_bids, _ = define_bids(
         omega, blackboard, p, sp_data, neighborhood, sp_rho,
         level1_options,
         latency=latency,
         fairness=fairness,
-        delta=np.zeros((Nn, Nn)),
+        force_memory_bids=False,
       )
 
+      additional_replicas = np.zeros_like(sp_r)
       if len(bids) > 0:
-        auction_y, p = evaluate_bids(
-          bids, blackboard, sp_data, ell, p, capacity, u0,
-          level1_options, current_y=y,
+        auction_y, p, _, _ = evaluate_bids(
+          bids, blackboard, sp_data, previous_y=y, ell=ell, p=p,
+          capacity=capacity, u0=u0, auction_options=level1_options,
+          may_replace_existing_assignments=False,
         )
         y += auction_y
 
@@ -243,10 +267,10 @@ def run(
         omega = sp_omega - rmp_omega
         omega[np.abs(omega) < tolerance] = 0.0
       else:
-        a, sp_rho = start_additional_replicas(
+        additional_replicas, sp_rho = start_additional_replicas(
           memory_bids, sp_r, sp_data, sp_rho,
         )
-        sp_r += a
+        sp_r += additional_replicas
 
       capacity, blackboard, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data,
@@ -281,10 +305,25 @@ def run(
       stopping_bids = bids_for_stopping(
         bids, len(result.accepted_allocations),
       )
+      total_runtime = time.monotonic() - started
       stop_searching, why_stop_searching = check_stopping_criteria(
-        it, max_iterations, blackboard, omega, rmp_omega,
-        stopping_bids, memory_bids, tolerance, total_runtime, time_limit,
+        it=it, max_iterations=max_iterations, blackboard=blackboard,
+        omega=omega, rmp_omega=rmp_omega, bids=stopping_bids,
+        a=additional_replicas,
+        memory_bids=memory_bids, tolerance=tolerance,
+        total_runtime=total_runtime, time_limit=hierarchy_time_limit,
       )
+
+      if pg_reserve > 0:
+        # ponytail: two epsilon-stable rounds are a heuristic, not a convergence certificate.
+        price_tolerance = auction_options["epsilon"] + tolerance
+        stable = (np.array_equal(y, previous_y) and np.array_equal(sp_r, previous_r)
+                  and np.allclose(p, previous_p, rtol=0, atol=price_tolerance)
+                  and np.allclose(auction_options["fairness_weight"] * (fairness - previous_fairness),
+                                  0, rtol=0, atol=price_tolerance))
+        stagnant_rounds = stagnant_rounds + 1 if stable else 0
+        if not stop_searching and stagnant_rounds >= 2:
+          stop_searching, why_stop_searching = True, "assignments, replicas and prices stalled"
 
       csol = combine_solutions(
         Nn, Nf, sp_data, loadt,
@@ -305,12 +344,23 @@ def run(
       if not stop_searching:
         it += 1
       else:
-        spc_complete_solution, _, _ = decode_solutions(
+        incumbent = best_centralized_solution if best_centralized_solution is not None else csol
+        if refine_welfare:
+          from madea_pg import refine_solution
+          incumbent, refinement = refine_solution(
+            sp_data, incumbent, config, time_limit - (time.monotonic() - started),
+          )
+          refinement_history.append({"time": t, **refinement,
+                                     "hierarchy_rounds": it + 1,
+                                     "hierarchy_pg_reserve": pg_reserve,
+                                     "hierarchy_time_budget": hierarchy_time_limit})
+        total_runtime = time.monotonic() - started
+        spc_complete_solution, _, final_objective = decode_solutions(
           sp_data,
-          best_centralized_solution if best_centralized_solution is not None else csol,
+          incumbent,
           spc_complete_solution, None,
         )
-        obj_dict["LSPr_final"].append(best_centralized_cost)
+        obj_dict["LSPr_final"].append(final_objective)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} (it: {it}; "
           f"best centralized it: {best_centralized_it}; "
@@ -344,7 +394,12 @@ def run(
     spc_solution, spc_offloaded, spc_complete_solution,
     spc_detailed_fwd_solution, "LSPc", solution_folder,
   )
-  pd.DataFrame(obj_dict["LSPr_final"], columns=["HierarchicalAuction"]).to_csv(
+  result_name = "HierarchicalOneShotPG" if refine_welfare else "HierarchicalAuction"
+  if refinement_history:
+    pd.DataFrame(refinement_history).to_csv(
+      os.path.join(solution_folder, "refinement.csv"), index=False,
+    )
+  pd.DataFrame(obj_dict["LSPr_final"], columns=[result_name]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index=False,
   )
   pd.DataFrame(tc_dict["LSPr"]).to_csv(

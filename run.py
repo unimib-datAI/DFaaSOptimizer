@@ -13,6 +13,7 @@ from decentralized_powerd import run as run_powerd
 from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
 from decentralized_potentialgame import run_pg_s, run_pg_r
 from madea_pg import run as run_madea_pg, run_hierarchical as run_hierarchical_madea_pg
+from one_shot_pg import run as run_one_shot_pg, run_hierarchical as run_hierarchical_one_shot_pg
 from decentralized_gcaa import run as run_gcaa
 from plasma.runner import run as run_plasma
 from plasma.welfare import run as run_plasma_welfare
@@ -42,6 +43,8 @@ METHOD_RESULT_MODELS = {
   "faas-madea": ("LSPc", "FaaS-MADeA"),
   "faas-madea-1s": ("LSPc", "FaaS-MADeA(1s)"),
   "faas-madea-pg": ("LSPc", "FaaS-MADeA-PG"),
+  "one-shot-pg": ("LSPc", "One-shot-PG"),
+  "hierarchical-one-shot-pg": ("LSPc", "HierarchicalOneShotPG"),
   "hierarchical-madea-level-cycles-pg": ("LSPc", "HierarchicalMADeALevelCyclesPG"),
   "hierarchical": ("LSPc", "HierarchicalAuction"),
   "hierarchical-madea": ("LSPc", "HierarchicalMADeA"),
@@ -112,6 +115,8 @@ def parse_arguments() -> argparse.Namespace:
       "faas-madea",
       "faas-madea-1s",
       "faas-madea-pg",
+      "one-shot-pg",
+      "hierarchical-one-shot-pg",
       "hierarchical-madea-level-cycles-pg",
       "hierarchical",
       "hierarchical-madea",
@@ -1171,6 +1176,8 @@ def run(
     pending_refinements = {
       method: runner for method, runner in (
         ("faas-madea-pg", run_madea_pg),
+        ("one-shot-pg", run_one_shot_pg),
+        ("hierarchical-one-shot-pg", run_hierarchical_one_shot_pg),
         ("hierarchical-madea-level-cycles-pg", run_hierarchical_madea_pg),
         ("plasma-welfare", run_plasma_welfare),
       )
