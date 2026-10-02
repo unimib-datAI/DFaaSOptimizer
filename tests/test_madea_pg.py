@@ -10,8 +10,8 @@ import madea_pg
 import run_faasmadea
 from hierarchical_auction import madea_level_cycles_runner
 from postprocessing import load_solution
-from run_centralized_model import encode_solution, get_current_load, update_data
-from utils.centralized import validate_centralized_solution
+from run_centralized_model import get_current_load, update_data
+from utils.centralized import encode_solution, validate_centralized_solution
 from utils.common import load_base_instance, load_requests_traces
 
 

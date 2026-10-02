@@ -1,6 +1,6 @@
+from utils.common import load_requests_traces, NpEncoder
 from generators.load_generator import LoadGenerator
-from run_centralized_model import encode_solution
-from utils.common import load_requests_traces
+from utils.centralized import encode_solution
 from postprocessing import load_solution
 
 import matplotlib.pyplot as plt
@@ -106,6 +106,9 @@ def plot_filtered_traces(
     solution_folder, only_local, with_offloading, with_reject
   ):
   traces, mt, Mt, ts  = load_requests_traces(solution_folder)
+  onlylocal_times = mt + np.asarray(only_local) * ts
+  offloading_times = mt + np.asarray(with_offloading) * ts
+  reject_times = mt + np.asarray(with_reject) * ts
   for f, f_traces in traces.items():
     # f_traces_array = {
     #   a: np.array(tr)[with_offloading] for a, tr in f_traces.items()
@@ -117,7 +120,7 @@ def plot_filtered_traces(
       v = np.array(f_traces[a])
       last_valid = np.maximum.accumulate(
         np.where(
-          np.isin(np.arange(len(v)), with_offloading),
+          np.isin(np.arange(len(v)), offloading_times),
           np.arange(len(v)),
           -1
         )
@@ -129,58 +132,80 @@ def plot_filtered_traces(
     )
 
 
+def main(solution_folder: str, model_name: str):
+  all_local, all_sentrecv, all_rej = count_requests(
+    solution_folder, model_name
+  )
+  input_load, mt, Mt, ts = load_requests_traces(solution_folder)
+  if len(all_sentrecv) > 0:
+    only_local, with_offloading, with_reject = filter_traces(
+      all_sentrecv, all_rej
+    )
+    os.makedirs(os.path.join(solution_folder, "load"), exist_ok = True)
+    with open(
+        os.path.join(solution_folder, "load", "trace_filtered.json"), "w"
+      ) as ost:
+      ost.write(
+        json.dumps(
+          {
+            "only_local": only_local, 
+            "with_offloading": with_offloading,
+            "with_reject": with_reject
+          }, 
+          indent = 2
+        )
+      )
+    # plot_filtered_traces(
+    #   solution_folder, only_local, with_offloading, with_reject
+    # )
+    # plot all
+    t = 0
+    all_sentrecv[all_sentrecv["t"] == t][["sent","recv"]].plot.bar(
+      logy = True
+    )
+    plt.grid(which = "both", axis = "y")
+    plt.savefig(
+      os.path.join(solution_folder, f"sentrecv_t{t}.png"),
+      dpi = 300,
+      format = "png",
+      bbox_inches = "tight"
+    )
+  # modify traces subtracting rejected requests
+  norej_traces = {}
+  for f, f_traces in input_load.items():
+    norej_traces[f] = {}
+    for n, n_trace in f_traces.items():
+      norej_traces[f][n] = n_trace.copy()
+      for idx, t in enumerate(range(mt, Mt, ts)):
+        norej_traces[f][n][t] -= int(
+          all_rej[
+            (all_rej["t"] == idx) & (all_rej["node"] == n)
+          ][f"f{f}"].iloc[0]
+        )
+    if len(f_traces) <= 10:
+      LoadGenerator.plot_input_load(
+        norej_traces[f], 
+        0, 
+        os.path.join(solution_folder, "load", f"f{f}_norej.png")
+      )
+  with open(
+      os.path.join(
+        solution_folder, "load", f"norej_trace-{mt}_{Mt}_{ts}.json"
+      ), 
+      "w"
+    ) as ost:
+    ost.write(
+      json.dumps(norej_traces, indent = 2, cls = NpEncoder)
+    )
+
+
 if __name__ == "__main__":
-  base_solution_folder = "solutions/3classes-fixed_sum_auto_avg/k_3"
-  model_name = "LoadManagementModel"
+  base_solution_folder = "solutions/Nf_3-model_variant-selfish_centralized"
+  model_name = "SelfishLoadManagementModel"
   for dname in os.listdir(base_solution_folder):
     if os.path.isdir(os.path.join(base_solution_folder, dname)) and not (
         dname.startswith(".") or dname.startswith("postprocessing")
       ):
       print(dname)
       solution_folder = os.path.join(base_solution_folder, dname)
-      all_local, all_sentrecv, all_rej = count_requests(
-        solution_folder, model_name
-      )
-      if len(all_sentrecv) > 0:
-        only_local, with_offloading, with_reject = filter_traces(
-          all_sentrecv, all_rej
-        )
-        os.makedirs(os.path.join(solution_folder, "load"), exist_ok = True)
-        with open(
-            os.path.join(solution_folder, "load", "trace_filtered.json"), "w"
-          ) as ost:
-          ost.write(
-            json.dumps(
-              {
-                "only_local": only_local, 
-                "with_offloading": with_offloading,
-                "with_reject": with_reject
-              }, 
-              indent = 2
-            )
-          )
-        plot_filtered_traces(
-          solution_folder, only_local, with_offloading, with_reject
-        )
-        # plot all
-        t = 0
-        all_sentrecv[all_sentrecv["t"] == t][["sent","recv"]].plot.bar(
-          logy = True
-        )
-        plt.grid(which = "both", axis = "y")
-        plt.savefig(
-          os.path.join(solution_folder, f"sentrecv_t{t}.png"),
-          dpi = 300,
-          format = "png",
-          bbox_inches = "tight"
-        )
-        # #
-        # _, axs = plt.subplots(nrows = Nf, ncols = 1, figsize = (30,2*Nf))
-        # for f in range(Nf):
-        #   all_sentrecv[
-        #     all_sentrecv["t"] == 0
-        #   ].loc[:,all_sentrecv.columns.str.startswith(f"f{f}")].plot.bar(
-        #     ax = axs[f],
-        #     logy = True
-        #   )
-        # plt.show()
+      main(solution_folder, model_name)

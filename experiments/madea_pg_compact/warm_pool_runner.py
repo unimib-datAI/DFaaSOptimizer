@@ -15,8 +15,8 @@ import run_faasmacro as macro
 from experiments.madea_pg_compact.warm_pool import cold_solve
 from postprocessing import load_solution
 from remote_experiments.instances import load_materialized_instance
-from run_centralized_model import encode_solution, get_current_load, update_data
-from utils.centralized import validate_centralized_solution
+from run_centralized_model import get_current_load, update_data
+from utils.centralized import encode_solution, validate_centralized_solution
 from utils.faasmacro import compute_centralized_objective
 
 

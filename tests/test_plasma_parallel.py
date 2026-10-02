@@ -71,8 +71,8 @@ def test_planar_runner_reuses_auto_pool_and_exports_identical_solutions(tmp_path
   from remote_experiments.batch import Experiment
   from remote_experiments.instances import materialize_instance, load_materialized_instance
   from postprocessing import load_solution
-  from run_centralized_model import encode_solution, get_current_load, update_data
-  from utils.centralized import validate_centralized_solution
+  from run_centralized_model import get_current_load, update_data
+  from utils.centralized import encode_solution, validate_centralized_solution
   config = json.loads((Path(__file__).resolve().parents[1] /
                        'experiments/madea_pg_compact/config.json').read_text())
   config.update(seed=7, max_steps=2, max_run_time=2, run_time_step=1,

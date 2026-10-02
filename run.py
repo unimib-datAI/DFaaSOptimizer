@@ -132,7 +132,8 @@ def parse_arguments() -> argparse.Namespace:
       "faas-gcaa",
       "plasma",
       "plasma-welfare",
-      "generate_only"
+      "generate_only",
+      "generate_and_filter_traces"
     ],
     required = True
   )
@@ -328,7 +329,7 @@ def results_postprocessing(
     methods: list,
     reference_method: str
   ):
-  methods = [m for m in methods if m != "generate_only"]
+  methods = [m for m in methods if "generate" not in m]
   reference_method_name = METHOD_RESULT_MODELS[reference_method][-1]
   # prepare folder to store plots
   plot_folder = os.path.join(base_folder, "postprocessing")
@@ -980,7 +981,10 @@ def run(
       exp_values = base_config["limits"]["neighborhood"][loop_over]
   disable_plotting = not enable_plotting
   from_instances = base_config["limits"].get("path", None)
-  generate_only = "generate_only" in methods
+  generate_only = (
+    "generate_only" in methods or 
+    "generate_and_filter_traces" in methods
+  )
   # generate list of experiments
   experiments_list = generate_experiments_list(exp_values, seed, n_experiments)
   # load list of already-run experiments (if any)
@@ -1181,8 +1185,7 @@ def run(
         ("hierarchical-madea-level-cycles-pg", run_hierarchical_madea_pg),
         ("plasma-welfare", run_plasma_welfare),
       )
-      if not generate_only and method in methods and (
-        experiment_idx is None
+      if not generate_only and method in methods and (experiment_idx is None
         or len(solution_folders.get(method, [])) <= experiment_idx
         or solution_folders[method][experiment_idx] is None
       )
@@ -1239,7 +1242,10 @@ def run(
               old_exp_idx
             ]
           config["limits"]["path"] = old_exp_path
-          if config["limits"]["load"]["trace_type"] == "load_existing":
+          if (
+              config["limits"]["load"]["trace_type"] == "load_existing" or
+              config["limits"]["load"]["trace_type"] == "load_filtered"
+            ):
             config["limits"]["load"]["path"] = old_exp_path
         except Exception:
           pass
@@ -1249,7 +1255,8 @@ def run(
           config, 
           log_on_file = log_on_file, 
           disable_plotting = disable_plotting,
-          generate_only = generate_only
+          generate_only = generate_only,
+          filter_traces = "generate_and_filter_traces" in methods
         )
         set_solution_folder(
           solution_folders, "centralized", experiment_idx, c_folder

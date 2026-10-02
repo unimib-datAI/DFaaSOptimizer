@@ -3,7 +3,6 @@ import time
 
 from postprocessing import load_solution
 from run_centralized_model import (
-  encode_solution,
   get_current_load, 
   init_complete_solution,
   init_problem, 
@@ -20,8 +19,11 @@ from run_faasmacro import (
   decode_solutions,
   solve_subproblem
 )
-from utils.centralized import check_feasibility
-from utils.faasmacro import compute_centralized_objective, relative_objective_gap
+from utils.centralized import check_feasibility, encode_solution
+from utils.faasmacro import (
+  compute_centralized_objective, 
+  relative_objective_gap
+)
 from utils.common import load_configuration
 from models.sp import LSP, LSPr, LSP_fixedr, LSPr_x
 from models.model import PYO_VAR_TYPE

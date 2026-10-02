@@ -4,8 +4,6 @@ import pytest
 
 from run_centralized_model import (
   compute_utilization,
-  decode_solution,
-  encode_solution,
   extract_solution,
   init_complete_solution,
   init_empty_solution,
@@ -13,6 +11,7 @@ from run_centralized_model import (
   save_checkpoint,
   save_solution,
 )
+from utils.centralized import encode_solution, decode_solution
 
 
 def _make_data(Nn=2, Nf=1):

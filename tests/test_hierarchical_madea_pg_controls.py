@@ -9,8 +9,7 @@ import pytest
 from hierarchical_auction import madea_cycles_runner as runner
 from hierarchical_auction.iterative_engine import IterativeHierarchicalAuctionEngine
 from postprocessing import load_solution
-from run_centralized_model import encode_solution
-from utils.centralized import validate_centralized_solution
+from utils.centralized import encode_solution, validate_centralized_solution
 from test_review_distributed_regressions import _materialized_config, _two_node_data
 
 

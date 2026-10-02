@@ -1,10 +1,11 @@
+from fwd_analysis import main as run_fwd_analysis
 from utils.common import (
   delete_tuples, 
   float_to_int, 
   load_configuration,
   NpEncoder
 )
-from utils.centralized import get_current_load
+from utils.centralized import get_current_load, decode_solution
 from generators.generate_data import generate_data, update_data
 from generators.generate_load import generate_load_traces
 from remote_experiments.instances import (
@@ -92,105 +93,6 @@ def compute_utilization(data: dict, solution: dict) -> np.array:
           x[n-1, f-1] + xi[n-1, :, f-1].sum()
         ) / r[n-1, f-1]
   return utilization
-
-
-def count_offloaded_processing(
-    detailed_offloading: pd.DataFrame, Nn: int, Nf: int
-  ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-  offloaded_processing = pd.DataFrame()
-  detailed_offloaded_processing = pd.DataFrame()
-  for n in range(Nn):
-    for f in range(Nf):
-      offloaded_processing[f"n{n}_f{f}_accepted"] = detailed_offloading.loc[
-        :,detailed_offloading.columns.str.endswith(f"_f{f}_n{n}")
-      ].sum(axis = "columns")
-  return offloaded_processing, detailed_offloaded_processing
-
-
-def decode_solution(
-    x: np.array, 
-    y: np.array, 
-    z: np.array, 
-    r: np.array, 
-    xi: np.array, 
-    rho: np.array,
-    U: np.array,
-    complete_solution: dict,
-  ) -> dict:
-  Nn, Nf = x.shape
-  # local processing
-  complete_solution["local_processing"] = update_2d_variables(
-    x, complete_solution["local_processing"]
-  )
-  # offloading
-  (
-    complete_solution["offloading"], complete_solution["detailed_offloading"]
-  ) = update_3d_variables(
-    y, complete_solution["offloading"], complete_solution["detailed_offloading"]
-  )
-  # rejections
-  complete_solution["rejections"] = update_2d_variables(
-    z, complete_solution["rejections"]
-  )
-  # number of reserved instances
-  complete_solution["replicas"] = update_2d_variables(
-    r, complete_solution["replicas"]
-  )
-  # utilization
-  complete_solution["utilization"] = update_2d_variables(
-    U, complete_solution["utilization"]
-  )
-  # received offloading
-  if xi is not None:
-    (
-      complete_solution["offloaded_processing"], 
-      complete_solution["detailed_offloaded_processing"]
-    ) = update_3d_variables(
-      xi, 
-      complete_solution["offloaded_processing"], 
-      complete_solution["detailed_offloaded_processing"]
-    )
-  else:
-    (
-      complete_solution["offloaded_processing"], 
-      complete_solution["detailed_offloaded_processing"]
-    ) = count_offloaded_processing(
-      complete_solution["detailed_offloading"], Nn, Nf
-    )
-  # residual capacity
-  complete_solution["residual_capacity"] = update_1d_variables(
-    rho, complete_solution["residual_capacity"]
-  )
-  return complete_solution
-
-
-def encode_solution(
-    Nn: int, Nf: int,
-    solution: pd.DataFrame, 
-    detailed_fwd_solution: pd.DataFrame, 
-    replicas: pd.DataFrame,
-    t: int
-  ) -> Tuple[np.array, np.array, np.array, np.array, np.array]:
-  x = np.zeros((Nn,Nf))
-  y = np.zeros((Nn,Nn,Nf))
-  z = np.zeros((Nn,Nf))
-  r = np.zeros((Nn,Nf))
-  # check whether xi and zeta are part of the solution
-  xi_exist = detailed_fwd_solution.columns.str.endswith("tot").any()
-  xi = np.zeros((Nn,Nn,Nf)) if xi_exist else None
-  for n in range(Nn):
-    for f in range(Nf):
-      basename = f"n{n}_f{f}"
-      x[n,f] = solution.loc[t,f"{basename}_loc"]
-      z[n,f] = solution.loc[t,basename]
-      r[n,f] = replicas.loc[t,basename]
-      for m in range(Nn):
-        endname = "_tot" if xi_exist else ""
-        if m != n:
-          y[n,m,f] = detailed_fwd_solution.loc[t,f"{basename}_n{m}{endname}"]
-          if xi_exist:
-            xi[n,m,f] = detailed_fwd_solution.loc[t,f"{basename}_n{m}_accepted"]
-  return x, y, z, r, xi
 
 
 def extract_solution(
@@ -464,58 +366,12 @@ def save_solution(
   )
 
 
-def update_1d_variables(
-    var: np.array, res: pd.DataFrame
-  ) -> pd.DataFrame:
-  Nn = var.shape[0]
-  df = {f"n{n}": [var[n]] for n in range(Nn)}
-  res = pd.concat(
-    [res, pd.DataFrame(df)], ignore_index = True
-  )
-  return res
-
-
-def update_2d_variables(
-    var: np.array, res: pd.DataFrame
-  ) -> pd.DataFrame:
-  Nn, Nf = var.shape
-  df = var.reshape(1,-1).tolist()
-  cols = [f"n{n}_f{f}" for n in range(Nn) for f in range(Nf)]
-  res = pd.concat(
-    [res, pd.DataFrame(df, columns = cols)], ignore_index = True
-  )
-  return res
-
-
-def update_3d_variables(
-    y: np.array, offloading: pd.DataFrame, detailed_offloading: pd.DataFrame
-  ) -> pd.DataFrame:
-  Nn, _, Nf = y.shape
-  df = {f"n{n}_f{f}": [] for n in range(Nn) for f in range(Nf)}
-  detailed_df = {
-    f"n{n1}_f{f}_n{n2}": [] \
-      for n1 in range(Nn) for f in range(Nf) for n2 in range(Nn) if n2 != n1
-  }
-  for f in range(Nf):
-    for n1 in range(Nn):
-      df[f"n{n1}_f{f}"].append(y[n1,:,f].sum())
-      for n2 in range(Nn):
-        if n1 != n2:
-          detailed_df[f"n{n1}_f{f}_n{n2}"].append(y[n1,n2,f])
-  offloading = pd.concat(
-    [offloading, pd.DataFrame(df)], ignore_index = True
-  )
-  detailed_offloading = pd.concat(
-    [detailed_offloading, pd.DataFrame(detailed_df)], ignore_index = True
-  )
-  return offloading, detailed_offloading
-
-
 def run(
     config: dict, 
     log_on_file: bool = False, 
     disable_plotting: bool = False, 
-    generate_only: bool = False
+    generate_only: bool = False,
+    filter_traces: bool = False
   ):
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
@@ -556,7 +412,7 @@ def run(
   Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
   # run models
-  if not generate_only:
+  if not generate_only or filter_traces:
     obj_dict = {}
     tc_dict = {}
     runtime_dict = {}
@@ -661,6 +517,9 @@ def run(
     # close log stream if needed
     if log_on_file:
       log_stream.close()
+    # filter traces based on solution (if required)
+    if filter_traces:
+      run_fwd_analysis(solution_folder, M.name)
   return solution_folder
 
 

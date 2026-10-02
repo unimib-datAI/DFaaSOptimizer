@@ -111,7 +111,10 @@ def from_existing_instance(limits: dict, rng: np.random.Generator) -> dict:
       for f in range(Nf):
         base_instance_data[None]["demand"][(n+1,f+1)] /= speedup_factors[n]
   # load limits
-  if "load" in limits and limits["load"]["trace_type"] == "load_existing":
+  if "load" in limits and (
+      limits["load"]["trace_type"] == "load_existing" or
+      limits["load"]["trace_type"] == "load_filtered"
+    ):
     load_limits[0] = {n: None for n in range(Nn)}
     load_limits["load_existing"] = limits["load"]["path"]
   return base_instance_data, load_limits, graph
@@ -528,7 +531,10 @@ def random_instance_data(
   }}
   # load limits
   load_limits = {}
-  if limits["load"]["trace_type"] == "load_existing":
+  if (
+      limits["load"]["trace_type"] == "load_existing" or
+      limits["load"]["trace_type"] == "load_filtered"
+    ):
     load_limits[0] = {n: None for n in range(Nn)}
     load_limits["load_existing"] = limits["load"]["path"]
   elif "values" in limits["load"]:

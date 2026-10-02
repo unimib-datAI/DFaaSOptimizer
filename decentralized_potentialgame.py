@@ -1,5 +1,4 @@
 from run_centralized_model import (
-  encode_solution,
   get_current_load,
   init_complete_solution,
   init_problem,
@@ -21,7 +20,7 @@ from run_faasmadea import (
   neigh_dict_to_matrix,
   start_additional_replicas,
 )
-from utils.centralized import check_feasibility
+from utils.centralized import check_feasibility, encode_solution
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.sp import LSP, LSP_fixedr, LSP_pg, LSP_pg_fixedr

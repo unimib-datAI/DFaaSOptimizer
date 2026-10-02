@@ -3,7 +3,6 @@ from run_centralized_model import (
   init_complete_solution,
   join_complete_solution,
   compute_utilization,
-  encode_solution,
   get_current_load, 
   save_checkpoint,
   save_solution,
@@ -21,6 +20,7 @@ from run_faasmacro import (
   solve_subproblem
 )
 from utils.common import load_configuration
+from utils.centralized import encode_solution
 from models.auction_models import (
   SellerNodeModel, 
   BuyerNodeModel, 

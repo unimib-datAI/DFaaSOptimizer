@@ -15,8 +15,10 @@ def generate_load_traces(
     enable_plotting: bool = True
   ) -> dict:
   input_requests_traces = {}
-  if trace_type == "load_existing":
-    input_requests_traces = load_requests_traces(limits["load_existing"])[0]
+  if trace_type == "load_existing" or trace_type == "load_filtered":
+    input_requests_traces = load_requests_traces(
+      limits["load_existing"], trace_type == "load_filtered"
+    )[0]
   else:
     LG = LoadGenerator(average_requests = 100, amplitude_requests = 50)
     rng = np.random.default_rng(seed = seed)

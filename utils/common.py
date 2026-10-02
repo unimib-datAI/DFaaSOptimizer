@@ -121,26 +121,29 @@ def load_configuration(config_file: str) -> dict:
   return config
 
 
-def load_requests_traces(folder: str) -> Tuple[dict, int, int, int]:
-  # load requests
-  requests = {}
-  with open(
-      os.path.join(folder, "input_requests_traces.json"), "r"
-    ) as ist:
-    requests = {
-      int(f): {
-        int(a): np.array(r) for a,r in v.items()
-      } for f,v in json.load(ist).items()
-    }
+def load_requests_traces(
+    folder: str, load_filtered: bool = False
+  ) -> Tuple[dict, int, int, int]:
   # load time info
   mt = 0
-  Mt = len(requests[0][0])
+  Mt = 1
   ts = 1
   if os.path.exists(os.path.join(folder, "config.json")):
     config = load_configuration(os.path.join(folder, "config.json"))
     mt = config.get("min_run_time", 0)
     Mt = config.get("max_run_time", config["max_steps"])
     ts = config.get("run_time_step", 1)
+  # load requests
+  requests = {}
+  filename = "input_requests_traces.json" if not load_filtered else (
+    f"load/norej_trace-{mt}_{Mt}_{ts}.json"
+  )
+  with open(os.path.join(folder, filename), "r") as ist:
+    requests = {
+      int(f): {
+        int(a): np.array(r) for a,r in v.items()
+      } for f,v in json.load(ist).items()
+    }
   return requests, mt, Mt, ts
 
 

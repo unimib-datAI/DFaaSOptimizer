@@ -2,16 +2,22 @@ from run_centralized_model import (
   compute_utilization, 
   init_complete_solution, 
   init_problem, 
-  decode_solution, 
-  encode_solution, 
   extract_solution, 
   get_current_load, 
   join_complete_solution,
   save_solution,
   save_checkpoint
 )
-from utils.centralized import check_feasibility, validate_centralized_solution
-from utils.faasmacro import compute_centralized_objective, relative_objective_gap
+from utils.centralized import (
+  check_feasibility, 
+  validate_centralized_solution, 
+  decode_solution, 
+  encode_solution, 
+)
+from utils.faasmacro import (
+  compute_centralized_objective, 
+  relative_objective_gap
+)
 from utils.common import load_configuration
 from generators.generate_data import update_data
 from postprocessing import load_solution, plot_history
