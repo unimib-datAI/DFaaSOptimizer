@@ -8,6 +8,31 @@ import argparse
 import os
 
 
+colors = {
+  "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
+  "SelfishLoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
+  "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
+  "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
+  "Selfish-DLMM": mcolors.CSS4_COLORS["lightcoral"],
+  "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
+  "FaaS-MADeA(1s)": mcolors.CSS4_COLORS["aquamarine"],
+  "One-shot-PG": mcolors.CSS4_COLORS["mediumaquamarine"],
+  "FaaS-MADeA-PG": mcolors.CSS4_COLORS["seagreen"],
+  "Plasma-Welfare": mcolors.CSS4_COLORS["darkorange"],
+  "HierarchicalOneShotPG": mcolors.CSS4_COLORS["orchid"],
+  "HierarchicalMADeALevelCyclesPG": mcolors.CSS4_COLORS["purple"],
+  "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
+  "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
+  "HierarchicalMADeACycles": mcolors.CSS4_COLORS["darkcyan"],
+  "HierarchicalMADeALevelCycles": mcolors.CSS4_COLORS["darkorange"],
+  "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
+  "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"],
+  "FaaS-MABR-S": mcolors.CSS4_COLORS["mediumaquamarine"],
+  "FaaS-MABR-R": mcolors.CSS4_COLORS["sandybrown"],
+  "FaaS-MABR-O": mcolors.CSS4_COLORS["mediumpurple"]
+  }
+
+
 def parse_arguments() -> argparse.Namespace:
   """
   Parse input arguments
@@ -130,6 +155,8 @@ def get_loop_over_label(key: str) -> str:
 def get_baseline_name(key: str) -> str:
   if key == "LoadManagementModel":
     return "LMM"
+  elif key == "SelfishLoadManagementModel":
+    return "LMM(s)"
   elif key == "Selfish-DLMM":
     return "DLMM(s)"
   return key
@@ -767,27 +794,6 @@ def plot_by_key(
     )
   # -- title
   plt.setp(axs, title = None)
-  # colors
-  colors = {
-    "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
-    "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
-    "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
-    "Selfish-DLMM": mcolors.CSS4_COLORS["lightcoral"],
-    "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
-    "FaaS-MADeA(1s)": mcolors.CSS4_COLORS["aquamarine"],
-    "FaaS-MADeA-PG": mcolors.CSS4_COLORS["seagreen"],
-    "Plasma-Welfare": mcolors.CSS4_COLORS["darkorange"],
-    "HierarchicalMADeALevelCyclesPG": mcolors.CSS4_COLORS["purple"],
-    "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
-    "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
-    "HierarchicalMADeACycles": mcolors.CSS4_COLORS["darkcyan"],
-    "HierarchicalMADeALevelCycles": mcolors.CSS4_COLORS["darkorange"],
-    "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
-    "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"],
-    "FaaS-MABR-S": mcolors.CSS4_COLORS["mediumaquamarine"],
-    "FaaS-MABR-R": mcolors.CSS4_COLORS["sandybrown"],
-    "FaaS-MABR-O": mcolors.CSS4_COLORS["mediumpurple"]
-  }
   for ridx, (keys, bplot) in enumerate(bplots):
     for cidx, bkey in enumerate(keys):
       color = colors[bkey]
@@ -981,26 +987,6 @@ def violinplot_by_key(
     label: str,
     plot_folder: str
   ):
-  colors = {
-    "LoadManagementModel": mcolors.CSS4_COLORS["lightgreen"],
-    "FaaS-MACrO": mcolors.CSS4_COLORS["lightpink"],
-    "FaaS-MACrO(v0)": mcolors.CSS4_COLORS["lightcoral"],
-    "Selfish-DLMM": mcolors.CSS4_COLORS["lightcoral"],
-    "FaaS-MADeA": mcolors.CSS4_COLORS["lightskyblue"],
-    "FaaS-MADeA(1s)": mcolors.CSS4_COLORS["aquamarine"],
-    "FaaS-MADeA-PG": mcolors.CSS4_COLORS["seagreen"],
-    "Plasma-Welfare": mcolors.CSS4_COLORS["darkorange"],
-    "HierarchicalMADeALevelCyclesPG": mcolors.CSS4_COLORS["purple"],
-    "HierarchicalAuction": mcolors.CSS4_COLORS["lightsteelblue"],
-    "HierarchicalMADeA": mcolors.CSS4_COLORS["cornflowerblue"],
-    "HierarchicalMADeACycles": mcolors.CSS4_COLORS["darkcyan"],
-    "HierarchicalMADeALevelCycles": mcolors.CSS4_COLORS["darkorange"],
-    "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
-    "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"],
-    "FaaS-MABR-S": mcolors.CSS4_COLORS["mediumaquamarine"],
-    "FaaS-MABR-R": mcolors.CSS4_COLORS["sandybrown"],
-    "FaaS-MABR-O": mcolors.CSS4_COLORS["mediumpurple"]
-  }
   nrows = 1
   ncols = 3 if rej is not None else 2
   _, axs = plt.subplots(
