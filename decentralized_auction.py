@@ -392,7 +392,7 @@ def run(
           spc_complete_solution,
           None
         )
-        obj_dict["LSPr_final"].append(objc if refine_welfare else objf)
+        obj_dict["LSPr_final"].append(objc)
         tc_dict["LSPr"].append(
           f"{why_stop_searching} "
           f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
