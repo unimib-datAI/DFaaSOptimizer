@@ -358,6 +358,15 @@ def compare_results(
     models,
     baseline_model if baseline_model is not None else "LoadManagementModel"
   )
+  dev_barplot_comparison(
+    obj, 
+    runtime, 
+    rej, 
+    key, 
+    key_label, 
+    postprocessing_folder, 
+    baseline_model if baseline_model is not None else "LoadManagementModel"
+  )
   plot_by_key(
     obj, 
     runtime, 
@@ -971,6 +980,132 @@ def dev_barplot_by_key(
       axs2[idx,cidx].set_ylim(limits[cidx][0], limits[cidx][1])
   f2.savefig(
     os.path.join(plot_folder, f"bars{sfx}.png"),
+    dpi = 300,
+    format = "png",
+    bbox_inches = "tight"
+  )
+  plt.close()
+
+
+def dev_barplot_comparison(
+    obj: pd.DataFrame, 
+    runtime: pd.DataFrame, 
+    rej: pd.DataFrame, 
+    key: str,
+    label: str,
+    plot_folder: str,
+    baseline_model: str
+  ):
+  nrows = 3
+  ncols = 3 if rej is not None else 2
+  fontsize = 21
+  f2, axs2 = plt.subplots(
+    nrows = nrows, ncols = ncols, figsize = (12 * ncols, 8 * nrows), 
+    gridspec_kw = {"wspace": 0.2}
+  )
+  ogroup = obj.groupby(key)
+  rgroup = runtime.groupby(key)
+  rejgroup = None if ncols < 3 else rej.groupby(key)
+  ridx = 0
+  sfx = (
+    f"-vs-{baseline_model}" if baseline_model != "LoadManagementModel" else ""
+  )
+  for cidx, groupdf in zip(range(ncols), [ogroup, rgroup, rejgroup]):
+    if groupdf is not None:
+      avgdf = - groupdf.mean() if cidx == 0 else groupdf.mean()
+      avgdf = avgdf.loc[
+        :,
+        avgdf.columns.str.startswith("dev_") & avgdf.columns.str.endswith(sfx)
+      ].rename(
+        {c: c.replace("dev_", "").replace(sfx, "") for c in avgdf.columns},
+        axis = "columns"
+      )
+      maxdf = - groupdf.min() if cidx == 0 else groupdf.max()
+      maxdf = maxdf.loc[
+        :,
+        maxdf.columns.str.startswith("dev_") & maxdf.columns.str.endswith(sfx)
+      ].rename(
+        {c: c.replace("dev_", "").replace(sfx, "") for c in maxdf.columns},
+        axis = "columns"
+      )
+      mindf = - groupdf.max() if cidx == 0 else groupdf.min()
+      mindf = mindf.loc[
+        :,
+        mindf.columns.str.startswith("dev_") & mindf.columns.str.endswith(sfx)
+      ].rename(
+        {c: c.replace("dev_", "").replace(sfx, "") for c in mindf.columns},
+        axis = "columns"
+      )
+      #
+      avgdf.plot.bar(
+        color = colors,
+        grid = True,
+        ax = axs2[0,cidx],
+        edgecolor = "k",
+        fontsize = fontsize,
+        rot = 0
+      )
+      mindf.plot.bar(
+        color = colors,
+        grid = True,
+        ax = axs2[1,cidx],
+        edgecolor = "k",
+        fontsize = fontsize,
+        rot = 0
+      )
+      maxdf.plot.bar(
+        color = colors,
+        grid = True,
+        ax = axs2[2,cidx],
+        edgecolor = "k",
+        fontsize = fontsize,
+        rot = 0
+      )
+  # horizontal lines (for reference)
+  for ridx in range(nrows):
+    axs2[ridx,0].axhline(
+      y = 0,
+      linestyle = "dashed",
+      linewidth = 2,
+      color = "k"
+    )
+    axs2[ridx,1].axhline(
+      y = 1,
+      linestyle = "dashed",
+      linewidth = 2,
+      color = "k"
+    )
+    # axis properties
+    # -- y
+    axs2[ridx,0].set_ylabel(
+      f"Objective deviation ({['avg','min','max'][ridx]}) [%]",
+      fontsize = fontsize
+    )
+    axs2[ridx,1].set_ylabel(
+      f"Runtime deviation ({['avg','min','max'][ridx]}) [x]",
+      fontsize = fontsize
+    )
+    if rej is not None:
+      axs2[ridx,2].axhline(
+        y = 0,
+        linestyle = "dashed",
+        linewidth = 2,
+        color = "k"
+      )
+      axs2[ridx,2].set_ylabel(
+        f"Cloud offloading deviation ({['avg','min','max'][ridx]}) [%]",
+        fontsize = fontsize
+      )
+    for idx in range(ncols):
+      axs2[ridx,idx].set_xlabel(
+        label,
+        fontsize = fontsize
+      )
+      axs2[ridx,idx].legend(fontsize = fontsize)
+  # -- common properties
+  plt.setp(axs2, title = None)
+  f2.savefig(
+    os.path.join(plot_folder, f"barscomparison{sfx}.png"),
     dpi = 300,
     format = "png",
     bbox_inches = "tight"
