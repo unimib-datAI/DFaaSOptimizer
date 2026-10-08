@@ -117,6 +117,7 @@ def test_madea_uses_each_available_replica_slot_once():
     bids, np.zeros((4, 1)), data,
     initial_rho=np.array([0.0, 0.0, 0.0, 3.0]),
     tentatively_start_replicas=True,
+    residual_capacity=np.zeros((4, 1)),
   )
   np.testing.assert_allclose(y[:3, 3, 0], [1.0, 1.0, 1.0])
   assert replicas[3, 0] == 3
@@ -146,6 +147,7 @@ def test_madea_reuses_started_replica_after_free_memory_is_exhausted():
   y, _, replicas, _ = madea.evaluate_bids(
     bids, np.zeros((2, 1)), data,
     initial_rho=np.array([0.0, 1.0]), tentatively_start_replicas=True,
+    residual_capacity=np.zeros((2, 1)),
   )
   assert y[0, 1, 0] == 3.0
   assert replicas[1, 0] == 1.0

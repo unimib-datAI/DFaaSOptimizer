@@ -86,6 +86,7 @@ def build_auction_options(config: Mapping[str, Any]) -> dict[str, object]:
     "zeta": auction.get("zeta", 0.1),
     "latency_weight": auction.get("latency_weight", 0.0),
     "fairness_weight": auction.get("fairness_weight", 0.0),
+    "use_internal_value": auction.get("use_internal_value", False),
   }
 
 

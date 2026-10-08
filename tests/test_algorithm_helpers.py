@@ -93,6 +93,7 @@ def test_faasmadea_stopping_capacity_utility_and_bid_helpers():
     total_capacity = cap,
     u0 = np.zeros((2, 2)),
     auction_options = {"eta": 0.5, "zeta": 0.1},
+    residual_capacity = np.array([[0.0, 0.0], [4.0, 0.0]]),
   )
   assert y_eval[0, 1, 0] == 4.0
   assert p_eval[1, 0] > 3.0
@@ -200,6 +201,7 @@ def test_decentralized_auction_bid_definition_and_helpers():
     total_capacity = np.ones((2, 2)) * 10,
     u0 = np.zeros((2, 2)),
     auction_options = options,
+    may_replace_existing_assignments = False,
   )
   assert y[0, 1, 0] == 3.0
   assert prices[1, 0] > 0
@@ -273,6 +275,7 @@ def test_decentralized_auction_rejects_ping_pong_in_same_round():
     total_capacity = np.ones((2, 2)),
     u0 = np.zeros((2, 2)),
     auction_options = options,
+    may_replace_existing_assignments = False,
   )
 
   assert not ((y.sum(axis=1) > 0) & (y.sum(axis=0) > 0)).any()

@@ -17,9 +17,11 @@ from run import (
 )
 from run_centralized_model import (
   compute_residual_capacity,
-  count_offloaded_processing,
   get_current_load,
   init_problem,
+)
+from utils.centralized import (
+  count_offloaded_processing,
   update_1d_variables,
   update_2d_variables,
   update_3d_variables,
