@@ -174,10 +174,12 @@ def run(
     best_solution_so_far = None
     best_centralized_solution = None
     best_cost_so_far = np.inf
-    best_centralized_cost = 0.0
+    best_centralized_cost = -np.inf
+    spr_obj = np.inf
     best_it_so_far = -1
     best_centralized_it = -1
     y = np.zeros((Nn,Nn,Nf))
+    rmp_omega = np.zeros((Nn,Nf))
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn,Nf))
     odev_queue = deque(maxlen=patience)
@@ -226,6 +228,7 @@ def run(
           print(bids, file = log_stream, flush = True)
       total_runtime += (e - s).total_seconds()
       # sellers accept/reject bids
+      a = np.zeros((Nn,Nf))
       if len(bids) > 0:
         s = datetime.now()
         auction_y, p, _, _ = evaluate_bids(
@@ -317,7 +320,7 @@ def run(
         sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
       )
       # update best solution so far
-      if spr_obj < best_cost_so_far:
+      if spr_obj < best_cost_so_far or it == 0:
         best_cost_so_far = spr_obj
         best_solution_so_far = csol
         best_it_so_far = it
@@ -349,6 +352,7 @@ def run(
         blackboard = blackboard,
         omega = omega,
         rmp_omega = rmp_omega,
+        a = a,
         odev_queue = odev_queue,
         bids = bids,
         memory_bids = memory_bids,

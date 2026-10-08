@@ -154,8 +154,10 @@ class LoadGenerator:
         total_workload, input_requests
       )
     elif trace_type == "flat":
+      # Match the integer truncation used by clipped and sinusoidal traces.
       input_requests = {
-        agent: np.array([limits[agent]] * max_steps) for agent in limits
+        agent: np.full(max_steps, limits[agent], dtype=int if only_integer_values else float)
+        for agent in limits
       }
     else:
       raise KeyError(f"Trace type `{trace_type}` is not supported")

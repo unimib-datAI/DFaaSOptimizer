@@ -133,6 +133,10 @@ def check_stopping_criteria(
     omega = sp_omega
   if a is None:
     a = np.zeros_like(rmp_omega) if rmp_omega is not None else None
+  # Newly created capacity needs an auction before declaring a plateau or exhaustion.
+  if (a is not None and (a > tolerance).any() and (omega > tolerance).any()
+      and it < max_iterations - 1 and total_runtime < time_limit):
+    return False, None
   stop = False
   why_stopping = None
   if it >= max_iterations - 1:
@@ -447,30 +451,28 @@ def evaluate_bids(
     for i, f, remaining_d, b in pending_bids:
       if receiving[i,f] or sending[j,f]:
         continue
-      managed = False
       if tentatively_start_replicas:
         current_a = int(additional_replicas[j,f])
         max_a = current_a + int(rho[j]/data[None]["memory_requirement"][f+1])
         # Reuse capacity from a replica already started, even if memory is exhausted.
         a = max(current_a, 1)
-        while a <= max_a and not managed:
-          u = data[None]["demand"][(j+1,f+1)] * (
-            ell[j,f] + y[:,j,f].sum() + remaining_d
-          ) / (r[j,f] + a)
-          if u <= data[None]["max_utilization"][f+1]:
-            y[i,j,f] += remaining_d
+        while a <= max_a and remaining_d > 0:
+          capacity = (r[j,f] + a) * (
+            data[None]["max_utilization"][f+1] / data[None]["demand"][(j+1,f+1)]
+          ) - ell[j,f] - y[:,j,f].sum()
+          q = min(remaining_d, VAR_TYPE(max(0.0, capacity)))
+          if q > 0:
+            y[i,j,f] += q
+            remaining_d -= q
             all_min_b[f] = min(all_min_b[f], b)
             sending[i,f] = True
             receiving[j,f] = True
-            managed = True
             if current_a < a:
               rho[j] -= (a - current_a) * data[None]["memory_requirement"][f+1]
               additional_replicas[j,f] = a
-          else:
-            a += 1
-      if managed or not may_replace_existing_assignments:
-        continue
-      if tentatively_start_replicas and rho[j] > 0:
+              current_a = a
+          a += 1
+      if remaining_d <= 0 or not may_replace_existing_assignments:
         continue
       if b <= p[j,f]:
         continue

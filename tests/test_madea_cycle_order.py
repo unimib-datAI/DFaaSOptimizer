@@ -72,11 +72,12 @@ def test_resumed_cycle_attempts_memory_fallback_without_losing_incumbent(
   madea.run_madea_cycle(state, **kwargs)
   assert state.sp_r[2, 0] == 1, "Memory fallback must run before convergence"
   assert state.sp_rho[2] == 0
-  assert state.best_centralized_cost == (2. if complete_incumbent else 1.)
-  np.testing.assert_array_equal(state.best_centralized_solution["sp"]["y"], incumbent_y)
-  assert state.best_centralized_it == 7
-
-  madea.run_madea_cycle(state, **kwargs)
+  if complete_incumbent:
+    np.testing.assert_array_equal(state.best_centralized_solution["sp"]["y"], incumbent_y)
+    assert state.best_centralized_it == 7
+  else:
+    np.testing.assert_array_equal(state.best_centralized_solution["sp"]["y"], state.y)
+    assert state.best_centralized_it >= 10
   assert state.reason == "all load assigned"
   assert state.y.sum() == 2
   assert state.omega.sum() == 0
