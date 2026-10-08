@@ -160,6 +160,23 @@ options:
 > exploit multithreading. Keep `j` small to avoid issues with aggressive 
 > over-commitment.
 
+### Optional internal value for auction bids
+
+Add `"use_internal_value": true` to `solver_options.auction` to form bids
+using the buyer's internal value `v = (beta + gamma) / incoming_load`.
+The default is `false`; omitting the option preserves the original behavior.
+With the option enabled, utility is `v - price - latency_penalty - fairness_penalty`,
+only positive-utility offers are submitted, and bids are capped at `v`:
+`min(v, price + epsilon + utility_difference_to_next_candidate)`.
+As in the welfare objective, zero load uses a denominator of 1; positive
+fractional loads are preserved.
+
+This applies to the shared MADEA/one-shot bid generator, including the level-one
+auction in their hierarchical variants. Higher-level allocation and PG refinement
+rules are unchanged. No marginal-value field is added to bid messages.
+Price updates are unchanged: tune `epsilon`, `eta`, and any latency/fairness weights
+for the normalized value scale. The option does not guarantee improved welfare.
+
 ### Hierarchical MADEA variants
 
 Three separate algorithms are available:

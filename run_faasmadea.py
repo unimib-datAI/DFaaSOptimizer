@@ -247,6 +247,7 @@ def define_bids(
     fairness: np.array,
     force_memory_bids: bool
   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+  use_internal_value = auction_options.get("use_internal_value", False)
   # loop over agents and functions
   potential_buyers, functions_to_share = np.nonzero(omega)
   bids = {
@@ -271,17 +272,25 @@ def define_bids(
     # -- loop over potential sellers
     utility = []
     candidate_sellers = []
+    candidate_values = []
     for j in potential_capacity_sellers:
       # -- compute utility
+      value = data[None]["beta"][(i+1,j+1,f+1)]
+      if use_internal_value:
+        # Match the welfare normalization, including its zero-load convention.
+        load = data[None]["incoming_load"][(i+1,f+1)] or 1
+        value = (value + data[None]["gamma"][(i+1,f+1)]) / load
       ut = (  
-        data[None]["beta"][(i+1,j+1,f+1)] - 
+        value -
         p[j,f] - 
         auction_options["latency_weight"] * latency[i,j] - 
         auction_options["fairness_weight"] * fairness[i,f]
       )
-      if ut > - data[None]["gamma"][(i+1,f+1)]:
+      reservation_utility = 0.0 if use_internal_value else -data[None]["gamma"][(i+1,f+1)]
+      if ut > reservation_utility:
         utility.append(ut)
         candidate_sellers.append(j)
+        candidate_values.append(value)
     # compute weights and define bids
     assigned = 0
     if len(utility) > 0:
@@ -294,6 +303,8 @@ def define_bids(
         if idx < len(sellers_order) - 1:
           delta = utility[sellers_order[idx]] - utility[sellers_order[idx+1]]
         b = p[j,f] + auction_options["epsilon"] + delta
+        if use_internal_value:
+          b = min(b, candidate_values[sellers_order[idx]])
         if auction_options["unit_bids"]:
           d = 1
           while (d < int(min(blackboard[j,f], omega[i,f])) + 1) and (

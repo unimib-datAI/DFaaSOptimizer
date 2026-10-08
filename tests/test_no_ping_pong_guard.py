@@ -132,6 +132,7 @@ def test_madea_evaluate_bids_recovers_ping_pong_free_y():
     bids, blackboard, data, last_y,
     np.zeros((3, 1)), np.zeros((3, 1)), capacity, np.zeros((3, 1)),
     {"eta": 0.0, "zeta": 0.0},
+    residual_capacity=blackboard - last_y.sum(axis=0),
   )
   assert y[:, 1, 0].sum() == 0.0                # node 1 sent already -> no host
   assert y[2, 0, 0] == 2.0                      # host that only received still accepts

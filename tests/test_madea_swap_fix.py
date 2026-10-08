@@ -30,9 +30,10 @@ def _base_data(Nn=4, Nf=1):
 
 def test_swap_does_not_oversubtract_incumbent():
   data = _base_data(Nn=4)
-  # seller 1 hosts capacity 2; incumbent buyer 3 currently holds 1 unit there
+  # Seller 1 has 3 slots, of which incumbent buyer 3 holds 1.
   last_y = np.zeros((4, 4, 1)); last_y[3, 1, 0] = 1.0
-  blackboard = np.zeros((4, 1)); blackboard[1, 0] = 2.0
+  blackboard = np.zeros((4, 1)); blackboard[1, 0] = 3.0
+  residual_capacity = blackboard - last_y.sum(axis=0)
   # buyer 2 fills the capacity in the main loop; buyer 0 overflows with d=5 > 1
   bids = pd.DataFrame({
     "i": [2, 0], "j": [1, 1], "f": [0, 0], "d": [2.0, 5.0], "b": [10.0, 5.0],
@@ -42,12 +43,13 @@ def test_swap_does_not_oversubtract_incumbent():
     bids, blackboard, data, last_y,
     np.zeros((4, 1)), np.zeros((4, 1)), capacity, np.zeros((4, 1)),
     {"eta": 0.0, "zeta": 0.0},
+    residual_capacity=residual_capacity,
   )
   accumulated = last_y + y
   assert (accumulated >= -1e-9).all(), accumulated[3, 1, 0]
   # incumbent can lose at most what it held (1); the displacer gains that much
   assert accumulated[3, 1, 0] >= 0.0
-  assert y[0, 1, 0] <= last_y[3, 1, 0] + 1e-9
+  assert y[0, 1, 0] == 1.0
   # the swap runs at exhausted residual, so this round's net placement at
   # seller 1 stays within the advertised residual capacity
-  assert y[:, 1, 0].sum() <= blackboard[1, 0] + 1e-9
+  assert y[:, 1, 0].sum() <= residual_capacity[1, 0] + 1e-9
