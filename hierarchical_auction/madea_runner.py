@@ -192,10 +192,10 @@ def run(
       if verbose > 0:
         print(f"    it = {it}", file=log_stream, flush=True)
       s = time.monotonic()
-      capacity, residual_capacity, ell = compute_residual_capacity(
+      total_capacity, residual_capacity, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data,
       )
-      blackboard = np.maximum(0.0, capacity - sp_x)
+      blackboard = np.maximum(0.0, total_capacity - sp_x)
       stalled = (
         len(accepted_queue) >= accepted_queue.maxlen
         and all(value == accepted_queue[0] for value in accepted_queue)
@@ -233,9 +233,10 @@ def run(
       if len(bids) > 0:
         s = time.monotonic()
         auction_y, p, additional_replicas, n_auctions = evaluate_bids(
-          bids, residual_capacity, sp_data, y, ell, p, capacity, u0,
+          bids, blackboard, sp_data, y, ell, p, total_capacity, u0,
           first_level_options, sp_rho, sp_r,
           tentatively_start_replicas=(len(memory_bids) == 0),
+          residual_capacity = residual_capacity
         )
         e = time.monotonic()
         rt = (e - s)

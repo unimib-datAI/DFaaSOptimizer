@@ -63,7 +63,7 @@ def parse_arguments() -> argparse.Namespace:
     "-j", "--parallelism",
     help = "Number of parallel processes to start (-1: auto, 0: sequential)",
     type = int,
-    default = -1
+    default = 0
   )
   parser.add_argument(
     "--disable_plotting",
@@ -353,14 +353,15 @@ def evaluate_bids(
     previous_y: np.array = None,
     ell: np.array = None, 
     p: np.array = None, 
-    capacity: np.array = None, 
+    total_capacity: np.array = None, 
     u0: np.array = None, 
     auction_options: dict = None,
     initial_rho: np.array = None,
     r: np.array = None,
     tentatively_start_replicas: bool = False,
     it: int = 0,
-    may_replace_existing_assignments: bool = True
+    may_replace_existing_assignments: bool = True,
+    residual_capacity: np.array = None
   ) -> np.array:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
@@ -369,8 +370,8 @@ def evaluate_bids(
     ell = np.zeros((Nn,Nf))
   if p is None:
     p = np.zeros((Nn,Nf))
-  if capacity is None:
-    capacity = np.ones((Nn,Nf))
+  if total_capacity is None:
+    total_capacity = np.ones((Nn,Nf))
   if u0 is None:
     u0 = np.zeros((Nn,Nf))
   if auction_options is None:
@@ -383,13 +384,14 @@ def evaluate_bids(
   # last value once the schedule is exhausted, accept a plain scalar too
   eta = auction_options["eta"]
   eta = eta[min(it, len(eta) - 1)] if isinstance(eta, (list, tuple)) else eta
-  # no_ping_pong (validate_centralized_solution): a node must not both send and
-  # receive the same function across the accumulated y. Track realized roles and
-  # refuse any bid that would give a node a second, conflicting role. Mirrors the
-  # guard in decentralized_auction.evaluate_bids.
+  # no_ping_pong (validate_centralized_solution): a node must not both send 
+  # and receive the same function across the accumulated y. Track realized 
+  # roles and refuse any bid that would give a node a second, conflicting 
+  # role. Mirrors the guard in decentralized_auction.evaluate_bids.
   sending = last_y.sum(axis = 1) > 1e-10
   receiving = last_y.sum(axis = 0) > 1e-10
   # loop over agents and functions
+  potential_sellers, functions_to_share = [None, None]
   potential_sellers, functions_to_share = np.nonzero(blackboard)
   if tentatively_start_replicas:
     potential_sellers, functions_to_share = ensure_memory_sellers(
@@ -408,7 +410,11 @@ def evaluate_bids(
       by = "b", ascending = False
     )
     bid_rows = all_bids_for_j.to_records(index=False)
-    remaining_capacities = blackboard[j,:].astype(int).copy()
+    remaining_capacities = None
+    if may_replace_existing_assignments:
+      remaining_capacities = residual_capacity[j,:].astype(int).copy()
+    else:
+      remaining_capacities = blackboard[j,:].astype(int).copy()
     all_min_b = all_bids_for_j.groupby("f")["b"].max()
     next_bid_idx = 0
     # loop over bids until there is remaining capacity
@@ -442,7 +448,8 @@ def evaluate_bids(
           max_a = current_a + int(rho[j]/data[None]["memory_requirement"][f+1])
           managed = False
           if max_a > 0 and not (receiving[i,f] or sending[j,f]):
-            # A previously started replica may still have spare processing capacity.
+            # a previously started replica may still have spare processing 
+            # capacity
             a = max(current_a, 1)
             while a <= max_a and not managed:
               # -- check utilization with one more replica
@@ -461,7 +468,9 @@ def evaluate_bids(
                 managed = True
                 # -- and update the remaining memory capacity
                 if additional_replicas[j,f] < a:
-                  rho[j] -= ((a - current_a) * data[None]["memory_requirement"][f+1])
+                  rho[j] -= (
+                    (a - current_a) * data[None]["memory_requirement"][f+1]
+                  )
                   additional_replicas[j,f] = a
               else:
                 # -- ...otherwhise, try to increase replicas
@@ -501,7 +510,8 @@ def evaluate_bids(
                         swapped < max_to_remove
                 ):
                 # cap at what the incumbent still holds: removing the full bid
-                # quantity would over-subtract y (negative) and exceed j capacity
+                # quantity would over-subtract y (negative) and exceed j 
+                # capacity
                 q = min(d_arr[nbi], max_to_remove - swapped)
                 y[previous_buyers[pbidx],j,f] -= q
                 y[i,j,f] += q
@@ -532,7 +542,7 @@ def evaluate_bids(
             next_bid_idx += 1
     # compute utilization and update prices
     for f,b in all_min_b.items():
-      u = (ell[j,f] + y[:,j,f].sum()) / capacity[j,f]
+      u = (ell[j,f] + y[:,j,f].sum()) / total_capacity[j,f]
       p[j,f] = b + eta * (u - u0[j,f])
     for f in set(functions_to_share) - set(all_min_b.index):
       p[j,f] *= (1 - auction_options["zeta"])
@@ -667,15 +677,15 @@ def run_madea_cycle(
       print(f"    it = {it}", file = log_stream, flush = True)
     # compute residual computational capacity
     s = datetime.now()
-    capacity, residual_capacity, ell = compute_residual_capacity(
+    total_capacity, residual_capacity, ell = compute_residual_capacity(
       sp_x, y, sp_r, sp_data
     )
-    blackboard = np.maximum(0.0, capacity - sp_x)
+    blackboard = np.maximum(0.0, total_capacity - sp_x)
     e = datetime.now()
     if verbose > 1:
       print(
         f"        compute_residual_capacity: DONE ",
-        f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
+        f"({total_capacity.tolist()}; blackboard = {blackboard.tolist()}; "
         f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})",
         file = log_stream,
         flush = True
@@ -718,18 +728,20 @@ def run_madea_cycle(
       s = datetime.now()
       auction_y, p, additional_replicas, n_auctions = evaluate_bids(
         bids,
-        residual_capacity,
+        blackboard,
         data,
         y,
         ell,
         p,
-        capacity,
+        total_capacity,
         u0,
         auction_options,
         sp_rho,
         sp_r,
         tentatively_start_replicas = (len(memory_bids) == 0),
-        it = it
+        it = it,
+        may_replace_existing_assignments = True,
+        residual_capacity = residual_capacity
       )
       e = datetime.now()
       rt = (e - s).total_seconds()

@@ -235,7 +235,7 @@ def run(
           previous_y = y,
           ell = ell,
           p = p,
-          capacity = capacity,
+          total_capacity = capacity,
           u0 = u0,
           auction_options = auction_options,
           tentatively_start_replicas = False,
@@ -454,7 +454,7 @@ def run(
     solution_folder
   )
   # save objective function values
-  result_name = "One-shot-PG" if refine_welfare else "FaaS-MADeA"
+  result_name = "One-shot-PG" if refine_welfare else "FaaS-MADeA(1s)"
   if refine_welfare:
     pd.DataFrame(refinement_history).to_csv(os.path.join(solution_folder, "refinement.csv"), index=False)
     pd.DataFrame({"tot": runtime_list}).to_csv(os.path.join(solution_folder, "runtime.csv"), index=False)

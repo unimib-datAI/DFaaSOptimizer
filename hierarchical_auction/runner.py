@@ -247,7 +247,7 @@ def run(
       if len(bids) > 0:
         auction_y, p, _, _ = evaluate_bids(
           bids, blackboard, sp_data, previous_y=y, ell=ell, p=p,
-          capacity=capacity, u0=u0, auction_options=level1_options,
+          total_capacity=capacity, u0=u0, auction_options=level1_options,
           may_replace_existing_assignments=False,
         )
         y += auction_y

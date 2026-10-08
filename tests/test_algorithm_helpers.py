@@ -90,7 +90,7 @@ def test_faasmadea_stopping_capacity_utility_and_bid_helpers():
     data = data,
     ell = ell,
     p = p,
-    capacity = cap,
+    total_capacity = cap,
     u0 = np.zeros((2, 2)),
     auction_options = {"eta": 0.5, "zeta": 0.1},
   )
@@ -129,28 +129,31 @@ def test_evaluate_bids_eta_schedule_and_scalar_and_n_auctions_guard():
   # scalar eta still works (backward compatible)
   _, p_scalar, _, _ = run_faasmadea.evaluate_bids(
     bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
-    capacity = cap, u0 = np.zeros((2, 2)),
+    total_capacity = cap, u0 = np.zeros((2, 2)),
     auction_options = {"eta": 0.5, "zeta": 0.1},
+    residual_capacity=residual
   )
   # a per-iteration eta schedule: it=0 must use eta[0]
   _, p_it0, _, _ = run_faasmadea.evaluate_bids(
     bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
-    capacity = cap, u0 = np.zeros((2, 2)),
+    total_capacity = cap, u0 = np.zeros((2, 2)),
     auction_options = {"eta": [0.5, 0.3, 0.15], "zeta": 0.1}, it = 0,
+    residual_capacity=residual
   )
   assert p_it0[1, 0] == pytest.approx(p_scalar[1, 0])
   # it beyond the schedule length clamps to the last value, no IndexError
   _, p_it_over, _, _ = run_faasmadea.evaluate_bids(
     bids, blackboard = blackboard, data = data, ell = ell, p = p.copy(),
-    capacity = cap, u0 = np.zeros((2, 2)),
+    total_capacity = cap, u0 = np.zeros((2, 2)),
     auction_options = {"eta": [0.5, 0.3, 0.15], "zeta": 0.1}, it = 99,
+    residual_capacity=residual
   )
   assert p_it_over[1, 0] != pytest.approx(p_it0[1, 0])
   # n_auctions == 0 (no potential sellers) must not raise ZeroDivisionError
   y_empty, _, _, n_auctions = run_faasmadea.evaluate_bids(
     pd.DataFrame(columns = ["i", "j", "f", "d", "b"]),
     blackboard = np.zeros((2, 2)), data = data,
-    ell = ell, p = p.copy(), capacity = cap, u0 = np.zeros((2, 2)),
+    ell = ell, p = p.copy(), total_capacity = cap, u0 = np.zeros((2, 2)),
     auction_options = {"eta": 0.5, "zeta": 0.1},
   )
   assert n_auctions == 0
@@ -194,7 +197,7 @@ def test_decentralized_auction_bid_definition_and_helpers():
     data,
     ell = np.zeros((2, 2)),
     p = np.zeros((2, 2)),
-    capacity = np.ones((2, 2)) * 10,
+    total_capacity = np.ones((2, 2)) * 10,
     u0 = np.zeros((2, 2)),
     auction_options = options,
   )
@@ -267,7 +270,7 @@ def test_decentralized_auction_rejects_ping_pong_in_same_round():
     data = data,
     ell = np.zeros((2, 2)),
     p = np.zeros((2, 2)),
-    capacity = np.ones((2, 2)),
+    total_capacity = np.ones((2, 2)),
     u0 = np.zeros((2, 2)),
     auction_options = options,
   )
