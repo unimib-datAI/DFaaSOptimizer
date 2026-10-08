@@ -153,6 +153,10 @@ class LoadGenerator:
       input_requests = self._impose_system_workload(
         total_workload, input_requests
       )
+    elif trace_type == "flat":
+      input_requests = {
+        agent: np.array([limits[agent]] * max_steps) for agent in limits
+      }
     else:
       raise KeyError(f"Trace type `{trace_type}` is not supported")
     # ensure that everything, anyway, stays above zero
