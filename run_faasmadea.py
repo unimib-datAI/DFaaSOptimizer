@@ -427,130 +427,70 @@ def evaluate_bids(
     else:
       remaining_capacities = blackboard[j,:].astype(int).copy()
     all_min_b = all_bids_for_j.groupby("f")["b"].max()
-    next_bid_idx = 0
-    # loop over bids until there is remaining capacity
-    while next_bid_idx < len(all_bids_for_j) and \
-        (remaining_capacities > 0).any():
-      bid = bid_rows[next_bid_idx]
+    pending_bids = []
+    # Fill free capacity first; keep each bid's unserved quantity for its function.
+    for bid in bid_rows:
       i = int(bid["i"])
       f = int(bid["f"])
-      next_bid_idx += 1
       if receiving[i,f] or sending[j,f]:
         continue
-      if remaining_capacities[f] > 0:
-        q = min(remaining_capacities[f], bid["d"])
+      q = min(remaining_capacities[f], bid["d"])
+      if q > 0:
         y[i,j,f] += q
         remaining_capacities[f] -= q
         all_min_b[f] = min(all_min_b[f], bid["b"])
         sending[i,f] = True
         receiving[j,f] = True
-    # if computational capacity is exhausted and there are still bids, 
-    # consider starting new replicas
-    if (remaining_capacities == 0).all() and (
-        (0 < next_bid_idx < len(all_bids_for_j)) or (
-          next_bid_idx == 0 and len(all_bids_for_j) > 0
-        )
-      ):
+      if bid["d"] > q:
+        pending_bids.append((i, f, bid["d"] - q, bid["b"]))
+
+    for i, f, remaining_d, b in pending_bids:
+      if receiving[i,f] or sending[j,f]:
+        continue
+      managed = False
+      if tentatively_start_replicas:
+        current_a = int(additional_replicas[j,f])
+        max_a = current_a + int(rho[j]/data[None]["memory_requirement"][f+1])
+        # Reuse capacity from a replica already started, even if memory is exhausted.
+        a = max(current_a, 1)
+        while a <= max_a and not managed:
+          u = data[None]["demand"][(j+1,f+1)] * (
+            ell[j,f] + y[:,j,f].sum() + remaining_d
+          ) / (r[j,f] + a)
+          if u <= data[None]["max_utilization"][f+1]:
+            y[i,j,f] += remaining_d
+            all_min_b[f] = min(all_min_b[f], b)
+            sending[i,f] = True
+            receiving[j,f] = True
+            managed = True
+            if current_a < a:
+              rho[j] -= (a - current_a) * data[None]["memory_requirement"][f+1]
+              additional_replicas[j,f] = a
+          else:
+            a += 1
+      if managed or not may_replace_existing_assignments:
+        continue
       if tentatively_start_replicas and rho[j] > 0:
-        while next_bid_idx < len(all_bids_for_j):
-          i = int(bid_rows[next_bid_idx]["i"])
-          f = int(bid_rows[next_bid_idx]["f"])
-          current_a = int(additional_replicas[j,f])
-          max_a = current_a + int(rho[j]/data[None]["memory_requirement"][f+1])
-          managed = False
-          if max_a > 0 and not (receiving[i,f] or sending[j,f]):
-            # a previously started replica may still have spare processing 
-            # capacity
-            a = max(current_a, 1)
-            while a <= max_a and not managed:
-              # -- check utilization with one more replica
-              q = bid_rows[next_bid_idx]["d"]
-              u = data[None]["demand"][(j+1,f+1)] * (
-                ell[j,f] + y[:,j,f].sum() + q
-              ) / (r[j,f] + a)
-              if u <= data[None]["max_utilization"][f+1]:
-                # -- if possible, accomodate one more bid...
-                y[i,j,f] += q
-                all_min_b[f] = min(
-                  all_min_b[f], bid_rows[next_bid_idx]["b"]
-                )
-                sending[i,f] = True
-                receiving[j,f] = True
-                managed = True
-                # -- and update the remaining memory capacity
-                if additional_replicas[j,f] < a:
-                  rho[j] -= (
-                    (a - current_a) * data[None]["memory_requirement"][f+1]
-                  )
-                  additional_replicas[j,f] = a
-              else:
-                # -- ...otherwhise, try to increase replicas
-                a += 1
-          if not managed and rho[j] <= 0:
-            # Leave unserved bids for the reassignment phase below.
-            break
-          next_bid_idx += 1
-      if may_replace_existing_assignments and (
-          not tentatively_start_replicas or (
-            tentatively_start_replicas and rho[j] <= 0
-          )
-        ):
-        # if no additional replicas can start, replace existing assignments
-        # -- check who previously won the assignment to j
-        i_arr, d_arr, b_arr, f_arr = all_bids_for_j[[
-          "i", "d", "b", "f"
-        ]].to_numpy().T
-        while next_bid_idx < len(f_arr):
-          f = int(f_arr[next_bid_idx])
-          previous_buyers = np.nonzero(last_y[:,j,f])[0]
-          pbidx = 0
-          nbi = -1
-          while pbidx < len(previous_buyers) and next_bid_idx < len(i_arr):
-            i = int(i_arr[next_bid_idx])
-            if (
-                previous_buyers[pbidx] != i and b_arr[next_bid_idx] > p[j,f]
-                and not receiving[i,f] and not sending[j,f]
-              ):
-              max_to_remove = last_y[previous_buyers[pbidx],j,f]
-              nbi = next_bid_idx
-              swapped = 0
-              while (
-                  nbi < len(i_arr) and
-                    i_arr[nbi] == i and
-                      f_arr[nbi] == f and
-                        swapped < max_to_remove
-                ):
-                # cap at what the incumbent still holds: removing the full bid
-                # quantity would over-subtract y (negative) and exceed j 
-                # capacity
-                q = min(d_arr[nbi], max_to_remove - swapped)
-                y[previous_buyers[pbidx],j,f] -= q
-                y[i,j,f] += q
-                swapped += q
-                all_min_b[f] = min(all_min_b[f], b_arr[nbi])
-                nbi += 1
-              if swapped > 0:
-                sending[i,f] = True
-                receiving[j,f] = True
-                last_y[previous_buyers[pbidx],j,f] -= swapped
-                if previous_y is not None and (
-                    (
-                      previous_y[previous_buyers[pbidx],:,f].sum() +
-                      y[previous_buyers[pbidx],:,f]
-                    ).sum() <= 0
-                  ):
-                  sending[previous_buyers[pbidx],f] = False
-                elif previous_y is None and (
-                    last_y[previous_buyers[pbidx],:,f].sum() <= 0 and
-                    y[previous_buyers[pbidx],:,f].sum() <= 0
-                  ).sum():
-                  sending[previous_buyers[pbidx],f] = False
-              next_bid_idx += (nbi if nbi > 0 else 1)
-            pbidx += 1
-          if len(previous_buyers) == 0 or (
-              nbi < 0 and pbidx == len(previous_buyers)
-            ):
-            next_bid_idx += 1
+        continue
+      if b <= p[j,f]:
+        continue
+      # Only prior-round assignments are replaceable; a bid may span incumbents.
+      for previous_buyer in np.nonzero(last_y[:,j,f])[0]:
+        if previous_buyer == i:
+          continue
+        q = min(remaining_d, last_y[previous_buyer,j,f])
+        y[previous_buyer,j,f] -= q
+        y[i,j,f] += q
+        last_y[previous_buyer,j,f] -= q
+        remaining_d -= q
+        all_min_b[f] = min(all_min_b[f], b)
+        sending[i,f] = True
+        receiving[j,f] = True
+        sending[previous_buyer,f] = (
+          previous_y[previous_buyer,:,f] + y[previous_buyer,:,f]
+        ).sum() > 1e-10
+        if remaining_d <= 0:
+          break
     # compute utilization and update prices
     for f,b in all_min_b.items():
       u = (ell[j,f] + y[:,j,f].sum()) / total_capacity[j,f]

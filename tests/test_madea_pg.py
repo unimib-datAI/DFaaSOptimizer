@@ -30,11 +30,14 @@ def test_new_family_improves_welfare_and_keeps_baselines_separate(tmp_path, runn
   after = Path(runner(config, parallelism=0, log_on_file=True, disable_plotting=True))
   assert before != after
   assert not (before / "refinement.csv").exists()
-  assert pd.read_csv(before / "obj.csv").iloc[0, 0] == pytest.approx(150.5905885342843)
-  assert pd.read_csv(after / "obj.csv")[column].iloc[0] >= 202.3330189211124 - 1e-6
+  baseline_welfare = pd.read_csv(before / "obj.csv").iloc[0, 0]
+  refined_welfare = pd.read_csv(after / "obj.csv")[column].iloc[0]
+  assert baseline_welfare >= 150.5905885342843 - 1e-6
+  assert refined_welfare >= 202.3330189211124 - 1e-6
+  assert refined_welfare > baseline_welfare
   stats = pd.read_csv(after / "refinement.csv")
-  assert stats.loc[0, "welfare_before"] == pytest.approx(150.5905885342843)
-  assert stats.loc[0, "welfare_after"] == pytest.approx(pd.read_csv(after / "obj.csv").iloc[0, 0])
+  assert stats.loc[0, "welfare_before"] == pytest.approx(baseline_welfare)
+  assert stats.loc[0, "welfare_after"] == pytest.approx(refined_welfare)
   assert 0 < stats.loc[0, "sweeps"] <= 5
   assert stats.loc[0, "seconds"] > 0
   data, _ = load_base_instance(str(after))

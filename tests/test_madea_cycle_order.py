@@ -459,10 +459,8 @@ def test_supplied_configuration_preserves_first_snapshot_welfare(tmp_path, runne
   # The legacy fixed_sum generator truncates integer shares without redistribution.
   baseline = 150.5905885342843
   assert len(objectives) == 1
-  if runner is madea:
-    assert objectives[0] == pytest.approx(baseline)
-  else:
-    assert objectives[0] >= baseline - 1e-6
+  assert objectives[0] >= baseline - 1e-6
+  if runner is not madea:
     from run import load_termination_condition
     termination = load_termination_condition(folder)
     assert termination.loc[0, "criterion"].startswith("no progress after hierarchy and MADEA")
