@@ -23,6 +23,7 @@ from run_faasmadea import (
 from utils.centralized import check_feasibility, encode_solution
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
+from models.model import PYO_VAR_TYPE
 from models.sp import LSP, LSP_fixedr, LSP_pg, LSP_pg_fixedr
 from models.local_sp import dp_enabled, try_solve_local
 
@@ -31,6 +32,7 @@ from copy import deepcopy
 from typing import Callable, Tuple
 import pandas as pd
 import numpy as np
+import pyomo.environ as pyo
 import argparse
 import json
 import sys
@@ -318,7 +320,8 @@ def potential_game_sweep(
   all_bids = {"i": [], "j": [], "f": []}
   for i in node_order:
     accepted, delta_u, bids, runtime = node_move(
-      i, x, y, r, sp_data, neighborhood, rho, epsilon, propose_fn, tolerance
+      i, x, y, r, sp_data, neighborhood, rho, epsilon, propose_fn, tolerance,
+      integer_flows=PYO_VAR_TYPE is pyo.NonNegativeIntegers,
     )
     proposal_runtime += runtime
     if accepted:

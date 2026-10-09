@@ -214,3 +214,17 @@ def test_compute_rho_tracks_committed_replicas():
   # replicas grown by a move: slack must shrink accordingly
   r[0, 0] = 50.0
   assert np.allclose(compute_rho(r, data), [0.0, 80.0])
+
+
+def test_sweep_places_integer_flows_with_integer_model():
+  # node 1 residual capacity is fractional (r=4.5 -> cap 3.6, minus 0.001):
+  # with integer variables the sweep may only commit whole requests
+  data = _data_2n_1f()
+  x, y, r = _state()
+  r[1, 0] = 4.5
+  neighborhood = np.array([[0, 1], [1, 0]])
+  potential_game_sweep(
+    x, y, r, data, neighborhood, np.zeros(2), 1e-6, 1e-9,
+    "fixed", np.random.default_rng(0), _offload_all_proposal,
+  )
+  assert np.isclose(y[0, 1, 0], 3.0)

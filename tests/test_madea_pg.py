@@ -216,6 +216,27 @@ def test_proportional_budget_reaches_local_solver(monkeypatch, per_node, remaini
   assert result is solution
 
 
+@pytest.mark.parametrize("use_dp,expected", [(True, [0.75, 0.75]), (False, [])])
+def test_glpk_whole_second_guard_only_without_dp(monkeypatch, use_dp, expected):
+  from test_review_distributed_regressions import _two_node_data
+  from run_faasmacro import combine_solutions
+  data = _two_node_data()
+  solution = combine_solutions(
+    2, 1, data, data[None]["incoming_load"], np.full((2, 1), 5.), np.ones((2, 1)),
+    np.zeros(2), None, np.zeros((2, 2, 1)), None, None, None, None,
+  )
+  limits = []
+  def propose(node, cap, y, data, model, solver, options, verbose):
+    limits.append(options["TimeLimit"])
+    return np.array([5.]), np.array([1.]), np.array([0.]), 0.
+  monkeypatch.setattr(madea_pg, "propose_node_move", propose)
+  monkeypatch.setattr(madea_pg.time, "monotonic", lambda: 10.)
+  madea_pg.refine_solution(data, solution, {
+    "solver_name": "glpk", "solver_options": {"general": {"use_dp": use_dp}},
+  }, 0.75)
+  assert limits == expected
+
+
 @pytest.mark.parametrize("value", [-1, float("nan"), float("inf"), True, "1", None])
 def test_invalid_proportional_budget_fails_early(value):
   with pytest.raises(ValueError, match="madea_pg.time_limit_per_node"):

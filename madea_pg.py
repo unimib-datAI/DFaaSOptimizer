@@ -9,6 +9,7 @@ import numpy as np
 import pyomo.environ as pyo
 
 from decentralized_potentialgame import node_move, propose_node_move, compute_rho
+from models.local_sp import dp_enabled
 from models.model import PYO_VAR_TYPE
 from models.sp import LSP_pg, LSP_pg_fixedr
 from run_faasmacro import combine_solutions
@@ -60,17 +61,21 @@ def refine_solution(data, solution, config, remaining_time=float("inf")):
   integer_flows = PYO_VAR_TYPE is pyo.NonNegativeIntegers
   model = LSP_pg_fixedr() if "r_bar" in data[None] else LSP_pg()
   solver = config["solver_name"]
+  # Either the local DP or the configured solver proposes; glpk's whole-second
+  # TimeLimit only constrains the budget when glpk is the one being called.
+  integer_limit = (solver in {"glpk", "glpsol"}
+                   and not dp_enabled(config.get("solver_options", {}).get("general", {})))
   exhausted = False
   for sweep in range(options["max_sweeps"]):
     accepted_in_sweep = 0
     for i in range(Nn):
       remaining = deadline - time.monotonic()
-      if remaining <= 0 or (solver in {"glpk", "glpsol"} and remaining < 1):
+      if remaining <= 0 or (integer_limit and remaining < 1):
         exhausted = True
         break
       stats["sweeps"] = sweep + 1
       solver_options = deepcopy(config.get("solver_options", {}).get("general", {}))
-      solver_options["TimeLimit"] = int(remaining) if solver in {"glpk", "glpsol"} else remaining
+      solver_options["TimeLimit"] = int(remaining) if integer_limit else remaining
       def propose(node, cap):
         proposal = propose_node_move(node, cap, y, data, model, solver, solver_options, 0)
         local_x, local_r, offload, _ = proposal
