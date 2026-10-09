@@ -1,0 +1,336 @@
+{
+  "config": {
+    "base_solution_folder": "solutions/madea-pg-compact",
+    "verbose": 0,
+    "seed": 4850,
+    "max_steps": 1,
+    "min_run_time": 0,
+    "max_run_time": 0,
+    "run_time_step": 1,
+    "solver_name": "gurobi",
+    "solver_options": {
+      "general": {
+        "TimeLimit": 30,
+        "MIPGap": 1e-09,
+        "Threads": 1,
+        "Seed": 0,
+        "OutputFlag": 0,
+        "use_dp": true
+      },
+      "auction": {
+        "eta": 0.0,
+        "epsilon": 0.001,
+        "zeta": 0.01,
+        "latency_weight": 0.0,
+        "fairness_weight": 0.0,
+        "unit_bids": true
+      },
+      "coordinator": {
+        "sorting_rule": "product"
+      },
+      "update_neighborhood": false,
+      "start_from_last_pi": false,
+      "use_detailed_pi": false,
+      "madea_pg": {
+        "max_sweeps": 5,
+        "epsilon": 1e-06,
+        "time_limit_per_node": 0.25
+      },
+      "plasma_welfare": {
+        "W": 1.0,
+        "rounds_per_step": 20,
+        "epsilon": 1e-06,
+        "hb_latency_rounds": 1,
+        "hb_loss": 0.0,
+        "staleness_rounds": 3
+      }
+    },
+    "checkpoint_interval": 1,
+    "max_iterations": 100,
+    "plot_interval": 100,
+    "patience": 10,
+    "sw_patience": 200,
+    "limits": {
+      "instance_type": "random",
+      "Nn": {
+        "min": 10,
+        "max": 10
+      },
+      "Nf": {
+        "min": 5,
+        "max": 5
+      },
+      "demand": {
+        "min": 0.2,
+        "max": 0.5,
+        "speedup_factors": {
+          "4096": 0.5,
+          "8192": 1.0,
+          "16384": 1.2,
+          "24576": 1.4,
+          "32768": 1.4
+        }
+      },
+      "memory_requirement": {
+        "values_from": [
+          128,
+          256,
+          512,
+          1024
+        ]
+      },
+      "memory_capacity": {
+        "repeated_values": [
+          [
+            0.125,
+            4096
+          ],
+          [
+            0.125,
+            8192
+          ],
+          [
+            0.375,
+            16384
+          ],
+          [
+            0.25,
+            24576
+          ],
+          [
+            0.125,
+            32768
+          ]
+        ],
+        "min": 4096,
+        "max": 4096
+      },
+      "neighborhood": {
+        "type": "planar",
+        "degree": 3
+      },
+      "max_utilization": {
+        "min": 0.8,
+        "max": 0.8
+      },
+      "load": {
+        "trace_type": "fixed_sum",
+        "values": [
+          "auto"
+        ],
+        "edge_exposed_fraction": 1.0
+      },
+      "weights": {
+        "alpha": {
+          "min": 1,
+          "max": 10
+        },
+        "beta_multiplier": {
+          "min": 0.1,
+          "max": 0.9
+        },
+        "gamma": {
+          "min": 1,
+          "max": 1
+        },
+        "delta_multiplier": {
+          "min": 1.0,
+          "max": 1.0
+        },
+        "edge_network_latency": {
+          "min": 0.005,
+          "max": 1.0
+        },
+        "edge_bandwidth": {
+          "min": 100,
+          "max": 100
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 5,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f5-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f5-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 10,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f10-s7-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 160,
+      "functions": 5,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n160-f5-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 40,
+      "functions": 10,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n40-f10-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f10-s42-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 99,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f5-s99-l1-r0"
+    },
+    {
+      "phase": "static",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 2026,
+      "steps": 1,
+      "profile": [
+        1.0
+      ],
+      "repeat": 0,
+      "id": "static-n80-f10-s2026-l1-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 7,
+      "steps": 1,
+      "profile": [
+        0.75
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f5-s7-l0.75-r0"
+    },
+    {
+      "phase": "stress",
+      "nodes": 80,
+      "functions": 10,
+      "seed": 42,
+      "steps": 1,
+      "profile": [
+        1.5
+      ],
+      "repeat": 0,
+      "id": "stress-n80-f10-s42-l1.5-r0"
+    },
+    {
+      "phase": "temporal",
+      "nodes": 80,
+      "functions": 5,
+      "seed": 7,
+      "steps": 3,
+      "profile": [
+        0.75,
+        1.25,
+        1.0
+      ],
+      "repeat": 0,
+      "id": "temporal-n80-f5-s7-l0.75-r0"
+    },
+    {
+      "phase": "temporal",
+      "nodes": 40,
+      "functions": 10,
+      "seed": 7,
+      "steps": 3,
+      "profile": [
+        0.75,
+        1.25,
+        1.0
+      ],
+      "repeat": 0,
+      "id": "temporal-n40-f10-s7-l0.75-r0"
+    }
+  ],
+  "parallelism": {
+    "MADEA": 0,
+    "MADEA-one-shot": 0,
+    "MADEA-PG": 0,
+    "PLASMA-Welfare": 0,
+    "one-shot-pg": 0,
+    "hierarchical-one-shot-pg": 0,
+    "hierarchical-madea-pg": 0,
+    "FaaS-MAPG-S": 0,
+    "FaaS-MAPG-R": 0
+  },
+  "available_logical_cpus": 11,
+  "deadline_utc": "2026-10-09T11:17:41.951076+00:00",
+  "started_utc": "2026-10-09T10:17:41.955164+00:00",
+  "source_hashes": {
+    "run_faasmacro.py": "89d5d7f50b773a2f1eac3c594e037b3d0a46f338d85c2aefd01279bcf75ce198",
+    "run_faasmadea.py": "fc5a51d385120f0750231496630bb75f19ce502490b1d7cf2503e628296ba530",
+    "decentralized_auction.py": "3bb6565be813765e7c05645fe22ab161594858a0529094b4cef727dc8c4720c2",
+    "madea_pg.py": "0fbd407927b56bab90fc84fb80be09dc64b5b74356b6c7e6378c984c42f93388",
+    "decentralized_potentialgame.py": "67b784b19b87584e050bb17dda53ff8940afce827ba901832838cdbe1ef906c4",
+    "models/local_sp.py": "cb0f364c7fad842c2a20641585bb64c9d4dd3b93cc5b223db93cc64df339785f",
+    "models/sp.py": "8e03190277d9cb35719cf7521f9fa17feec750386458cb5dc859df6abeb43e95",
+    "plasma/welfare.py": "12b4bb1c3e21d6554815188b25075296e509da355d56471239373f20659f1c7e",
+    "plasma/runner.py": "26f6bc71ccf93915c77fe0f0c207e1d484c7deca1f2215b1c28af48b2a70f013",
+    "plasma/core/sbm.py": "e5f5d9e675d8d1913201e357f29104ab7acf0eea36d9ca2672520f205b15da3c",
+    "generators/generate_load.py": "a495454359dc8d04a85b90b5a46dd66c9fd1254bf8cfde86688a226cec8839d0",
+    "generators/generate_data.py": "60645f1703de562a3b365f21a7083ba904a7fa2ef9474ad62a0bb55d28822858",
+    "experiments/madea_pg_compact/families_extended.py": "3ba9d8f5bd8e7ed367dfeaac06537279302fcdda7088baaf96792fa1079ff208"
+  },
+  "runtime_accounting": "actual full runner wall time including pool startup/shutdown; no replay or observer inside decision loop",
+  "native_limits": "MADEA and one-shot <=100 iterations; general TimeLimit=max(30,0.5*N); PG <=5 sweeps and 0.25 seconds/node bounded by remaining native time; PLASMA 20 rounds/step",
+  "note": "Different stopping criteria; not an equal-wall-budget comparison. fixed_sum integer rounding is unchanged; actual input totals are recorded.",
+  "instance_source": "solutions/families-alpha-gt-beta-2026-10-01/instances",
+  "reference_results": "experiments/madea_pg_compact/results_families_alpha_gt_beta_2026_10_01",
+  "extension_note": "Stesse 12 istanze \u03b1 > \u03b2 della campagna del 1\u00b0 ottobre (hash verificati). Tutti i metodi sono rieseguiti sul codice attuale, con DP locale attiva; si aggiungono FaaS-MAPG-S e FaaS-MAPG-R (PG da solo, ordine fisso e casuale), con al massimo 100 iterazioni e lo stesso TimeLimit max(30, 0,5 \u00d7 N)."
+}

@@ -1,0 +1,200 @@
+{
+  "successful_runs": 108,
+  "errors": 0,
+  "timeouts": 0,
+  "complete_paired_runs": 108,
+  "complete_case_ids": 12,
+  "paired_timestep_observations": 16,
+  "input_equivalence": true,
+  "feasible": true,
+  "parallelism": {
+    "MADEA": 0,
+    "MADEA-one-shot": 0,
+    "MADEA-PG": 0,
+    "PLASMA-Welfare": 0,
+    "one-shot-pg": 0,
+    "hierarchical-one-shot-pg": 0,
+    "hierarchical-madea-pg": 0,
+    "FaaS-MAPG-S": 0,
+    "FaaS-MAPG-R": 0
+  },
+  "phases": {
+    "static": {
+      "observations": 8,
+      "cases": 8,
+      "welfare_gain_mean_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": 0.07742871381717087,
+        "MADEA-PG": 0.5697734336552379,
+        "PLASMA-Welfare": 0.09663744393119955,
+        "one-shot-pg": 0.6193510867462809,
+        "hierarchical-one-shot-pg": 0.7974948555075828,
+        "hierarchical-madea-pg": 0.5634321315856922,
+        "FaaS-MAPG-S": -0.0354081623506905,
+        "FaaS-MAPG-R": -0.12393938706637408
+      },
+      "welfare_gain_min_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -0.37957155568990597,
+        "MADEA-PG": 0.24635172055014198,
+        "PLASMA-Welfare": -0.7110369003238359,
+        "one-shot-pg": 0.17084232909039265,
+        "hierarchical-one-shot-pg": 0.3968137190928589,
+        "hierarchical-madea-pg": 0.24635172055014198,
+        "FaaS-MAPG-S": -1.0264714240717732,
+        "FaaS-MAPG-R": -0.5530691542069865
+      },
+      "welfare_gain_max_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": 0.5431986372020248,
+        "MADEA-PG": 1.0187486753084452,
+        "PLASMA-Welfare": 0.7960744294747135,
+        "one-shot-pg": 1.0573670824905568,
+        "hierarchical-one-shot-pg": 1.4382247143410298,
+        "hierarchical-madea-pg": 1.0187486753084452,
+        "FaaS-MAPG-S": 0.47375828678908327,
+        "FaaS-MAPG-R": 0.34106676406147063
+      },
+      "winner_including_ties": {
+        "MADEA": 0,
+        "MADEA-one-shot": 0,
+        "MADEA-PG": 3,
+        "PLASMA-Welfare": 0,
+        "one-shot-pg": 0,
+        "hierarchical-one-shot-pg": 5,
+        "hierarchical-madea-pg": 3,
+        "FaaS-MAPG-S": 0,
+        "FaaS-MAPG-R": 0
+      }
+    },
+    "stress": {
+      "observations": 2,
+      "cases": 2,
+      "welfare_gain_mean_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -0.07398113548546248,
+        "MADEA-PG": 3.330826553506283,
+        "PLASMA-Welfare": 4.262236135363495,
+        "one-shot-pg": 3.2324862547923106,
+        "hierarchical-one-shot-pg": 3.26005061054615,
+        "hierarchical-madea-pg": 3.3739205273543904,
+        "FaaS-MAPG-S": 3.2359809176976118,
+        "FaaS-MAPG-R": 2.9623334925067244
+      },
+      "welfare_gain_min_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -0.09996828955149972,
+        "MADEA-PG": 0.138141775751488,
+        "PLASMA-Welfare": 0.14677314033821887,
+        "one-shot-pg": -0.015664622245936677,
+        "hierarchical-one-shot-pg": -0.09675163425511002,
+        "hierarchical-madea-pg": 0.22432972344770263,
+        "FaaS-MAPG-S": -0.07767087175156728,
+        "FaaS-MAPG-R": -0.4657912867266689
+      },
+      "welfare_gain_max_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -0.047993981419425236,
+        "MADEA-PG": 6.523511331261078,
+        "PLASMA-Welfare": 8.377699130388772,
+        "one-shot-pg": 6.480637131830558,
+        "hierarchical-one-shot-pg": 6.61685285534741,
+        "hierarchical-madea-pg": 6.523511331261078,
+        "FaaS-MAPG-S": 6.549632707146791,
+        "FaaS-MAPG-R": 6.390458271740118
+      },
+      "winner_including_ties": {
+        "MADEA": 0,
+        "MADEA-one-shot": 0,
+        "MADEA-PG": 0,
+        "PLASMA-Welfare": 1,
+        "one-shot-pg": 0,
+        "hierarchical-one-shot-pg": 0,
+        "hierarchical-madea-pg": 1,
+        "FaaS-MAPG-S": 0,
+        "FaaS-MAPG-R": 0
+      }
+    },
+    "temporal": {
+      "observations": 6,
+      "cases": 2,
+      "welfare_gain_mean_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": 0.18629908818986554,
+        "MADEA-PG": 1.0188601387150942,
+        "PLASMA-Welfare": 1.4204442179076906,
+        "one-shot-pg": 1.1517304208075119,
+        "hierarchical-one-shot-pg": 1.233900511706713,
+        "hierarchical-madea-pg": 1.0306367126757365,
+        "FaaS-MAPG-S": 0.6891164683891282,
+        "FaaS-MAPG-R": 0.5395132673071993
+      },
+      "welfare_gain_min_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": -0.3378948542473448,
+        "MADEA-PG": 0.07374004472298079,
+        "PLASMA-Welfare": 0.11125581583615318,
+        "one-shot-pg": -0.16434159376353952,
+        "hierarchical-one-shot-pg": -0.06963963132886608,
+        "hierarchical-madea-pg": 0.07374004472298079,
+        "FaaS-MAPG-S": -0.12188692135345347,
+        "FaaS-MAPG-R": -0.3895508492389288
+      },
+      "welfare_gain_max_pct": {
+        "MADEA": 0.0,
+        "MADEA-one-shot": 0.42511225675117004,
+        "MADEA-PG": 2.985610731953403,
+        "PLASMA-Welfare": 4.402093541767593,
+        "one-shot-pg": 3.247387802053825,
+        "hierarchical-one-shot-pg": 3.3441031752742045,
+        "hierarchical-madea-pg": 3.112979767343349,
+        "FaaS-MAPG-S": 2.018964111583399,
+        "FaaS-MAPG-R": 2.1377272293388927
+      },
+      "winner_including_ties": {
+        "MADEA": 0,
+        "MADEA-one-shot": 0,
+        "MADEA-PG": 0,
+        "PLASMA-Welfare": 3,
+        "one-shot-pg": 1,
+        "hierarchical-one-shot-pg": 1,
+        "hierarchical-madea-pg": 1,
+        "FaaS-MAPG-S": 0,
+        "FaaS-MAPG-R": 0
+      }
+    }
+  },
+  "pg_initial_vs_madea_max_difference": 0.0,
+  "pg_initial_matches_madea": true,
+  "pg_reasons": {
+    "no improving proposal": 16
+  },
+  "one_shot_pg_initial_vs_one_shot_max_difference": 0.0,
+  "one_shot_pg_initial_matches_one_shot": true,
+  "one_shot_pg_reasons": {
+    "no improving proposal": 16
+  },
+  "hierarchical_one_shot_pg_refinement_monotone": true,
+  "hierarchical_one_shot_pg_reasons": {
+    "no improving proposal": 16
+  },
+  "hierarchical_one_shot_pg_timestep_counts": {
+    "total": 16,
+    "improved": 16,
+    "zero_budget": 0
+  },
+  "hierarchical_one_shot_pg_vs_one_shot_pg": {
+    "static": {
+      "mean_welfare_change_pct": 0.17705134331596206,
+      "median_time_ratio": 1.4787280196091626
+    },
+    "stress": {
+      "mean_welfare_change_pct": 0.023412815033507783,
+      "median_time_ratio": 1.6629283555102
+    },
+    "temporal": {
+      "mean_welfare_change_pct": 0.08073014526724005,
+      "median_time_ratio": 1.4016035541334335
+    }
+  }
+}

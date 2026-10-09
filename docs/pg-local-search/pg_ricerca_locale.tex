@@ -1,0 +1,647 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[italian]{babel}
+\usepackage{lmodern}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,shapes.symbols,calc,fit,backgrounds}
+\usepackage[hidelinks]{hyperref}
+\sloppy
+
+\definecolor{cA}{HTML}{1F77B4}
+\definecolor{cB}{HTML}{2CA02C}
+\definecolor{cC}{HTML}{FF7F0E}
+\definecolor{cCloud}{HTML}{7F7F7F}
+\definecolor{cNew}{HTML}{D62728}
+
+\newcommand{\Phiv}{\Phi}
+\newcommand{\code}[1]{\texttt{#1}}
+
+% ---------------------------------------------------------------------------
+% Disegno di un nodo edge con barra di capacita'.
+% 1 richiesta/s = 0.1 cm; ogni replica vale 8 richieste/s (separatori).
+% #1 nome TikZ, #2 posizione, #3 etichetta, #4 colore, #5 carico,
+% #6 repliche r, #7 richieste locali x, #8 richieste ricevute dai vicini
+% ---------------------------------------------------------------------------
+\newcommand{\edgenode}[8]{%
+  \node[draw=#4,very thick,rounded corners,fill=#4!8,minimum width=4.4cm,
+        minimum height=1.8cm,align=left,anchor=center] (#1) at #2 {};
+  \node[anchor=north west,font=\small\bfseries,text=#4,align=left,inner sep=2pt] at ($(#1.north west)+(0.08,-0.05)$)
+        {#3\\[-1pt]\normalfont\footnotesize carico $\lambda=#5$, repliche $r=#6$};
+  \pgfmathsetmacro{\cap}{#6*8}
+  \pgfmathsetmacro{\usedx}{#7}
+  \pgfmathsetmacro{\usedy}{#8}
+  \coordinate (#1-bar) at ($(#1.south west)+(0.15,0.22)$);
+  \fill[#4!70] (#1-bar) rectangle ++(\usedx*0.1,0.32);
+  \fill[cNew!55] ($(#1-bar)+(\usedx*0.1,0)$) rectangle ++(\usedy*0.1,0.32);
+  \draw[black!70] (#1-bar) rectangle ++(\cap*0.1,0.32);
+  \foreach \k in {1,...,#6} {\draw[black!50] ($(#1-bar)+(\k*0.8,0)$) -- ++(0,0.32);}
+  \node[anchor=south west,font=\scriptsize,inner sep=1pt] at ($(#1-bar)+(0,0.34)$)
+        {usata $#7{+}#8$ su capacit\`a $\pgfmathprintnumber{\cap}$};
+}
+
+% stato completo della rete: A, B, C e Cloud
+% #1 rA #2 rB #3 rC  #4 yAB #5 yAC #6 zA  #7 testo Phi
+\newcommand{\netstate}[7]{%
+  \begin{tikzpicture}[>=Stealth]
+    \edgenode{A}{(0,0)}{Nodo A}{cA}{30}{#1}{16}{0}
+    \edgenode{B}{(6.6,1.6)}{Nodo B}{cB}{4}{#2}{4}{#4}
+    \edgenode{C}{(6.6,-1.6)}{Nodo C}{cC}{10}{#3}{10}{#5}
+    \node[draw=cCloud,thick,cloud,cloud puffs=11,aspect=2.2,fill=cCloud!10,
+          font=\small] (Cl) at (0,2.6) {Cloud};
+    \ifnum#4>0 \draw[->,very thick,cB] (A.east) ++(0,0.25) -- node[above,sloped,font=\small]{$y_{AB}=#4$} (B.west);\fi
+    \ifnum#5>0 \draw[->,very thick,cC] (A.east) ++(0,-0.25) -- node[below,sloped,font=\small]{$y_{AC}=#5$} (C.west);\fi
+    \ifnum#6>0 \draw[->,very thick,cCloud,dashed] (A.north) -- node[right,font=\small]{$z_A=#6$} (Cl.south);\fi
+    \node[anchor=north,font=\small] at (3.3,-2.8) {#7};
+  \end{tikzpicture}%
+}
+
+\title{La ricerca locale \emph{PG} (Potential Game)\\[2pt]
+\large spiegata in modo semplice, con un esempio passo per passo}
+\author{DFaaSOptimizer}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{L'idea in tre righe}
+
+Ogni nodo edge riceve richieste per alcune funzioni serverless. Pu\`o
+\emph{eseguirle da s\'e}, \emph{passarle a un vicino} o \emph{mandarle al Cloud}.
+PG \`e una \textbf{ricerca locale a turni}: i nodi, uno alla volta, provano a
+cambiare la propria scelta; il cambio viene \textbf{accettato solo se migliora}
+il guadagno del nodo. Poich\'e la somma dei guadagni di tutti i nodi (il
+\emph{potenziale} $\Phiv$) sale a ogni mossa accettata, il procedimento
+\textbf{non pu\`o girare in tondo} e prima o poi si ferma in un equilibrio
+in cui nessuno ha pi\`u convenienza a cambiare (equilibrio di Nash
+approssimato, o $\varepsilon$-Nash).
+
+\section{Gli ingredienti}
+
+Per un nodo $i$ e una funzione $f$:
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Simbolo & Significato \\
+\midrule
+$\lambda_{i}$ & richieste al secondo che arrivano al nodo (carico) \\
+$x_{i}$ & richieste eseguite localmente \\
+$y_{ij}$ & richieste mandate dal nodo $i$ al vicino $j$ \\
+$z_{i} = \lambda_i - x_i - \sum_j y_{ij}$ & richieste che finiscono nel Cloud \\
+$r_{i}$ & repliche (container) della funzione attive sul nodo \\
+$\kappa = u_{\max}/d$ & richieste che una replica sostiene (qui $0.8/0.1 = 8$) \\
+$M_i,\ m$ & memoria del nodo e memoria richiesta da una replica \\
+$\rho_i = M_i - m\,r_i$ & memoria libera (\emph{slack}) del nodo \\
+$\alpha,\ \beta_{ij},\ \gamma$ & premio per eseguire in locale, premio per
+  inoltrare a $j$, penale Cloud \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Guadagno di un nodo.} Ogni nodo valuta la propria situazione con
+\[
+  u_i \;=\; \frac{\alpha\,x_i \;+\; \sum_j \beta_{ij}\,y_{ij} \;-\; \gamma\,z_i}{\lambda_i}
+  \qquad(\text{\code{compute\_node\_utility}})
+\]
+cio\`e: guadagno pieno per ci\`o che esegue, guadagno un po' minore per ci\`o
+che fa eseguire ai vicini, una piccola perdita per ci\`o che manda al Cloud.
+
+\paragraph{Potenziale.} $\Phiv = \sum_i u_i$ \`e esattamente l'obiettivo del
+problema centralizzato
+(\code{compute\_centralized\_objective}). Quando un nodo
+cambia solo le \emph{proprie} scelte e non tocca quanto gi\`a promesso agli
+altri, la variazione di $\Phiv$ coincide con la variazione del suo $u_i$:
+migliorare se stessi significa migliorare il sistema.
+
+\section{L'algoritmo passo per passo}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=Stealth, node distance=0.55cm,
+  box/.style={draw,rounded corners,fill=#1!10,align=center,font=\small,
+              text width=9.6cm,minimum height=0.8cm},
+  box/.default=black,
+  dec/.style={draw,diamond,aspect=2.4,fill=yellow!15,align=center,font=\small,inner sep=1pt}]
+  \node[box=cA] (init) {\textbf{0. Avvio egoista}\\ ogni nodo risolve da solo il proprio
+        problema (LSP): sceglie $x_i, r_i$; nessuno inoltra ($y{=}0$)};
+  \node[box] (rho) [below=of init] {\textbf{1.} calcola la memoria libera $\rho_i$ di ogni nodo};
+  \node[box=cB] (sweep) [below=of rho] {\textbf{2. Giro dei nodi} (\emph{sweep})\\
+        per ogni nodo $i$ (ordine fisso = PG-S, casuale = PG-R):\\[2pt]
+        \begin{tabular}{@{}l@{\ }l@{}}
+        a) & libera i propri inoltri e legge la capacit\`a residua dei vicini\\
+        b) & applica il divieto di \emph{ping-pong}\\
+        c) & calcola il tetto di inoltro $\bar\omega_i$\\
+        d) & propone una nuova scelta $(x_i, r_i, \omega_i)$\\
+        e) & divide $\omega_i$ tra i vicini, dal $\beta$ pi\`u alto\\
+        f) & \textbf{accetta} solo se $\Delta u_i > \varepsilon$\\
+        g) & se resta domanda scoperta, fa un'\emph{offerta di memoria}
+        \end{tabular}};
+  \node[box=cC] (market) [below=of sweep] {\textbf{3. Mercato della memoria}\\
+        i nodi con memoria libera accendono nuove repliche per chi le ha chieste};
+  \node[box] (phi) [below=of market] {\textbf{4.} ricalcola $\Phiv$ (non pu\`o scendere)};
+  \node[dec] (stop) [below=0.7cm of phi] {nessuna mossa accettata\\e nessuna nuova replica?};
+  \node[box=cNew,text width=3.2cm] (end) [right=1.0cm of stop] {\textbf{Stop}:\\ equilibrio $\varepsilon$-Nash};
+  \draw[->,thick] (init) -- (rho);
+  \draw[->,thick] (rho) -- (sweep);
+  \draw[->,thick] (sweep) -- (market);
+  \draw[->,thick] (market) -- (phi);
+  \draw[->,thick] (phi) -- (stop);
+  \draw[->,thick] (stop) -- node[above,font=\small]{s\`i} (end);
+  \coordinate (L) at ($(sweep.west)+(-0.5,0)$);
+  \draw[->,thick] (stop.west) -| node[pos=0.75,left,font=\small]{no} (L) |- (rho.west);
+\end{tikzpicture}
+\caption{Schema di PG (\code{decentralized\_potentialgame.py}, funzione \code{\_run}).
+Ci si ferma anche al numero massimo di iterazioni o al limite di tempo.}
+\label{fig:flow}
+\end{figure}
+
+\subsection*{Cosa succede in ogni passo}
+
+\begin{description}
+\item[0. Avvio egoista.] Ogni nodo massimizza il proprio guadagno ignorando
+  gli altri. Esegue in locale quanto pu\`o con la memoria che ha; il resto,
+  non potendo ancora contare sui vicini, va al Cloud.
+
+\item[1. Memoria libera.] $\rho_i = M_i - m\,r_i$, ricalcolata a ogni giro
+  perch\'e le mosse accettate cambiano le repliche (\code{compute\_rho}).
+
+\item[2a. Libera e guarda.] Il nodo $i$ ``ritira'' per un attimo i propri
+  inoltri e guarda quanta capacit\`a avanza ai vicini:
+  residuo$_j = \kappa\,r_j - (\text{carico gi\`a servito da } j)$
+  (\code{compute\_residual\_capacity}). Questo \`e il \emph{registro} (ledger).
+
+\item[2b. Niente ping-pong.] Un nodo non pu\`o insieme mandare e ricevere la
+  stessa funzione. Quindi: un vicino che sta gi\`a inoltrando $f$ non pu\`o
+  riceverne; e chi riceve $f$ da altri non pu\`o inoltrarla.
+
+\item[2c. Tetto di inoltro.] $\bar\omega_i$ = somma dei residui dei vicini
+  per cui inoltrare conviene pi\`u del Cloud ($\beta_{ij} > -\gamma$).
+
+\item[2d. Proposta.] Il nodo risolve il suo piccolo problema locale
+  (\code{LSP\_pg}, con programmazione dinamica se \code{use\_dp} \`e attivo):
+  deve continuare a servire ci\`o che ha promesso agli altri e non pu\`o
+  inoltrare pi\`u di $\bar\omega_i$. In questa fase l'inoltro \`e pagato con un
+  prezzo medio $\delta$.
+
+\item[2e. Divisione golosa.] La quantit\`a $\omega_i$ viene distribuita tra i
+  vicini a partire da quello con il $\beta_{ij}$ pi\`u alto, riempiendone il
+  residuo, poi il successivo, e cos\`i via (\code{split\_omega}). Ci\`o che
+  non entra va al Cloud.
+
+\item[2f. Accettazione.] Si ricalcola il guadagno \emph{vero} (con i
+  $\beta_{ij}$ effettivi). Se $u_i^{\text{nuovo}} - u_i^{\text{vecchio}} > \varepsilon$
+  la mossa diventa definitiva, altrimenti si butta via.
+
+\item[2g. Offerta di memoria.] Se al nodo resta domanda scoperta (parte di
+  $\omega_i$ non piazzata, oppure richieste ancora nel Cloud), chiede ai vicini
+  che hanno memoria libera di accendere repliche per lui.
+
+\item[3. Mercato della memoria.] Ogni nodo con memoria libera la divide tra
+  le funzioni richieste in proporzione alle offerte e accende quante pi\`u
+  repliche possibile (\code{start\_additional\_replicas}). Cos\`i, al giro
+  successivo, i vicini hanno pi\`u capacit\`a residua da offrire.
+
+\item[4. Controllo.] $\Phiv$ non deve mai diminuire. Se in un giro intero
+  nessuna mossa \`e stata accettata e il mercato non ha acceso repliche,
+  nessun nodo pu\`o migliorare: siamo in equilibrio e ci si ferma
+  (\code{check\_pg\_stopping}).
+\end{description}
+
+\section{Esempio numerico e grafico}
+
+Tre nodi tutti vicini tra loro, una sola funzione. Ogni replica occupa 1 unit\`a
+di memoria e sostiene $\kappa = 8$ richieste/s. $\alpha = 1$, $\gamma = 0.1$,
+$\delta = 0.9$, $\varepsilon = 10^{-6}$, ordine fisso A, B, C (PG-S).
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+ & Nodo A & Nodo B & Nodo C \\
+\midrule
+carico $\lambda$ & 30 & 4 & 10 \\
+memoria $M$ (= repliche massime) & 2 & 4 & 2 \\
+premio $\beta$ verso il 1\textordmasculine{} vicino & $\beta_{AB}=0.9$ & $\beta_{BA}=0.9$ & $\beta_{CB}=0.9$ \\
+premio $\beta$ verso il 2\textordmasculine{} vicino & $\beta_{AC}=0.8$ & $\beta_{BC}=0.8$ & $\beta_{CA}=0.8$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+A \`e sovraccarico: con 2 repliche sostiene solo 16 delle sue 30 richieste.
+B ha poco lavoro e molta memoria; C ha un po' di capacit\`a avanzata.
+Tutti i numeri che seguono sono stati ottenuti eseguendo le funzioni del
+codice (\code{node\_move}, \code{split\_omega}, \code{start\_additional\_replicas})
+su questa istanza.
+
+\paragraph{Come leggere le figure.} Nella barra di ogni nodo ogni tacca \`e
+una replica (8 richieste/s); il colore del nodo indica il carico proprio
+eseguito ($x$), il \textcolor{cNew}{rosso} il carico ricevuto dai vicini,
+il bianco la capacit\`a ancora libera.
+
+% ---------------------------------------------------------------- passo 0
+\subsection*{Passo 0 --- Avvio egoista}
+
+\begin{center}
+\netstate{2}{1}{2}{0}{0}{14}{$\Phiv = 0.487 + 1 + 1 = 2.487$}
+\end{center}
+
+Ogni nodo accende le repliche che gli servono e che la memoria permette:
+A $r=2$ (esegue 16, manda 14 al Cloud), B $r=1$, C $r=2$.
+\[
+  u_A = \frac{16 - 0.1\cdot 14}{30} = \frac{14.6}{30} = 0.487,\qquad
+  u_B = \frac{4}{4} = 1,\qquad u_C = \frac{10}{10} = 1 .
+\]
+Memoria libera: $\rho = (0,\ 3,\ 0)$.
+
+% ---------------------------------------------------------------- giro 1
+\subsection*{Giro 1, mossa di A --- primi inoltri}
+
+\begin{enumerate}
+\item[\textbf{a)}] Residui dei vicini: B $= 8 - 4 = 4$, C $= 16 - 10 = 6$.
+\item[\textbf{b)}] Nessuno inoltra ancora: niente divieti.
+\item[\textbf{c)}] Tetto: $\bar\omega_A = 4 + 6 = 10$.
+\item[\textbf{d)}] Proposta: $x_A = 16$, $r_A = 2$, $\omega_A = 10$
+  (vorrebbe inoltrarne 14, ma il tetto \`e 10).
+\item[\textbf{e)}] Divisione golosa: prima B ($\beta=0.9$) riceve 4 e si
+  riempie, poi C ($\beta=0.8$) riceve 6. Restano 4 richieste al Cloud.
+\item[\textbf{f)}] Nuovo guadagno
+  $u_A = \dfrac{16 + 0.9\cdot4 + 0.8\cdot6 - 0.1\cdot4}{30} = \dfrac{24}{30} = 0.800$;
+  $\Delta u_A = 0.313 > \varepsilon$ $\Rightarrow$ \textbf{accettata}.
+\item[\textbf{g)}] A ha ancora 4 richieste nel Cloud: fa un'offerta di
+  memoria a B (che ha $\rho_B = 3 \ge 1$). C non ha memoria libera.
+\end{enumerate}
+
+\begin{center}
+\netstate{2}{1}{2}{4}{6}{4}{$\Phiv = 0.800 + 1 + 1 = 2.800$\quad(offerta di memoria A$\to$B)}
+\end{center}
+
+\paragraph{Mosse di B e C.} Entrambi ora \emph{ricevono} la funzione da A,
+quindi per il divieto di ping-pong non possono inoltrarla ($\bar\omega = 0$).
+La loro migliore proposta \`e lasciare tutto com'\`e: $\Delta u = 0$,
+\textbf{rifiutate}.
+
+\paragraph{Mercato della memoria.} B ha 3 unit\`a libere e un'unica
+richiesta (da A): accende $\lfloor 3/1 \rfloor = 3$ nuove repliche,
+$r_B: 1 \to 4$. Ora B pu\`o sostenere 32 richieste/s. $\Phiv$ non cambia
+(le repliche da sole non spostano richieste), ma il giro conta come
+``qualcosa \`e successo'', quindi si continua.
+
+\begin{center}
+\netstate{2}{4}{2}{4}{6}{4}{dopo il mercato: $r_B = 4$, \quad $\Phiv = 2.800$}
+\end{center}
+
+% ---------------------------------------------------------------- giro 2
+\subsection*{Giro 2, mossa di A --- riassegnazione verso il vicino migliore}
+
+\begin{enumerate}
+\item[\textbf{a)}] A ritira i propri inoltri; residui: B $= 32 - 4 = 28$,
+  C $= 16 - 10 = 6$.
+\item[\textbf{c)}] $\bar\omega_A = 28 + 6 = 34$.
+\item[\textbf{d)}] Proposta: $x_A = 16$, $\omega_A = 14$ (tutto l'eccesso).
+\item[\textbf{e)}] B ha il $\beta$ pi\`u alto e ora c'\`e posto: tutte e 14
+  vanno a B; C non riceve pi\`u nulla, il Cloud nemmeno.
+\item[\textbf{f)}] $u_A = \dfrac{16 + 0.9\cdot 14}{30} = \dfrac{28.6}{30} = 0.953$;
+  $\Delta u_A = 0.153$ $\Rightarrow$ \textbf{accettata}.
+\item[\textbf{g)}] Nessuna domanda scoperta: nessuna offerta.
+\end{enumerate}
+
+\begin{center}
+\netstate{2}{4}{2}{14}{0}{0}{$\Phiv = 0.953 + 1 + 1 = 2.953$}
+\end{center}
+
+Nota: A ha \emph{spostato} 6 richieste da C a B. \`E consentito perch\'e
+sono inoltri di A (li ``possiede'' lui); ci\`o che A non pu\`o fare \`e
+toccare quanto gli altri hanno promesso a lui.
+
+\paragraph{Mosse di B e C.} B continua a ricevere da A, quindi non pu\`o
+inoltrare: $\Delta u_B = 0$, rifiutata. C non riceve pi\`u nulla e potrebbe
+inoltrare fino a 14 richieste a B, ma eseguire in locale vale di pi\`u
+($\alpha = 1 > \beta_{CB} = 0.9$): $\Delta u_C = 0$, rifiutata.
+Nessuno ha chiesto memoria: il mercato non accende repliche.
+
+% ---------------------------------------------------------------- giro 3
+\subsection*{Giro 3 --- certificato di equilibrio}
+
+A, B e C ripropongono la stessa scelta: tre $\Delta u = 0$, nessuna
+offerta, nessuna nuova replica. Condizione di stop soddisfatta:
+\textbf{equilibrio $\varepsilon$-Nash}, nessun nodo pu\`o migliorare da solo.
+
+\subsection*{Riepilogo}
+
+\begin{center}
+\begin{tabular}{@{}lccccccc@{}}
+\toprule
+Momento & $y_{AB}$ & $y_{AC}$ & $z_A$ & $r_B$ & $u_A$ & $\Phiv$ & esito \\
+\midrule
+Avvio              & 0  & 0 & 14 & 1 & 0.487 & 2.487 & --- \\
+Giro 1, mossa A    & 4  & 6 & 4  & 1 & 0.800 & 2.800 & accettata, offerta a B \\
+Giro 1, B e C      & 4  & 6 & 4  & 1 & 0.800 & 2.800 & rifiutate \\
+Giro 1, mercato    & 4  & 6 & 4  & 4 & 0.800 & 2.800 & +3 repliche su B \\
+Giro 2, mossa A    & 14 & 0 & 0  & 4 & 0.953 & 2.953 & accettata \\
+Giro 2, B e C      & 14 & 0 & 0  & 4 & 0.953 & 2.953 & rifiutate \\
+Giro 3             & 14 & 0 & 0  & 4 & 0.953 & 2.953 & stop: equilibrio \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=Stealth,x=1.6cm,y=6cm]
+  \draw[->] (0,2.4) -- (6.5,2.4) node[right,font=\small]{eventi};
+  \draw[->] (0,2.4) -- (0,3.05) node[above,font=\small]{$\Phiv$};
+  \foreach \v in {2.5,2.6,2.7,2.8,2.9,3.0}
+    \draw (0,\v) -- (-0.06,\v) node[left,font=\scriptsize]{\v};
+  \draw[dashed,gray] (0,2.953) -- (6.2,2.953);
+  \draw[very thick,cA] (0.3,2.487) -- (1.3,2.487) -- (1.3,2.8) -- (3.3,2.8)
+                       -- (3.3,2.953) -- (6.2,2.953);
+  \foreach \x/\y/\t in {0.3/2.487/avvio, 1.3/2.8/G1: A, 2.3/2.8/G1: mercato,
+                        3.3/2.953/G2: A, 5.2/2.953/G3: stop}
+    {\fill[cA] (\x,\y) circle (2pt);
+     \node[font=\scriptsize,rotate=35,anchor=north east] at (\x,2.4) {\t};}
+  \node[font=\scriptsize,cNew,anchor=south west] at (1.35,2.62) {$+0.313$};
+  \node[font=\scriptsize,cNew,anchor=south west] at (3.35,2.85) {$+0.153$};
+\end{tikzpicture}
+\caption{Il potenziale $\Phiv$ sale a ogni mossa accettata e resta fermo
+altrimenti: per questo la ricerca termina.}
+\end{figure}
+
+\section{Perch\'e funziona (e perch\'e si ferma)}
+
+\begin{itemize}
+\item \textbf{Ogni mossa accettata alza $\Phiv$ di pi\`u di $\varepsilon$.}
+  Il nodo cambia solo cose sue (esecuzione locale, propri inoltri, proprie
+  repliche) e non tocca le promesse altrui; quindi $\Delta\Phiv = \Delta u_i$.
+\item \textbf{$\Phiv$ \`e limitato} (al massimo ogni nodo esegue tutto con
+  premio $\alpha$), dunque le mosse accettate sono un numero finito.
+\item \textbf{Il mercato della memoria aggiunge solo repliche} dove c'\`e
+  memoria libera: la memoria \`e finita, quindi anche questo si esaurisce.
+\item \textbf{Il divieto di ping-pong} toglie alcune mosse ma non rompe
+  l'argomento: si sceglie sempre tra meno alternative.
+\item \textbf{Proposta e accettazione usano due misure diverse}: la
+  proposta usa un prezzo medio $\delta$ per l'inoltro (veloce da calcolare),
+  l'accettazione i veri $\beta_{ij}$. \`E l'accettazione a garantire che
+  $\Phiv$ salga, non l'ottimalit\`a della proposta.
+\end{itemize}
+
+\section{PG come raffinamento di MADeA (MADeA-PG)}
+
+Nel codice ``PG'' compare in due ruoli diversi.
+
+\begin{description}
+\item[PG da solo] (FaaS-MAPG, \code{decentralized\_potentialgame.py}, varianti
+  S e R): \`e l'algoritmo descritto finora. Parte dalla soluzione egoista
+  (dell'LSP tiene solo $x$ e $r$; l'inoltro calcolato dall'LSP viene
+  scartato e si parte da $y = 0$) e arriva da solo all'equilibrio.
+\item[PG dopo l'asta] (MADeA-PG, \code{madea\_pg.py}; one-shot-PG,
+  \code{one\_shot\_pg.py}): prima gira l'asta (MADeA iterata oppure
+  one-shot) fino al suo criterio di stop; poi la sua \emph{migliore soluzione}
+  viene passata a \code{refine\_solution}, che esegue giri di
+  \code{node\_move} \emph{partendo da quella soluzione}. \`E quindi una
+  ricerca locale a valle dell'asta.
+\end{description}
+
+\begin{figure}[ht]
+\centering
+\begin{tikzpicture}[>=Stealth, node distance=0.45cm,
+  st/.style={draw,rounded corners,fill=#1!10,align=center,font=\small,
+             text width=3.0cm,minimum height=1.9cm},
+  st/.default=black]
+  \node[st=cA] (lsp) {\textbf{LSP locale}\\ ogni nodo:\\ $x_i,\ r_i,\ \omega_i$};
+  \node[st=cC,right=of lsp] (auc) {\textbf{Asta MADeA}\\ offerte, prezzi,\\
+        mercato della memoria};
+  \node[st,right=of auc] (inc) {\textbf{Miglior soluzione}\\ dell'asta\\ $(x, y, z, r)$};
+  \node[st=cB,right=of inc] (ref) {\textbf{\code{refine\_solution}}\\ giri di
+        \code{node\_move}\\ ($\le 5$ giri, tempo limitato,\\ senza mercato)};
+  \draw[->,thick] (lsp) -- (auc);
+  \draw[->,thick] (auc) -- (inc);
+  \draw[->,thick] (inc) -- (ref);
+  \node[draw,rounded corners,fill=cNew!10,font=\small,below=0.6cm of ref,
+        text width=3.0cm,align=center] (out) {soluzione finale\\(welfare $\ge$ asta)};
+  \draw[->,thick] (ref) -- (out);
+\end{tikzpicture}
+\caption{La catena di MADeA-PG (\code{run\_faasmadea.py}, righe con
+\code{refine\_welfare}).}
+\end{figure}
+
+\subsection*{Cosa cambia nella fase PG}
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.0cm}
+  >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X@{}}
+\toprule
+ & PG da solo & PG dopo l'asta (\code{refine\_solution}) \\
+\midrule
+Punto di partenza & soluzione egoista, $y = 0$ & soluzione dell'asta, $y \neq 0$ \\
+Mercato della memoria & s\`i & \textbf{no}: si passa $\rho = 0$, quindi
+  nessuna richiesta di memoria ai vicini; un nodo pu\`o solo ridecidere le
+  \emph{proprie} repliche \\
+Limiti & numero di iterazioni, tempo & al pi\`u 5 giri (\code{max\_sweeps})
+  e un budget di tempo (5\,s, oppure 0.25\,s per nodo in one-shot-PG) \\
+Stop & equilibrio $\varepsilon$-Nash certificato & ``nessuna proposta
+  migliorante'': il codice dice esplicitamente che \emph{non} \`e un
+  certificato di Nash \\
+Proposte & accettate se $\Delta u_i > \varepsilon$ & in pi\`u validate
+  (una proposta che viola i vincoli del nodo viene saltata) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Ogni mossa accettata alza il welfare, quindi il risultato finale non pu\`o
+essere peggiore di quello dell'asta.
+
+\subsection*{Esempio: la stessa rete, ripartendo dall'asta}
+
+Stessa istanza di prima (A, B, C). Le opzioni d'asta sono quelle degli
+esperimenti (\code{experiments/madea\_pg\_compact/config.json}):
+offerte unitarie,
+incremento $\epsilon_{\text{asta}} = 0.001$, prezzi che calano dell'1\% quando
+nessuno compra ($\zeta = 0.01$). Anche qui i numeri vengono dall'esecuzione
+del codice (\code{run\_madea\_cycle} e poi \code{refine\_solution}).
+
+\paragraph{Fase 1: l'asta MADeA.} L'LSP d\`a ad A $x_A = 16$ e una domanda
+da inoltrare $\omega_A = 14$.
+
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{@{}c>{\raggedright\arraybackslash}X ccc c@{}}
+\toprule
+It. & Cosa succede & $y_{AB}$ & $y_{AC}$ & $r_B$ & $W$ \\
+\midrule
+0 & A offre 4 unit\`a a B (prezzo offerto 0.101) e 6 a C (0.001): tutte
+    assegnate. Restano 4 unit\`a da piazzare: A chiede memoria a B e il
+    mercato accende 3 repliche ($r_B: 1 \to 4$).
+  & 4 & 6 & 4 & 2.800 \\
+1 & Per A, B e C ora valgono uguale ($0.9 - 0.101 = 0.8 - 0.001$): offre le
+    4 unit\`a a C, che per\`o \`e pieno. Nulla assegnato. Il problema
+    ristretto ricalcola le repliche sul carico effettivo e B torna a
+    $r_B = 1$; il prezzo di B cala, quello di C sale.
+  & 4 & 6 & 1 & 2.800 \\
+2 & Ora B \`e pi\`u conveniente: A gli offre le 4 unit\`a; B accende al volo
+    una replica e le accetta. Tutto il carico \`e assegnato: stop.
+  & 8 & 6 & 2 & 2.933 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\begin{center}
+\netstate{2}{2}{2}{8}{6}{0}{fine dell'asta: $W = 0.933 + 1 + 1 = 2.933$}
+\end{center}
+
+L'asta lascia 6 richieste su C ($\beta_{AC} = 0.8$) anche se B
+($\beta_{AB} = 0.9$) avrebbe posto: A offre solo per la domanda
+\emph{ancora da piazzare}, e i contratti gi\`a chiusi con C non vengono
+rimessi in discussione dal compratore.
+
+\paragraph{Fase 2: \code{refine\_solution}.}
+
+\begin{description}
+\item[Giro 1, A:] ritira i propri inoltri e legge i residui:
+  B $= 16 - 4 = 12$ (2 repliche), C $= 16 - 10 = 6$; tetto
+  $\bar\omega_A = 18$. Propone $\omega_A = 14$; la divisione golosa d\`a
+  12 a B ($\beta = 0.9$) e 2 a C.
+  $u_A = \dfrac{16 + 0.9\cdot 12 + 0.8\cdot 2}{30} = \dfrac{28.4}{30} = 0.947$,
+  $\Delta u_A = +0.013$ $\Rightarrow$ \textbf{accettata}.
+\item[Giro 1, B e C:] B riceve da A (divieto di ping-pong), C
+  preferisce eseguire in locale: rifiutate.
+\item[Giro 2:] nessuna proposta migliora: stop
+  (``no improving proposal'').
+\end{description}
+
+\begin{center}
+\netstate{2}{2}{2}{12}{2}{0}{dopo il raffinamento PG: $W = 0.947 + 1 + 1 = 2.947$}
+\end{center}
+
+\paragraph{Confronto finale sull'esempio.}
+
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+Metodo & $y_{AB}$ & $y_{AC}$ & $r_B$ & Welfare $W$ \\
+\midrule
+MADeA (solo asta) & 8 & 6 & 2 & 2.933 \\
+MADeA-PG (asta + raffinamento) & 12 & 2 & 2 & 2.947 \\
+PG da solo & 14 & 0 & 4 & 2.953 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{itemize}
+\item \textbf{Cosa aggiunge PG all'asta:} il compratore pu\`o
+  \emph{spostare i propri inoltri} verso il vicino migliore (qui 4 richieste
+  da C a B). L'asta non lo fa, perch\'e offre solo per la domanda rimasta.
+\item \textbf{Perch\'e qui MADeA-PG resta sotto PG da solo:} nel raffinamento
+  il mercato della memoria \`e spento. B ha ancora 2 unit\`a di memoria
+  libere, ma nessuno pu\`o chiedergli nuove repliche; quindi A riesce a
+  mettere su B solo 12 richieste invece di 14.
+\item Su questa istanza giocattolo vince PG da solo; su istanze reali il
+  confronto pu\`o andare diversamente (gli esperimenti sono in
+  \code{experiments/madea\_pg\_compact}).
+\end{itemize}
+
+\clearpage
+\section{Chi sa cosa: PG, one-shot e MADEA a confronto}
+
+Nel codice tutto gira in un unico processo e i nodi leggono matrici
+condivise; la tabella elenca quindi le informazioni che ogni nodo
+\emph{usa}, cio\`e quelle che in un sistema distribuito dovrebbero
+viaggiare sulla rete. ``One-shot'' \`e l'asta MADEA a una passata
+(\code{decentralized\_auction.py}); ``MADEA'' \`e l'asta iterata con
+riassegnazione (\code{run\_faasmadea.py}). La colonna PG si riferisce a PG da solo:
+MADeA-PG scambia le informazioni della colonna MADEA e poi quelle della
+colonna PG, senza le richieste di memoria (mercato spento nel raffinamento).
+
+\newcommand{\si}{\checkmark}
+\newcommand{\no}{$\times$}
+\begin{center}
+\footnotesize\renewcommand{\arraystretch}{1.35}
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.3cm}
+  >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}X
+  >{\raggedright\arraybackslash}X@{}}
+\toprule
+Informazione & One-shot & MADEA & PG \\
+\midrule
+Capacit\`a residua del vicino, per funzione
+  & \si{} residuo vero (\code{blackboard})
+  & \si{} capacit\`a al netto del solo carico proprio del vicino; il residuo
+    vero lo usa il venditore per riassegnare
+  & \si{} residuo vero (stessa funzione \code{compute\_residual\_\allowbreak capacity}) \\
+Memoria libera $\rho_j$ & \si & \si & \si \\
+Prezzo $p_{jf}$ annunciato dal venditore & \si & \si & \no \\
+Offerta del compratore (quantit\`a + prezzo $b$)
+  & \si & \si & \no{} solo la quantit\`a impegnata $y_{ij}$ \\
+Risposta del venditore (accetta/rifiuta, nuovo prezzo)
+  & \si & \si{} e pu\`o togliere carico a chi l'aveva prima
+  & \no{} decide il compratore da solo, il venditore non arbitra \\
+Richieste di memoria $(i,j,f)$
+  & \si{} solo se non ci sono offerte di capacit\`a
+  & \si{} e il venditore pu\`o accendere repliche gi\`a durante l'asta
+  & \si \\
+Divieto di ping-pong
+  & il venditore guarda se il compratore \emph{riceve} $f$
+  & idem
+  & il compratore guarda se il vicino \emph{inoltra} $f$ (stessa
+    informazione, letta dall'altra parte) \\
+Latenza, contatore di equit\`a
+  & dati propri del compratore & idem & non usati \\
+Ritiro dei propri inoltri
+  & \no{} (una passata, nulla si sposta)
+  & lo decide il venditore, a favore di chi offre di pi\`u
+  & lo decide il compratore, che rioffre da capo a ogni mossa \\
+Turni
+  & sincroni: tutti offrono insieme, poi tutti i venditori decidono
+  & sincroni
+  & \textbf{sequenziali}: un nodo alla volta, con lo stato dei vicini
+    aggiornato dopo ogni mossa \\
+Informazione globale per fermarsi
+  & pesante: obiettivo centralizzato (miglior soluzione, ``non migliora
+    pi\`u''), ``capacit\`a finita'', ``tutto assegnato''
+  & idem
+  & leggera: solo ``qualcuno ha cambiato qualcosa nel giro?''
+    ($\Phiv$ \`e solo un controllo) \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\paragraph{In sintesi.}
+\begin{itemize}
+\item \textbf{Informazioni in pi\`u in PG:} nessuna. L'unica differenza \`e
+  che il s\`i/no ``sta inoltrando $f$?'' lo legge il compratore invece del
+  venditore.
+\item \textbf{Informazioni in meno in PG:} prezzi, valori delle offerte,
+  risposte dei venditori, latenza ed equit\`a, obiettivo globale per fermarsi.
+\item \textbf{Il costo di PG \`e il coordinamento, non i dati.} L'asta \`e
+  parallela, con due messaggi per iterazione; PG richiede un turno condiviso
+  e stato fresco dei vicini, cio\`e $N$ mosse in sequenza per giro. Inoltre
+  presuppone che il vicino accetti carico entro il residuo che ha
+  annunciato, senza poter rifiutare.
+\item \textbf{One-shot-PG} (\code{one\_shot\_pg.py}) \`e l'asta one-shot
+  seguita da un affinamento PG (\code{madea\_pg.refine\_solution}, che usa
+  \code{node\_move}): scambia l'unione delle due colonne, in due fasi.
+\end{itemize}
+
+\section{Dove si trova nel codice}
+
+\begin{center}
+\begin{tabular}{@{}ll@{}}
+\toprule
+Passo & Funzione (\code{decentralized\_potentialgame.py}) \\
+\midrule
+ciclo esterno, avvio, stop & \code{\_run}, \code{check\_pg\_stopping} \\
+memoria libera $\rho$ & \code{compute\_rho} \\
+giro dei nodi (S / R) & \code{potential\_game\_sweep} (\code{run\_pg\_s}, \code{run\_pg\_r}) \\
+mossa di un nodo (2a--2g) & \code{node\_move} \\
+proposta locale (2d) & \code{propose\_node\_move} $\to$ \code{LSP\_pg} / DP \\
+divisione golosa (2e) & \code{split\_omega} \\
+guadagno e Cloud & \code{compute\_node\_utility}, \code{compute\_z} \\
+mercato della memoria (3) & \code{start\_additional\_replicas} (\code{run\_faasmadea.py}) \\
+MADeA-PG, one-shot-PG & \code{refine\_solution} (\code{madea\_pg.py}), \code{one\_shot\_pg.py} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\end{document}

@@ -20,7 +20,8 @@ def run(source, output, pilot):
   output.mkdir(parents=True, exist_ok=True)
   runs = pd.read_csv(source / 'runs.csv')
   methods = METHODS + [method for method in ('one-shot-pg', 'hierarchical-one-shot-pg',
-                                            'hierarchical-madea-pg')
+                                            'hierarchical-madea-pg', 'FaaS-MAPG-S',
+                                            'FaaS-MAPG-R')
                        if runs.method.eq(method).any()]
   steps = pd.read_csv(source / 'timesteps.csv')
   protocol = json.loads((source / 'protocol.json').read_text())
@@ -160,7 +161,8 @@ def run(source, output, pilot):
                          values='wall_seconds')[methods]
     colors = {'MADEA-one-shot':'#d97706', 'MADEA-PG':'#7c3aed', 'PLASMA-Welfare':'#0f766e',
               'one-shot-pg':'#2563eb', 'hierarchical-one-shot-pg':'#dc2626',
-              'hierarchical-madea-pg':'#475569'}
+              'hierarchical-madea-pg':'#475569', 'FaaS-MAPG-S':'#16a34a',
+              'FaaS-MAPG-R':'#84cc16'}
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5), sharey=True)
     for ax, nf in zip(axes, (5, 10)):
       selected = values.index.get_level_values('functions') == nf
