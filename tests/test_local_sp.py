@@ -22,7 +22,7 @@ def _data():
 
 @pytest.mark.parametrize('parallelism', [0, 2])
 def test_local_ram_allocation_does_not_require_external_solver(parallelism):
-  result = solve_subproblem(_data(), [0], LSP(), 'missing_solver', {}, parallelism)
+  result = solve_subproblem(_data(), [0], LSP(), 'missing_solver', {'use_dp': True}, parallelism)
   np.testing.assert_array_equal(result[1], [[2, 0]])
   np.testing.assert_array_equal(result[4], [[1, 4]])
   np.testing.assert_array_equal(result[5], [[2, 0]])
@@ -32,7 +32,7 @@ def test_local_ram_allocation_does_not_require_external_solver(parallelism):
 
 def test_fixed_traffic_computes_replicas_and_rejections_without_solver():
   result, objective, condition, _ = compute_social_welfare(
-    LSPr_x(), _data(), [0], 'missing_solver', {}, np.zeros((1, 1, 2)),
+    LSPr_x(), _data(), [0], 'missing_solver', {'use_dp': True}, np.zeros((1, 1, 2)),
     np.array([[1., 2.]]), 0, np.array([[1., 0.]]),
   )
   np.testing.assert_array_equal(result[2], [[1, 2]])
@@ -148,7 +148,7 @@ def test_fixed_traffic_with_fractional_load_and_offloading_uses_direct_calculati
   data = _data()
   data[None]['incoming_load'][1, 1] = 3.5
   result, objective, condition, _ = compute_social_welfare(
-    LSPr_x(), data, [0], 'missing_solver', {}, np.zeros((1, 1, 2)),
+    LSPr_x(), data, [0], 'missing_solver', {'use_dp': True}, np.zeros((1, 1, 2)),
     np.array([[.5, 2.]]), 0, np.array([[1., 0.]]),
   )
   np.testing.assert_array_equal(result[2], [[2., 2.]])

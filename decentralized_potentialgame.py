@@ -24,7 +24,7 @@ from utils.centralized import check_feasibility, encode_solution
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.sp import LSP, LSP_fixedr, LSP_pg, LSP_pg_fixedr
-from models.local_sp import try_solve_local
+from models.local_sp import dp_enabled, try_solve_local
 
 from datetime import datetime
 from copy import deepcopy
@@ -126,7 +126,7 @@ def propose_node_move(
   required += [("memory_requirement", f) for f in range(1, Nf + 1)]
   required += [(parameter, (owner, f)) for parameter in ("incoming_load", "demand")
                for f in range(1, Nf + 1)]
-  if (type(model) in (LSP_pg, LSP_pg_fixedr)
+  if (dp_enabled(general_solver_options) and type(model) in (LSP_pg, LSP_pg_fixedr)
       and all(key in values.get(parameter, {}) for parameter, key in required)):
     # Only own parameters and committed inbound totals enter the local DP.
     # Remapping to one node avoids copying the network and rebuilding Nn² flows.

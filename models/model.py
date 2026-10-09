@@ -54,7 +54,8 @@ class BaseAbstractModel():
       _SOLVER_CACHE[solver_name] = solver
     solver.options.clear()
     for k, v in solver_options.items():
-      solver.options[_solver_option_name(solver_name, k)] = v
+      if k != "use_dp":  # Application option, never an external solver parameter.
+        solver.options[_solver_option_name(solver_name, k)] = v
     # provide initial solution (if any)
     warmstart = False
     if initial_solution is not None:

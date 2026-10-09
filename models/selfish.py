@@ -3,6 +3,7 @@
 import pyomo.environ as pyo
 
 from models.model import LoadManagementModel
+from models.local_sp import solve_agent_problem
 from models.sp import LSP_detailed
 
 
@@ -58,8 +59,7 @@ class SelfishLoadManagementModel(LoadManagementModel):
     local_runtime = 0.0
     for n in instance.N:
       data[None]["whoami"] = {None: n}
-      reference = local.generate_instance(data)
-      result = local.solve(reference, solver_options, solver_name)
+      result = solve_agent_problem(local, data, solver_options, solver_name)
       if (
           not result["solution_exists"] or 
           result["termination_condition"] != "optimal"
@@ -69,10 +69,10 @@ class SelfishLoadManagementModel(LoadManagementModel):
           f"{result['termination_condition']}"
         )
       instance.minimum_local_gain[n] = pyo.value(sum(
-        reference.alpha[n, f] * reference.x[f] / (
-          reference.incoming_load[n, f] or 1
+        instance.alpha[n, f] * result["x"][f - 1] / (
+          instance.incoming_load[n, f] or 1
         )
-        for f in reference.F
+        for f in instance.F
       ))
       local_runtime += result["runtime"]
     return local_runtime

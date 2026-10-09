@@ -27,7 +27,7 @@ def test_proposal_uses_own_parameters_and_inbound_commitments(model):
   y = np.zeros((2, 2, 2))
   y[1, 0, 0] = 1.
   x, r, omega, _ = propose_node_move(
-    0, np.zeros(2), y, data, model, 'missing_solver', {}, 0,
+    0, np.zeros(2), y, data, model, 'missing_solver', {'use_dp': True}, 0,
   )
   np.testing.assert_array_equal(x, [4, 0])
   np.testing.assert_array_equal(r, [4, 0])
@@ -59,7 +59,7 @@ def test_compact_proposals_preserve_full_native_allocations():
     cap = rng.uniform(0, 8, size=nf)
     for model in (LSP_pg(), LSP_pg_fixedr()):
       for node in range(nn):
-        args = (node, cap, y, data, model, 'missing_solver', {}, 0)
+        args = (node, cap, y, data, model, 'missing_solver', {'use_dp': True}, 0)
         full = full_propose(*args)
         compact = propose_node_move(*args)
         for old, new in zip(full[:3], compact[:3]):
@@ -73,4 +73,4 @@ def test_missing_required_parameter_retains_pyomo_diagnostic():
     'memory_requirement': {1: 1}, 'memory_capacity': {1: 4},
   }}
   with pytest.raises(ValueError, match='demand'):
-    propose_node_move(0, np.zeros(1), np.zeros((1, 1, 1)), data, LSP_pg(), 'missing_solver', {}, 0)
+    propose_node_move(0, np.zeros(1), np.zeros((1, 1, 1)), data, LSP_pg(), 'missing_solver', {'use_dp': True}, 0)

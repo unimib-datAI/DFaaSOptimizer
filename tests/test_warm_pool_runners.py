@@ -23,7 +23,7 @@ def test_planar_runs_reuse_one_pool_and_match_sequential_timesteps(tmp_path, mon
                        'experiments/madea_pg_compact/config.json').read_text())
   config.update(seed=7, max_steps=2, max_run_time=2, run_time_step=1,
                 base_solution_folder=str(tmp_path / 'runs'), solver_name='glpk')
-  config['solver_options']['general'] = {'TimeLimit': 30, 'MIPGap': 1e-9}
+  config['solver_options']['general'] = {'use_dp': True, 'TimeLimit': 30, 'mipgap': 1e-9}
   config['limits']['Nn'] = {'min': 10, 'max': 10}
   config['limits']['Nf'] = {'min': 3, 'max': 3}
   source = tmp_path / 'instance'

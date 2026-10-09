@@ -9,6 +9,7 @@
   "solver_name": "gurobi",
   "solver_options": {
     "general": {
+      "use_dp": true,
       "TimeLimit": 30,
       "MIPGap": 1e-09,
       "Threads": 1,

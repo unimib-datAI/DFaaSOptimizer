@@ -230,10 +230,19 @@ class LSP_detailed(SPAbstractModel):
     self.model.residual_capacity = pyo.Constraint(
       rule = self.residual_capacity
     )
+    self.model.offload_only_to_neighbors = pyo.Constraint(
+      self.model.N, self.model.F, rule = self.offload_only_to_neighbors
+    )
     ###########################################################################
     # Objective function
     ###########################################################################
     self.set_objective(rule = self.maximize_processing, sense = pyo.maximize)
+
+  @staticmethod
+  def offload_only_to_neighbors(model, n, f):
+    return model.y[n,f] <= (
+      model.incoming_load[model.whoami,f] * model.neighborhood[model.whoami,n]
+    )
 
   @staticmethod
   def maximize_processing(model):

@@ -256,17 +256,44 @@ The external no-progress stopping rule above applies to both cycle variants.
 
 ### MADEA-PG: auction initialization and welfare refinement
 
-All runners share the exact local backend in `models/local_sp.py`: `LSPr_x`
+Local optimization uses the configured Pyomo solver by default. Enable the
+exact local DP backend explicitly with a JSON boolean:
+
+```json
+"solver_options": {
+  "general": {
+    "use_dp": true
+  }
+}
+```
+
+With `use_dp: false` or the option absent, local problems use `solver_name`.
+`models/local_sp.py` selects the backend; `models/dp_solver.py` contains the
+DP algorithm and solution reconstruction, separate from the Pyomo models.
+When enabled, `LSPr_x`
 computes rejections and minimum replicas directly; `LSP`, restricted `LSPr`,
-and their supported v0, capped, fixed-replica and PG variants use local RAM
+`LSP_detailed` and the supported v0, capped, fixed-replica and PG variants use local RAM
 dynamic programming (fixed replicas require only per-function calculations).
 The backend preserves each model's objective, flow domains, capacity bounds
 and committed incoming traffic. Sequential runs and multiprocessing workers
 use the same path. The original Pyomo APIs remain available as an oracle and
 fallback for other model classes, continuous-flow modes, unsupported parameters,
-infeasible inputs and large DP state spaces. Solver options apply to that fallback.
+infeasible inputs and large DP state spaces. Solver options apply to that fallback;
+`use_dp` is consumed by the application and never passed to Gurobi or GLPK.
+At the Python API level, pass `{"use_dp": True}` to `solve_agent_problem` or the
+local-solver runners. Direct model `.solve()` calls still use Pyomo.
+The selfish model also applies the option to its `LSP_detailed` local references;
+its final global problem always uses the configured external solver.
+For `LSP_detailed`, the best outgoing neighbor's reward replaces `delta` and aggregate
+offloading is reconstructed as destination-specific `y`, with a maximization
+objective. Both Pyomo and DP permit forwarding only where `neighborhood[i,j] = 1`;
+missing entries default to zero. An isolated node must process or reject its load.
+Keep diagonal entries zero to prohibit self-offloading. The local model does not
+impose receiver-capacity constraints. Equal destination rewards
+choose the first node. Other ties can produce different optimal `x` or `r` from
+an external solver, and hence different selfish local-gain floors.
 Nodes use their own parameters plus existing incoming commitments and offload caps.
-PG proposals pass only the proposing node's parameters and aggregate inbound
+When DP is enabled, PG proposals pass only the proposing node's parameters and aggregate inbound
 commitments to this backend, avoiding a copy of the full network and its flow
 dictionary. Unsupported inputs retain the original full-data solver path.
 

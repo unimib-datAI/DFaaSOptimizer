@@ -41,7 +41,7 @@ def run(instance, output):
         macro, '_solve_agents_parallel', cold_solve if mode == 'cold' else macro._solve_agents_parallel):
       for step, batch in enumerate(batches):
         started = time.perf_counter()
-        result = macro.solve_subproblem(batch, agents, LSP(), 'missing_solver', {},
+        result = macro.solve_subproblem(batch, agents, LSP(), 'missing_solver', {'use_dp': True},
                                         processes, detailed_pi=prices[step])
         elapsed = time.perf_counter() - started
         if mode == 'sequential':

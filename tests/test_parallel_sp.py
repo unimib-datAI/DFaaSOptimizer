@@ -17,7 +17,7 @@ class FallbackLSP(LSP):
 def test_accepts_agent_key_views_returned_by_instance_loaders():
   with macro.parallel_solver_session():
     agents = {0: None, 1: None, 2: None}.keys()
-    result = macro.solve_subproblem(_data(), agents, LSP(), 'missing_solver', {}, 2)
+    result = macro.solve_subproblem(_data(), agents, LSP(), 'missing_solver', {'use_dp': True}, 2)
     np.testing.assert_array_equal(result[1], [[2], [3], [1]])
 
 
@@ -42,7 +42,7 @@ def test_warm_pool_uses_current_inputs_across_models_and_nested_sessions():
   data = _data()
   baseline = _children()
   with macro.parallel_solver_session():
-    first = macro.solve_subproblem(data, [0, 1, 2], LSP(), 'missing_solver', {}, 2)
+    first = macro.solve_subproblem(data, [0, 1, 2], LSP(), 'missing_solver', {'use_dp': True}, 2)
     np.testing.assert_array_equal(first[1], [[2], [3], [1]])
     workers = _children() - baseline
     assert len(workers) == 2
@@ -52,19 +52,19 @@ def test_warm_pool_uses_current_inputs_across_models_and_nested_sessions():
     prices = np.array([[0.], [2.], [0.]])
     with macro.parallel_solver_session():
       second = macro.solve_subproblem(
-        changed, [0, 1, 2], LSP(), 'missing_solver', {}, 2, detailed_pi=prices,
+        changed, [0, 1, 2], LSP(), 'missing_solver', {'use_dp': True}, 2, detailed_pi=prices,
       )
     np.testing.assert_array_equal(second[1], [[1], [1], [3]])
     np.testing.assert_array_equal(second[3], [[0], [1], [0]])
     np.testing.assert_array_equal(second[4], np.zeros((3, 1)))
     assert _children() - baseline == workers
     oracle = macro.solve_subproblem(
-      changed, [0, 1, 2], LSP(), 'missing_solver', {}, 0, detailed_pi=prices,
+      changed, [0, 1, 2], LSP(), 'missing_solver', {'use_dp': True}, 0, detailed_pi=prices,
     )
     for k in (1, 2, 3, 4, 5, 6, 7):
       np.testing.assert_array_equal(second[k], oracle[k])
     fixed = np.array([[0.], [1.], [2.]])
-    args = (LSPr_x(), changed, [0, 1, 2], 'missing_solver', {},
+    args = (LSPr_x(), changed, [0, 1, 2], 'missing_solver', {'use_dp': True},
             np.zeros((3, 3, 1)), np.array([[0.], [0.], [1.]]))
     restricted = macro.compute_social_welfare(*args, 2, fixed)
     sequential = macro.compute_social_welfare(*args, 0, fixed)
@@ -74,7 +74,7 @@ def test_warm_pool_uses_current_inputs_across_models_and_nested_sessions():
     np.testing.assert_array_equal(restricted[0][4], fixed)
     assert _children() - baseline == workers
     # A smaller batch reuses the same pool; a later timestep can use all workers.
-    subset = macro.solve_subproblem(changed, [1], LSP(), 'missing_solver', {}, 2)
+    subset = macro.solve_subproblem(changed, [1], LSP(), 'missing_solver', {'use_dp': True}, 2)
     np.testing.assert_array_equal(subset[1][1], [1])
     assert _children() - baseline == workers
   assert _children() - baseline == set()
@@ -86,7 +86,7 @@ def test_worker_count_uses_available_cpus_and_caps_processes_at_nodes(monkeypatc
   monkeypatch.setattr(macro.mpp, 'cpu_count', lambda: 64)
   baseline = _children()
   with macro.parallel_solver_session():
-    macro.solve_subproblem(_data(), [0, 1, 2], LSP(), 'missing_solver', {}, requested)
+    macro.solve_subproblem(_data(), [0, 1, 2], LSP(), 'missing_solver', {'use_dp': True}, requested)
     assert len(_children() - baseline) == expected
   assert _children() - baseline == set()
 
@@ -96,9 +96,9 @@ def test_runner_scope_closes_workers_after_worker_failure():
   @macro.parallel_solver_run
   def run():
     data = _data()
-    macro.solve_subproblem(data, [0, 1, 2], LSP(), 'missing_solver', {}, 2)
+    macro.solve_subproblem(data, [0, 1, 2], LSP(), 'missing_solver', {'use_dp': True}, 2)
     del data[None]['demand'][1, 1]
-    macro.solve_subproblem(data, [0, 1, 2], LSP(), 'missing_solver', {}, 2)
+    macro.solve_subproblem(data, [0, 1, 2], LSP(), 'missing_solver', {'use_dp': True}, 2)
   with pytest.raises(ValueError, match='demand'):
     run()
   assert _children() - baseline == set()
@@ -107,7 +107,7 @@ def test_runner_scope_closes_workers_after_worker_failure():
 def test_sequential_batches_do_not_start_workers():
   baseline = _children()
   with macro.parallel_solver_session():
-    macro.solve_subproblem(_data(), [0, 1, 2], LSP(), 'missing_solver', {}, 0)
+    macro.solve_subproblem(_data(), [0, 1, 2], LSP(), 'missing_solver', {'use_dp': True}, 0)
     assert _children() - baseline == set()
 
 
@@ -117,7 +117,7 @@ def test_warm_workers_refresh_solver_and_options_for_milp_fallback():
   data = _data()
   baseline = _children()
   with macro.parallel_solver_session():
-    macro.solve_subproblem(data, [0, 1, 2], LSP(), 'missing_solver', {}, 2)
+    macro.solve_subproblem(data, [0, 1, 2], LSP(), 'missing_solver', {'use_dp': True}, 2)
     workers = _children() - baseline
     parallel = macro.solve_subproblem(
       data, [0, 1, 2], FallbackLSP(), 'glpk', {'TimeLimit': 30}, 2,
