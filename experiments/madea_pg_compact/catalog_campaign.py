@@ -110,8 +110,9 @@ def run_one(case, method, output, config):
 
 if __name__ == '__main__':
   parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--catalog', type=Path, required=True)
-  parser.add_argument('--reference-root', type=Path, required=True)
+  parser.add_argument('--catalog', type=Path, help='edge-dataset catalogue (only needed with --sample)')
+  parser.add_argument('--reference-root', type=Path, help='worktree holding the 09/10 reference protocol (default config source)')
+  parser.add_argument('--config', type=Path, help='full run configuration (JSON); overrides --reference-root')
   parser.add_argument('--folder', default='solutions/catalog-sample-2026-10-10')
   parser.add_argument('--seed', type=int, default=20261010)
   parser.add_argument('--sample', action='store_true')
@@ -127,8 +128,15 @@ if __name__ == '__main__':
       print(x['group'], x['family'], x['name'])
   else:
     cases = {x['id']: x for x in json.loads((folder / 'sample.json').read_text())}
-    config = json.loads((args.reference_root / REFERENCE_PROTOCOL).read_text())['config']
+    if args.config:
+      config = json.loads(args.config.read_text())
+    else:
+      config = json.loads((args.reference_root / REFERENCE_PROTOCOL).read_text())['config']
     config['solver_options']['frankwolfe'] = dict(iterations=400, kappa=10.0, smoothing=1.0, max_rounds=20)
+    case = cases[args.case]
+    local = folder / 'instances' / case['name']
+    if local.exists():  # frozen copy shipped with the campaign folder
+      case['path'] = str(local.resolve())
     out = folder / 'runs' / args.case / args.method
     if not (out / 'finished.json').exists():
-      run_one(cases[args.case], args.method, out, config)
+      run_one(case, args.method, out, config)

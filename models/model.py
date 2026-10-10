@@ -1,3 +1,4 @@
+import math
 from pyomo.opt.results import SolverStatus
 from pyomo.opt import TerminationCondition
 from pyomo.contrib.iis import write_iis
@@ -19,6 +20,13 @@ def _solver_option_name(solver_name: str, option_name: str) -> str:
   if solver_name in {"glpk", "glpsol"} and option_name == "TimeLimit":
     return "tmlim"
   return option_name
+
+
+def _solver_option_value(solver_name: str, option_name: str, value):
+  # glpsol --tmlim accepts whole seconds only ("Invalid time limit '30.0'")
+  if solver_name in {"glpk", "glpsol"} and option_name == "TimeLimit":
+    return max(1, int(math.ceil(float(value))))
+  return value
 
 
 class BaseAbstractModel():
@@ -55,7 +63,9 @@ class BaseAbstractModel():
     solver.options.clear()
     for k, v in solver_options.items():
       if k != "use_dp":  # Application option, never an external solver parameter.
-        solver.options[_solver_option_name(solver_name, k)] = v
+        solver.options[_solver_option_name(solver_name, k)] = (
+          _solver_option_value(solver_name, k, v)
+        )
     # provide initial solution (if any)
     warmstart = False
     if initial_solution is not None:
