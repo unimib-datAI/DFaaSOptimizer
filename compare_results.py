@@ -27,6 +27,7 @@ colors = {
   "HierarchicalMADeALevelCycles": mcolors.CSS4_COLORS["darkorange"],
   "FaaS-MADiG": mcolors.CSS4_COLORS["plum"],
   "FaaS-MAPoD": mcolors.CSS4_COLORS["khaki"],
+  "FaaS-MAFW": mcolors.CSS4_COLORS["tomato"],
   "FaaS-MABR-S": mcolors.CSS4_COLORS["mediumaquamarine"],
   "FaaS-MABR-R": mcolors.CSS4_COLORS["sandybrown"],
   "FaaS-MABR-O": mcolors.CSS4_COLORS["mediumpurple"]
@@ -133,6 +134,7 @@ def parse_arguments() -> argparse.Namespace:
       "HierarchicalMADeALevelCycles",
       "FaaS-MADiG",
       "FaaS-MAPoD",
+      "FaaS-MAFW",
       "FaaS-MABR-S",
       "FaaS-MABR-R",
       "FaaS-MABR-O",

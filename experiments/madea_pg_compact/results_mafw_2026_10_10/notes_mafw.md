@@ -1,0 +1,6 @@
+## Note di metodo
+
+- **Versione di FaaS-MAFW.** Correzioni del 10/10: riparazione rispetto allo slack di memoria (un inoltro non scaccia mai carico locale del ricevente), greedy sul guadagno perso per MB liberato, penalità in unità di replica media con gap di Frank-Wolfe relativo, smoothing che maggiora la cerniera, tetto dell'arrotondamento a ⌊ω⌋, ripiego sulla soluzione senza inoltro, nessun arresto spurio quando l'arrotondamento dà zero, tempo nativo per nodo.
+- **Parametri:** `iterations=400`, `kappa=10`, `smoothing=1`, `max_rounds=20` (mai raggiunto: le run chiudono in 2-4 round). κ è stato scelto fra {1, 3, 10, 30} su 4 dei 12 casi della campagna sui grafi originali: su quelle istanze il confronto è leggermente ottimista per MAFW. Fra κ=3 e κ=30 la differenza media è di qualche centesimo di punto.
+- **Ambiente.** MAFW gira nella VM Linux sul Mac con `gurobipy` 13 a licenza ristretta e `use_dp=true`, una run alla volta. I metodi di riferimento sono quelli misurati il 09/10. Il welfare è deterministico (stesso valore in due esecuzioni), ma i rapporti di tempo confrontano macchine e sessioni diverse e vanno letti come indicativi.
+- **Medie.** Guadagni ricalcolati dai `runs.csv` sui welfare sommati per caso: la colonna temp può differire di qualche decimo dal report del 09/10, che media per timestep.

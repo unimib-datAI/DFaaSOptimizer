@@ -10,6 +10,7 @@ from hierarchical_auction.madea_cycles_runner import run as run_hierarchical_mad
 from hierarchical_auction.madea_level_cycles_runner import run as run_hierarchical_madea_level_cycles
 from decentralized_diffusion import run as run_diffusion
 from decentralized_powerd import run as run_powerd
+from decentralized_frankwolfe import run as run_frankwolfe
 from decentralized_bestresponse import run_br_s, run_br_r, run_br_o
 from decentralized_potentialgame import run_pg_s, run_pg_r
 from madea_pg import run as run_madea_pg, run_hierarchical as run_hierarchical_madea_pg
@@ -52,6 +53,7 @@ METHOD_RESULT_MODELS = {
   "hierarchical-madea-level-cycles": ("LSPc", "HierarchicalMADeALevelCycles"),
   "faas-diffuse": ("LSPc", "FaaS-MADiG"),
   "faas-powd": ("LSPc", "FaaS-MAPoD"),
+  "faas-fw": ("LSPc", "FaaS-MAFW"),
   "faas-br-s": ("LSPc", "FaaS-MABR-S"),
   "faas-br-r": ("LSPc", "FaaS-MABR-R"),
   "faas-br-o": ("LSPc", "FaaS-MABR-O"),
@@ -124,6 +126,7 @@ def parse_arguments() -> argparse.Namespace:
       "hierarchical-madea-level-cycles",
       "faas-diffuse",
       "faas-powd",
+      "faas-fw",
       "faas-br-s",
       "faas-br-r",
       "faas-br-o",
@@ -158,7 +161,7 @@ def parse_arguments() -> argparse.Namespace:
   parser.add_argument(
     "--fix_r",
     help = "True to fix the number of replicas in FaaS-MACrO, FaaS-MADeA, "
-           "FaaS-MADiG, FaaS-MAPoD, and FaaS-MABR according to the optimal "
+           "FaaS-MADiG, FaaS-MAPoD, FaaS-MAFW, and FaaS-MABR according to the optimal "
            "centralized solution",
     default = False,
     action = "store_true"
@@ -1002,6 +1005,7 @@ def run(
     "hierarchical-madea-level-cycles": [],
     "faas-diffuse": [],
     "faas-powd": [],
+    "faas-fw": [],
     "faas-br-s": [],
     "faas-br-r": [],
     "faas-br-o": []
@@ -1031,6 +1035,7 @@ def run(
     run_hmlc = False # -- repeated auctions at each hierarchy level
     run_d = False # -- faas-diffuse (FaaS-MADiG)
     run_p = False # -- faas-powd (FaaS-MAPoD)
+    run_fw = False # -- faas-fw (FaaS-MAFW)
     run_brs = False # -- faas-br-s (FaaS-MABR-S)
     run_brr = False # -- faas-br-r (FaaS-MABR-R)
     run_bro = False # -- faas-br-o (FaaS-MABR-O)
@@ -1115,6 +1120,12 @@ def run(
           solution_folders["faas-powd"][experiment_idx] is None
         )):
         run_p = True
+      if (not generate_only and "faas-fw" in methods) and ((
+          len(solution_folders.get("faas-fw", [])) <= experiment_idx
+        ) or (
+          solution_folders["faas-fw"][experiment_idx] is None
+        )):
+        run_fw = True
       if (not generate_only and "faas-br-s" in methods) and ((
           len(solution_folders.get("faas-br-s", [])) <= experiment_idx
         ) or (
@@ -1170,6 +1181,7 @@ def run(
       run_hmlc = "hierarchical-madea-level-cycles" in methods
       run_d = "faas-diffuse" in methods
       run_p = "faas-powd" in methods
+      run_fw = "faas-fw" in methods
       run_brs = "faas-br-s" in methods
       run_brr = "faas-br-r" in methods
       run_bro = "faas-br-o" in methods
@@ -1192,7 +1204,7 @@ def run(
     }
     # if the experiment is still to run...
     if (run_c or run_sc or run_i or run_i_v0 or run_a or run_a1s or run_h or \
-        run_hm or run_hmc or run_hmlc or run_d or run_p or run_brs or \
+        run_hm or run_hmc or run_hmlc or run_d or run_p or run_fw or run_brs or \
           run_brr or run_bro or run_pgs or run_pgr or run_g or run_pl or \
             generate_only or pending_refinements
       ):
@@ -1397,6 +1409,17 @@ def run(
         )
         set_solution_folder(
           solution_folders, "faas-powd", experiment_idx, p_folder
+        )
+      # -- solve distributed Frank-Wolfe (FaaS-MAFW)
+      if run_fw:
+        fw_folder = run_frankwolfe(
+          config,
+          sp_parallelism,
+          log_on_file = log_on_file,
+          disable_plotting = disable_plotting
+        )
+        set_solution_folder(
+          solution_folders, "faas-fw", experiment_idx, fw_folder
         )
       # -- solve best-response sequential (FaaS-MABR-S)
       if run_brs:
