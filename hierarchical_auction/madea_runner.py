@@ -208,7 +208,7 @@ def run(
         if verbose > 1:
           print(
             f"        compute_residual_capacity: DONE ",
-            f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
+            f"({total_capacity.tolist()}; blackboard = {blackboard.tolist()}; "
             f"ell = {ell.tolist()}; stalled = {stalled}; "
             f"runtime = {(e - s)})", 
             file = log_stream, 

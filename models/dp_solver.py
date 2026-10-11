@@ -100,11 +100,13 @@ def try_solve_local(model, data):
     if not isfinite(inbound) or inbound < 0 or not isfinite(cap) or cap < 0:
       return None
     ub = min(int(load), floor(cap + 1e-9))
-    omega_fixed = v['omega_bar'][node, f] if restricted else None
-    if restricted and (not isfinite(omega_fixed) or not -1e-9 <= omega_fixed <= load + 1e-9):
-      return None
-    if restricted:  # coordination arithmetic leaves float noise (e.g. load + 4e-15)
-      omega_fixed = min(max(omega_fixed, 0.), load)
+    omega_fixed = None
+    if restricted:
+      omega_bar = float(v['omega_bar'][node, f])
+      if not isfinite(omega_bar) or not -1e-9 <= omega_bar <= load + 1e-9:
+        return None
+      # coordination arithmetic leaves float noise (e.g. load + 4e-15)
+      omega_fixed = min(max(omega_bar, 0.), load)
     denominator = load or 1
 
     def allocation(x, r):
