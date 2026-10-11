@@ -101,3 +101,26 @@ def test_budget_workers_and_csv(tmp_path):
   step_time.write_runtime(str(tmp_path), [dict(step=0, algorithm_s=1.0, wall_s=2.0, parallel_phases=3, workers=2)])
   frame = pd.read_csv(tmp_path / "runtime.csv")
   assert tuple(frame.columns) == step_time.COLUMNS and frame.iloc[0].algorithm_s == 1.0
+
+
+def test_solve_subproblem_is_one_phase_with_one_task_per_agent(monkeypatch):
+  import run_faasmacro
+
+  durations = {0: 0.02, 1: 0.05, 2: 0.01}
+
+  def fake_solve(model, data, options, solver):
+    import time
+    agent = data[None]["whoami"][None] - 1
+    time.sleep(durations[agent])
+    return {"agent": agent}
+
+  monkeypatch.setattr(run_faasmacro, "solve_agent_problem", fake_solve)
+  monkeypatch.setattr(run_faasmacro, "merge_agents_solutions",
+                      lambda *a, **k: (None,) * 6 + ({"tot": 0.0}, None, None))
+  monkeypatch.setattr(run_faasmacro, "compute_utilization", lambda *a, **k: None)
+  data = {None: {"Nn": {None: 3}, "Nf": {None: 1}}}
+  clock = step_time.start_step()
+  run_faasmacro.solve_subproblem(data, [0, 1, 2], None, "missing_solver", {}, 0)
+  row = step_time.end_step(clock, 0)
+  assert row["parallel_phases"] == 1
+  assert row["algorithm_s"] == pytest.approx(0.05, abs=0.02) and row["wall_s"] >= 0.08

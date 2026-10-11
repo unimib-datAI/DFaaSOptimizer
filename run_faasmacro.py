@@ -34,8 +34,10 @@ from models.sp import (
   LSP_fixedr_v0 
 )
 from heuristic_coordinator import GreedyCoordinator
+from utils import step_time
 
 import multiprocessing as mpp
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
@@ -103,7 +105,12 @@ def _solve_parallel_batch(task):
   data, options, solver, model, agents, prices = task
   # Each task carries the current snapshot, even if this worker ran another model.
   init_parallel_worker(data, options, solver, model)
-  return [solve_single_agent(agent, prices) for agent in agents]
+  out = []
+  for agent in agents:
+    started = time.perf_counter()  # the node's own computation, without transfer
+    agent_id, result = solve_single_agent(agent, prices)
+    out.append((agent_id, result, time.perf_counter() - started))
+  return out
 
 
 def _solve_agents_parallel(data, agents, model, solver, options, parallelism, prices=None):
@@ -122,7 +129,11 @@ def _solve_agents_parallel(data, agents, model, solver, options, parallelism, pr
   # One fresh snapshot per chunk, rather than serializing the network per node.
   tasks = [(data, options, solver, model, agents[i::count], prices) for i in range(count)]
   results = state['pool'].map(_solve_parallel_batch, tasks, chunksize=1)
-  by_agent = dict(item for batch in results for item in batch)
+  by_agent = {}
+  for batch in results:
+    for agent, result, seconds in batch:
+      by_agent[agent] = result
+      step_time.record(agent, seconds)
   return {agent: by_agent[agent] for agent in agents}
 
 
@@ -325,16 +336,18 @@ def compute_social_welfare(
     }
   # solve for all agents
   agents_sol = {}
-  if parallelism != 0:
-    agents_sol = _solve_agents_parallel(
-      spr_data, agents, spr, solver_name, solver_options, parallelism,
-    )
-  else:
-    for agent in agents:
-      spr_data[None]["whoami"] = {None: agent + 1}
-      agents_sol[agent] = solve_agent_problem(
-        spr, spr_data, solver_options, solver_name
+  with step_time.parallel_phase():
+    if parallelism != 0:
+      agents_sol = _solve_agents_parallel(
+        spr_data, agents, spr, solver_name, solver_options, parallelism,
       )
+    else:
+      for agent in agents:
+        with step_time.task(agent):
+          spr_data[None]["whoami"] = {None: agent + 1}
+          agents_sol[agent] = solve_agent_problem(
+            spr, spr_data, solver_options, solver_name
+          )
   # merge solutions
   spr_sol = merge_agents_solutions(
     spr_data, agents_sol
@@ -634,21 +647,22 @@ def solve_subproblem(
     sp_data[None]["pi"] = {f+1: 0 for f in range(Nf)}
   # solve for all agents
   agents_sol = {}
-  if parallelism != 0:
-    agents_sol = _solve_agents_parallel(
-      sp_data, agents, sp, solver_name, solver_options, parallelism, detailed_pi,
-    )
-  else:
-    for agent in agents:
-      # generate instance
-      agent_data = sp_data.copy()
-      agent_data[None] = sp_data[None].copy()
-      agent_data[None]["whoami"] = {None: agent + 1}
-      if detailed_pi is not None:
-        agent_data[None]["pi"] = {f+1: detailed_pi[agent,f] for f in range(Nf)}
-      agents_sol[agent] = solve_agent_problem(
-        sp, agent_data, solver_options, solver_name
+  with step_time.parallel_phase():
+    if parallelism != 0:
+      agents_sol = _solve_agents_parallel(
+        sp_data, agents, sp, solver_name, solver_options, parallelism, detailed_pi,
       )
+    else:
+      for agent in agents:
+        with step_time.task(agent):
+          agent_data = sp_data.copy()
+          agent_data[None] = sp_data[None].copy()
+          agent_data[None]["whoami"] = {None: agent + 1}
+          if detailed_pi is not None:
+            agent_data[None]["pi"] = {f+1: detailed_pi[agent,f] for f in range(Nf)}
+          agents_sol[agent] = solve_agent_problem(
+            sp, agent_data, solver_options, solver_name
+          )
   # merge solutions
   (
     sp_x, 
