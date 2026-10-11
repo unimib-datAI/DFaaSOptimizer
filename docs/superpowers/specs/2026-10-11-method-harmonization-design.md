@@ -61,7 +61,7 @@ One clock per step, `utils/step_time.py`, reachable from any function of the
 step through a context variable (no signature changes along call chains):
 
 ```
-modelled = (wall since step start) − Σ phase_wall + Σ max(task durations of the phase)
+modelled = (wall since step start) − Σ untimed_wall − Σ phase_wall + Σ longest task of each phase
 ```
 
 - `step_clock()`: context manager opened by each runner around the decision
@@ -81,6 +81,19 @@ modelled = (wall since step start) − Σ phase_wall + Σ max(task durations of 
   by construction; the pool persists for the whole run (`parallel_solver_session`).
 - Nested phases are not allowed (a phase inside a phase raises): each per-node
   computation belongs to exactly one phase.
+- **Vectorized phases** (one numpy computation over all nodes, e.g. a
+  Frank-Wolfe iteration): no per-node duration exists, the work per node row
+  is uniform, so the longest task is the phase wall time divided by the
+  number of nodes that take part.
+- **Observer code** inside a step (feasibility checks such as
+  `check_ls_pr_feasibility_from_fixed_y` and `check_feasibility`, decoding and
+  accumulating solutions for export, verbose logging, checkpoints) is not part
+  of the algorithm: it runs inside `step_time.untimed()` and its wall time is
+  removed from the modelled time (it still counts in `wall_s`).
+- Today each runner approximates this differently (mean agent runtime for
+  subproblems, phase time divided by the number of auctions, sellers or
+  nodes, full wall time elsewhere). All these accumulations are replaced by
+  the clock.
 
 ## Time budgets
 
