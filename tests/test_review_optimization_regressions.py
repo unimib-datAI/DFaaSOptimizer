@@ -218,7 +218,8 @@ def test_overloaded_runners_reach_stopping_check_with_correct_argument_types(
   config["solver_name"] = "glpk"
   config["max_iterations"] = 3
   config["limits"]["memory_capacity"] = {"values": [2, 24] * 5}
-  config["solver_options"]["general"] = {"TimeLimit": 15}
+  # harmonized runners read the modelled-time budget; excluded ones still TimeLimit
+  config["solver_options"]["general"] = {"TimeLimit": 15, "algorithm_time_limit": 15}
   config["solver_options"].update({
     "diffusion": {"latency_weight": 0.0, "fairness_weight": 0.0, "unit_bids": False},
     "powerd": {"d": 2, "criterion": "score", "unit_bids": True},

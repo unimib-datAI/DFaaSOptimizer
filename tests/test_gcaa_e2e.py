@@ -65,8 +65,8 @@ def test_run_gcaa_produces_artifacts(tmp_path):
   assert len(obj) >= 1
   assert np.isfinite(pd.to_numeric(obj["FaaS-MAGCAA"], errors="coerce")).all()
   runtime = pd.read_csv(Path(folder, "runtime.csv"))
-  assert "tot" in runtime.columns
-  assert (runtime["tot"] >= 0).all()
+  assert "algorithm_s" in runtime.columns
+  assert (runtime["algorithm_s"] >= 0).all()
   tc = pd.read_csv(Path(folder, "termination_condition.csv"))
   assert len(tc) >= 1
   for s in tc["0"]:

@@ -155,7 +155,7 @@ def test_refinement_is_recorded_for_each_timestep(tmp_path, runner):
   assert stats["sweeps"].tolist() == [1, 1]
   assert (stats.welfare_after >= stats.welfare_before).all()
   np.testing.assert_allclose(pd.read_csv(folder / "obj.csv").iloc[:, 0], stats.welfare_after)
-  assert (pd.read_csv(folder / "runtime.csv")["tot"] >= stats.seconds).all()
+  assert (pd.read_csv(folder / "runtime.csv")["algorithm_s"] >= stats.seconds).all()
 
 
 def test_local_acceptance_does_not_consult_global_welfare(monkeypatch):

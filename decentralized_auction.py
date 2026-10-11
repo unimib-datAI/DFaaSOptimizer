@@ -39,6 +39,7 @@ import argparse
 import json
 import sys
 import os
+from utils import step_time
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -59,7 +60,7 @@ def parse_arguments() -> argparse.Namespace:
     "-j", "--parallelism",
     help = "Number of parallel processes to start (-1: auto, 0: sequential)",
     type = int,
-    default = 0
+    default = -1
   )
   parser.add_argument(
     "--disable_plotting",
@@ -91,7 +92,7 @@ def run(
   solver_options = config["solver_options"]
   general_solver_options = solver_options.get("general", {})
   auction_options = solver_options["auction"]
-  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  time_limit = step_time.algorithm_time_limit(config)
   tolerance = config.get("tolerance", 1e-6)
   # -- maximum number of iterations and time limits
   max_iterations = config["max_iterations"]
@@ -131,7 +132,7 @@ def run(
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
   refinement_history = []
-  runtime_list = []
+  runtime_rows = []
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
       print(f"t = {t}", file = log_stream, flush = True)
@@ -139,7 +140,7 @@ def run(
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
     # local planning
-    total_runtime = 0
+    clock = step_time.start_step()
     ss = datetime.now()
     # -- solve subproblem
     sp = LSP()
@@ -164,7 +165,6 @@ def run(
         file = log_stream,
         flush = True
       )
-    total_runtime += sp_runtime["tot"]
     # define target operating point and initial prices
     u0 = np.ones((Nn,Nf)) * 0.9
     p = np.zeros((Nn,Nf))
@@ -200,7 +200,6 @@ def run(
           file = log_stream,
           flush = True
         )
-      total_runtime += (e - s).total_seconds()
       # buyers define their bids
       s = datetime.now()
       bids, memory_bids, n_auctions = define_bids(
@@ -226,7 +225,6 @@ def run(
         )
         if verbose > 2:
           print(bids, file = log_stream, flush = True)
-      total_runtime += (e - s).total_seconds()
       # sellers accept/reject bids
       a = np.zeros((Nn,Nf))
       if len(bids) > 0:
@@ -251,7 +249,6 @@ def run(
            file = log_stream,
            flush = True
           )
-        total_runtime += (e - s).total_seconds()
         # update effective load, number of replicas and fairness matrix
         y += auction_y
         rmp_omega = np.zeros((Nn,Nf))
@@ -272,7 +269,6 @@ def run(
           parallelism,
           sp_x
         )
-        total_runtime += spr_runtime
         if verbose > 1:
           print(
             f"        solve 'restricted problem': DONE ({spr_tc}; "
@@ -309,42 +305,43 @@ def run(
           file = log_stream,
           flush = True
         )
-        total_runtime += (e - s).total_seconds()
-      # merge solutions and compute the centralized objective value
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt,
-        sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None
-      )
-      cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-      )
-      # update best solution so far
-      if spr_obj < best_cost_so_far or it == 0:
-        best_cost_so_far = spr_obj
-        best_solution_so_far = csol
-        best_it_so_far = it
-        if verbose > 0:
-          print(
-            f"        best solution updated; obj = {spr_obj}",
-            file = log_stream,
-            flush = True
-          )
-      prev_cobj = best_centralized_cost
-      if cobj > best_centralized_cost:
-        best_centralized_cost = cobj
-        best_centralized_solution = csol
-        best_centralized_it = it
-        if verbose > 0:
-          print(
-            f"        best centralized solution updated; obj = {cobj}",
-            file = log_stream,
-            flush = True
-          )
-      odev_queue.append(
-        relative_objective_gap(prev_cobj, best_centralized_cost)
-      )
+      with step_time.untimed():
+        # merge solutions and compute the centralized objective value
+        csol = combine_solutions(
+          Nn, Nf, sp_data, loadt,
+          sp_x, sp_r, sp_rho,
+          None, y, None, None, None, None
+        )
+        cobj = compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        )
+        # update best solution so far
+        if spr_obj < best_cost_so_far or it == 0:
+          best_cost_so_far = spr_obj
+          best_solution_so_far = csol
+          best_it_so_far = it
+          if verbose > 0:
+            print(
+              f"        best solution updated; obj = {spr_obj}",
+              file = log_stream,
+              flush = True
+            )
+        prev_cobj = best_centralized_cost
+        if cobj > best_centralized_cost:
+          best_centralized_cost = cobj
+          best_centralized_solution = csol
+          best_centralized_it = it
+          if verbose > 0:
+            print(
+              f"        best centralized solution updated; obj = {cobj}",
+              file = log_stream,
+              flush = True
+            )
+        odev_queue.append(
+          relative_objective_gap(prev_cobj, best_centralized_cost)
+        )
       # check termination criteria
+      total_runtime = step_time.current_modelled()
       s = datetime.now()
       stop_searching, why_stop_searching = check_stopping_criteria(
         it = it,
@@ -376,43 +373,45 @@ def run(
         it += 1
       # -- ...save solution
       else:
-        # save solutions
-        sp_complete_solution, _, objf = decode_solutions(
-          sp_data,
-          best_solution_so_far,
-          sp_complete_solution,
-          None
-        )
+        with step_time.untimed():
+          # save solutions
+          sp_complete_solution, _, objf = decode_solutions(
+            sp_data,
+            best_solution_so_far,
+            sp_complete_solution,
+            None
+          )
         if refine_welfare:
           from madea_pg import refine_solution
           best_centralized_solution, refinement = refine_solution(
-            sp_data, best_centralized_solution, config, time_limit - total_runtime,
+            sp_data, best_centralized_solution, config, time_limit - step_time.current_modelled(),
           )
-          total_runtime += refinement["seconds"]
           refinement_history.append({"time": t, **refinement})
-        spc_complete_solution, _, objc = decode_solutions(
-          sp_data,
-          best_centralized_solution,
-          spc_complete_solution,
-          None
-        )
-        obj_dict["LSPr_final"].append(objc)
-        tc_dict["LSPr"].append(
-          f"{why_stop_searching} "
-          f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
-          f"best centralized it: {best_centralized_it}; "
-          f"total runtime: {total_runtime})"
-        )
-        # save checkpoint
-        if t % checkpoint_interval == 0 or t == max_steps - 1:
-          save_checkpoint(
-            sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+        with step_time.untimed():
+          spc_complete_solution, _, objc = decode_solutions(
+            sp_data,
+            best_centralized_solution,
+            spc_complete_solution,
+            None
           )
-          save_checkpoint(
-            spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+          obj_dict["LSPr_final"].append(objc)
+          tc_dict["LSPr"].append(
+            f"{why_stop_searching} "
+            f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
+            f"best centralized it: {best_centralized_it}; "
+            f"total runtime: {total_runtime})"
           )
+          # save checkpoint
+          if t % checkpoint_interval == 0 or t == max_steps - 1:
+            save_checkpoint(
+              sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+            )
+            save_checkpoint(
+              spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+            )
+    total_runtime = step_time.current_modelled()
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
     ee = datetime.now()
-    runtime_list.append(total_runtime)
     if verbose > 0:
       print(
         f"    TOTAL RUNTIME [s] = {total_runtime} "
@@ -461,7 +460,7 @@ def run(
   result_name = "One-shot-PG" if refine_welfare else "FaaS-MADeA(1s)"
   if refine_welfare:
     pd.DataFrame(refinement_history).to_csv(os.path.join(solution_folder, "refinement.csv"), index=False)
-    pd.DataFrame({"tot": runtime_list}).to_csv(os.path.join(solution_folder, "runtime.csv"), index=False)
+  step_time.write_runtime(solution_folder, runtime_rows)
   pd.DataFrame(obj_dict["LSPr_final"], columns = [result_name]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index = False
   )

@@ -124,3 +124,17 @@ def test_solve_subproblem_is_one_phase_with_one_task_per_agent(monkeypatch):
   row = step_time.end_step(clock, 0)
   assert row["parallel_phases"] == 1
   assert row["algorithm_s"] == pytest.approx(0.05, abs=0.02) and row["wall_s"] >= 0.08
+
+
+def test_timed_loop_records_each_iteration_to_its_node_even_on_break(now):
+  clock = step_time.start_step()
+  with step_time.parallel_phase():
+    for i, f in step_time.timed([(0, 0), (0, 1), (1, 0), (2, 0)], key=lambda item: item[0]):
+      now.t += {0: 1.0, 1: 2.5, 2: 0.5}[i]
+      if i == 2:
+        break                         # last iteration still recorded
+  assert clock.modelled() == pytest.approx(2.5)   # node 0: 2 s, node 1: 2.5 s, node 2: 0.5 s
+
+
+def test_current_modelled_without_clock_is_zero():
+  assert step_time.current_modelled() == 0.0

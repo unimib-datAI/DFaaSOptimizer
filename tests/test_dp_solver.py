@@ -155,3 +155,15 @@ def test_restricted_dp_tolerates_float_noise_in_fixed_offload():
   values['omega_bar'] = {(2, 1): 3.000000000000004, (2, 2): 0.0}
   values['y_bar'] = {(m, 2, f): 0.0 for m in (1, 2, 3) for f in (1, 2)}
   assert try_solve_local(LSPr(), data) is not None
+
+
+def test_external_solver_never_receives_the_algorithm_time_limit():
+  # algorithm_time_limit is an application budget (modelled time), not a solver option.
+  if not pyo.SolverFactory('glpk').available(exception_flag=False):
+    pytest.skip('GLPK required')
+  data = _data()
+  data[None]['demand'][2, 1] = 0.
+  model = LSP_detailed()
+  actual = solve_agent_problem(model, data, {'use_dp': True, 'TimeLimit': 30,
+                                             'algorithm_time_limit': 5}, 'glpk')
+  assert actual['termination_condition'] == 'optimal'

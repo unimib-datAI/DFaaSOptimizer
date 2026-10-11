@@ -30,8 +30,10 @@ import pandas as pd
 import decentralized_auction as _one_shot
 import run_faasmadea as _madea
 from run_faasmadea import VAR_TYPE, ensure_memory_sellers
+from utils import step_time
 
 
+@step_time.parallel
 def define_bids(
     omega: np.array,
     blackboard: np.array, 
@@ -88,7 +90,7 @@ def define_bids(
       }
     return bid_cache[(i, f)].get(j, p[j,f] + auction_options["epsilon"])
 
-  for i,f in zip(potential_buyers, functions_to_share):
+  for i,f in step_time.timed(zip(potential_buyers, functions_to_share), key=lambda item: item[0]):
     # identify potential sellers
     potential_sellers = set(np.nonzero(neighborhood[i,:])[0])
     # -- capacity sellers are neighbors with residual computing capacity 
@@ -181,6 +183,7 @@ def define_bids(
   return pd.DataFrame(bids), pd.DataFrame(memory_bids), len(potential_buyers)
 
 
+@step_time.parallel
 def evaluate_bids(
     bids: pd.DataFrame, 
     blackboard: np.array, 
@@ -244,7 +247,7 @@ def evaluate_bids(
   additional_replicas = np.zeros((Nn,Nf))
   rho = deepcopy(initial_rho)
   unique_potential_sellers = np.unique(potential_sellers)
-  for j in unique_potential_sellers:
+  for j in step_time.timed(unique_potential_sellers):
     # extract bids for the current node
     all_bids_for_j = bids[(bids["j"] == j)].sort_values(
       by = "b", ascending = False
@@ -338,6 +341,7 @@ def evaluate_bids(
   return y, p, additional_replicas, len(unique_potential_sellers)
 
 
+@step_time.parallel
 def start_replicas_by_value(
     memory_bids: pd.DataFrame,
     r: np.array,
@@ -359,7 +363,7 @@ def start_replicas_by_value(
   residual_memory = deepcopy(rho)
   if len(memory_bids) == 0:
     return additional_replicas, residual_memory
-  for j, bids_for_j in memory_bids.groupby("j"):
+  for j, bids_for_j in step_time.timed(memory_bids.groupby("j"), key=lambda item: item[0]):
     free = float(rho[j])
     if free <= 0:
       continue

@@ -37,8 +37,10 @@ import argparse
 import json
 import sys
 import os
+from utils import step_time
 
 
+@step_time.parallel
 def resolve_gcaa_round(
     bids: pd.DataFrame,
     residual_capacity: np.array,
@@ -59,7 +61,7 @@ def resolve_gcaa_round(
   sending = current_y.sum(axis=1) > 1e-10
   receiving = current_y.sum(axis=0) > 1e-10
   best_per_agent = bids.loc[bids.groupby(["i", "f"])["utility"].idxmax()]
-  for (j, f), group in best_per_agent.groupby(["j", "f"]):
+  for (j, f), group in step_time.timed(best_per_agent.groupby(["j", "f"]), key=lambda item: int(item[0][0])):
     j, f = int(j), int(f)
     if sending[j, f]:
       continue
@@ -122,7 +124,7 @@ def run(
   gcaa_options = solver_options["gcaa"]
   if gcaa_options.get("unit_bids") is not True:
     raise ValueError("solver_options.gcaa.unit_bids must be true")
-  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  time_limit = step_time.algorithm_time_limit(config)
   tolerance = config.get("tolerance", 1e-6)
   max_iterations = config["max_iterations"]
   max_steps = config["max_steps"]
@@ -155,7 +157,7 @@ def run(
   spc_complete_solution = init_complete_solution()
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
-  runtime_list = []
+  runtime_rows = []
   # GCAA bids are pure utility: price stays at zero forever (no
   # evaluate_bids-style price adaptation)
   no_price = np.zeros((Nn, Nf))
@@ -168,7 +170,7 @@ def run(
       print(f"t = {t}", file = log_stream, flush = True)
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
-    total_runtime = 0
+    clock = step_time.start_step()
     ss = datetime.now()
     sp_data = deepcopy(data)
     sp = LSP()
@@ -184,7 +186,6 @@ def run(
         f"runtime = {sp_runtime['tot']})",
         file = log_stream, flush = True
       )
-    total_runtime += sp_runtime["tot"]
     it = 0
     stop_searching = False
     best_solution_so_far = None
@@ -220,42 +221,44 @@ def run(
             rmp_omega[n,f] = y[n,:,f].sum()
             if rmp_omega[n,f] > 0:
               fairness[n,f] += 1
-        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
-        if bad_nodes:
-          raise RuntimeError(
-            f"LSPr infeasible from fixed y assignments: {bad_nodes}"
-          )
+        with step_time.untimed():
+          bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+          if bad_nodes:
+            raise RuntimeError(
+              f"LSPr infeasible from fixed y assignments: {bad_nodes}"
+            )
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism
         )
-        total_runtime += spr_runtime
         sp_x, _, _, _, sp_r, sp_rho = spr_sol
         for i in range(Nn):
           for f in range(Nf):
             omega[i,f] = sp_omega[i,f] - rmp_omega[i,f]
             if abs(omega[i,f]) < tolerance:
               omega[i,f] = 0.0
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None
-      )
-      cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-      )
-      feas = check_feasibility(
-        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-        csol["sp"]["r"], csol["sp"]["U"], sp_data
-      )
-      assert feas[0], feas[1]
-      if spr_obj < best_cost_so_far or it == 0:
-        best_cost_so_far = spr_obj
-        best_solution_so_far = deepcopy(csol)
-        best_it_so_far = it
-      if best_centralized_solution is None or cobj > best_centralized_cost:
-        best_centralized_cost = cobj
-        best_centralized_solution = deepcopy(csol)
-        best_centralized_it = it
+      with step_time.untimed():
+        csol = combine_solutions(
+          Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
+          None, y, None, None, None, None
+        )
+        cobj = compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        )
+        feas = check_feasibility(
+          csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+          csol["sp"]["r"], csol["sp"]["U"], sp_data
+        )
+        assert feas[0], feas[1]
+        if spr_obj < best_cost_so_far or it == 0:
+          best_cost_so_far = spr_obj
+          best_solution_so_far = deepcopy(csol)
+          best_it_so_far = it
+        if best_centralized_solution is None or cobj > best_centralized_cost:
+          best_centralized_cost = cobj
+          best_centralized_solution = deepcopy(csol)
+          best_centralized_it = it
+      total_runtime = step_time.current_modelled()
       stop_searching, why_stop_searching = check_stopping_criteria(
         it, max_iterations, blackboard, omega, rmp_omega,
         bids=bids, memory_bids=memory_bids,
@@ -264,25 +267,28 @@ def run(
       if not stop_searching:
         it += 1
       else:
-        sp_complete_solution, _, objf = decode_solutions(
-          sp_data, best_solution_so_far, sp_complete_solution, None
-        )
-        spc_complete_solution, _, _ = decode_solutions(
-          sp_data, best_centralized_solution, spc_complete_solution, None
-        )
-        obj_dict["LSPr_final"].append(objf)
-        tc_dict["LSPr"].append(
-          f"{why_stop_searching} "
-          f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
-          f"total runtime: {total_runtime})"
-        )
-        if t % checkpoint_interval == 0 or t == max_steps - 1:
-          save_checkpoint(
-            sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+        with step_time.untimed():
+          sp_complete_solution, _, objf = decode_solutions(
+            sp_data, best_solution_so_far, sp_complete_solution, None
           )
-          save_checkpoint(
-            spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+          spc_complete_solution, _, _ = decode_solutions(
+            sp_data, best_centralized_solution, spc_complete_solution, None
           )
+          obj_dict["LSPr_final"].append(objf)
+          tc_dict["LSPr"].append(
+            f"{why_stop_searching} "
+            f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
+            f"total runtime: {total_runtime})"
+          )
+          if t % checkpoint_interval == 0 or t == max_steps - 1:
+            save_checkpoint(
+              sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+            )
+            save_checkpoint(
+              spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+            )
+    total_runtime = step_time.current_modelled()
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
     ee = datetime.now()
     if verbose > 0:
       print(
@@ -290,7 +296,6 @@ def run(
         f"(wallclock: {(ee-ss).total_seconds()})",
         file = log_stream, flush = True
       )
-    runtime_list.append(total_runtime)
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
     sp_complete_solution
   )
@@ -318,9 +323,7 @@ def run(
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
   )
-  pd.DataFrame({"tot": runtime_list}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index = False
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   if verbose > 0:
     print(
       f"All solutions saved in: {solution_folder}",

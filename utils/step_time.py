@@ -109,6 +109,25 @@ def record(key, seconds: float) -> None:
     phase.add(key, seconds)
 
 
+def timed(items, key=lambda item: item):
+  """Iterate ``items`` timing each loop iteration as a task of ``key(item)``.
+
+  Same as wrapping the loop body in ``task(key(item))``, without re-indenting it;
+  an iteration left with ``break`` is still recorded.
+  """
+  for item in items:
+    started = perf_counter()
+    try:
+      yield item
+    finally:
+      record(key(item), perf_counter() - started)
+
+
+def current_modelled() -> float:
+  clock = _clock.get()
+  return 0.0 if clock is None else clock.modelled()
+
+
 @contextmanager
 def untimed():
   started = perf_counter()

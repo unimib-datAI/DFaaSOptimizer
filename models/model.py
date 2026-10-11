@@ -14,6 +14,7 @@ PYO_PARAM_TYPE = pyo.NonNegativeReals
 
 
 _SOLVER_CACHE: dict = {}
+APPLICATION_OPTIONS = {"use_dp", "algorithm_time_limit"}
 
 
 def _solver_option_name(solver_name: str, option_name: str) -> str:
@@ -62,7 +63,7 @@ class BaseAbstractModel():
       _SOLVER_CACHE[solver_name] = solver
     solver.options.clear()
     for k, v in solver_options.items():
-      if k != "use_dp":  # Application option, never an external solver parameter.
+      if k not in APPLICATION_OPTIONS:  # never external solver parameters
         solver.options[_solver_option_name(solver_name, k)] = (
           _solver_option_value(solver_name, k, v)
         )

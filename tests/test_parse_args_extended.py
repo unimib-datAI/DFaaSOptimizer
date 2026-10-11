@@ -23,7 +23,7 @@ def test_decentralized_auction_parse_args_defaults(monkeypatch):
   from decentralized_auction import parse_arguments
   args = parse_arguments()
   assert args.config == "config_files/manual_config.json"
-  assert args.parallelism == 0
+  assert args.parallelism == -1  # harmonized runners default to all cores
   assert args.disable_plotting is False
 
 
