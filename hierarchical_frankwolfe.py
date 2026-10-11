@@ -63,6 +63,7 @@ import json
 import time
 import os
 import sys
+from utils import step_time
 
 
 RESULT_NAMES = {
@@ -74,9 +75,10 @@ RESULT_NAMES = {
 
 
 def _update_from_lspr(spr, sp_data, agents, solver_name, solver_options, y, parallelism):
-  bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
-  if bad_nodes:
-    raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
+  with step_time.untimed():
+    bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+    if bad_nodes:
+      raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
   rmp_omega = y.sum(axis=1)
   spr_sol, spr_obj, _, spr_runtime = compute_social_welfare(
     spr, sp_data, agents, solver_name, solver_options, y, rmp_omega, parallelism
@@ -106,7 +108,7 @@ def run(
   fw_options = frankwolfe_options(solver_options)
   auction_options = build_auction_options(config)
   rng = np.random.default_rng(seed)
-  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  time_limit = step_time.algorithm_time_limit(config)
   tolerance = config.get("tolerance", 1e-6)
   max_iterations = config["max_iterations"]
   max_steps = config["max_steps"]
@@ -147,12 +149,12 @@ def run(
   ub = (max_run_time + run_time_step) if max_run_time == min_run_time else max_run_time
   spc_complete_solution = init_complete_solution()
   obj_dict, tc_dict = {"LSPr_final": []}, {"LSPr": []}
-  stats_rows, runtime_list, refinement_history = [], [], []
+  stats_rows, runtime_rows, refinement_history = [], [], []
 
   for t in range(min_run_time, ub, run_time_step):
-    started = time.monotonic()
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
+    clock = step_time.start_step()
     sp_data = deepcopy(data)
     (
       sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, _, _, _, _
@@ -160,7 +162,8 @@ def run(
       sp_data, agents, LSP(), solver_name, general_solver_options, parallelism
     )
     spr = LSPr()
-    fw_params = fw_parameters(sp_data)
+    with step_time.untimed():  # dense copies of the instance (simulation bookkeeping)
+      fw_params = fw_parameters(sp_data)
     y = np.zeros((Nn, Nn, Nf))
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn, Nf))
@@ -169,19 +172,20 @@ def run(
       max_depth=max_hierarchy_depth, auction_options=auction_options,
     ) if hierarchy else None
 
-    def snapshot():
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None
-      )
-      feas = check_feasibility(
-        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-        csol["sp"]["r"], csol["sp"]["U"], sp_data
-      )
-      assert feas[0], feas[1]
-      return csol, compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-      )
+    def snapshot():  # observer: global incumbent and feasibility check
+      with step_time.untimed():
+        csol = combine_solutions(
+          Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
+          None, y, None, None, None, None
+        )
+        feas = check_feasibility(
+          csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+          csol["sp"]["r"], csol["sp"]["U"], sp_data
+        )
+        assert feas[0], feas[1]
+        return csol, compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        )
 
     # the local solution without forwarding is the first incumbent
     best_solution, best_cost = snapshot()
@@ -223,8 +227,9 @@ def run(
       stats_rows.append(fw_stats)
       csol, cobj = snapshot()
       if cobj > best_cost:
-        best_solution, best_cost, best_it = deepcopy(csol), cobj, it
-      elapsed = time.monotonic() - started
+        with step_time.untimed():
+          best_solution, best_cost, best_it = deepcopy(csol), cobj, it
+      elapsed = step_time.current_modelled()
       if it + 1 >= max_iterations:
         why = "max iterations"
       elif fw_options["max_rounds"] and it + 1 >= fw_options["max_rounds"]:
@@ -234,7 +239,7 @@ def run(
       elif y_new.sum() <= tolerance and accepted_higher <= tolerance:
         why = "no more assignments"
       elif elapsed > coordination_limit:
-        why = "time limit"
+        why = f"reached time limit: {elapsed} > {coordination_limit}"
       else:
         it += 1
         continue
@@ -244,19 +249,19 @@ def run(
     if refine_welfare:
       from madea_pg import refine_solution
       incumbent, refinement = refine_solution(
-        sp_data, incumbent, config, time_limit - (time.monotonic() - started),
+        sp_data, incumbent, config, time_limit - step_time.current_modelled(),
       )
       refinement_history.append({"time": t, **refinement, "coordination_rounds": it + 1,
                                  "pg_reserve": pg_reserve})
+    total = step_time.current_modelled()
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
     spc_complete_solution, _, final_objective = decode_solutions(
       sp_data, incumbent, spc_complete_solution, None
     )
-    total = time.monotonic() - started
     obj_dict["LSPr_final"].append(final_objective)
     tc_dict["LSPr"].append(
       f"{why} (it: {it}; best centralized it: {best_it}; total runtime: {total})"
     )
-    runtime_list.append(total)
     if verbose > 0:
       print(f"t = {t}: {why}, rounds {it + 1}, welfare {final_objective}",
             file=log_stream, flush=True)
@@ -269,7 +274,7 @@ def run(
   pd.DataFrame(obj_dict["LSPr_final"], columns=[result_name]).to_csv(
     os.path.join(solution_folder, "obj.csv"), index=False)
   pd.DataFrame(tc_dict["LSPr"]).to_csv(os.path.join(solution_folder, "termination_condition.csv"))
-  pd.DataFrame({"tot": runtime_list}).to_csv(os.path.join(solution_folder, "runtime.csv"), index=False)
+  step_time.write_runtime(solution_folder, runtime_rows)
   pd.DataFrame(stats_rows).to_csv(os.path.join(solution_folder, "frankwolfe_stats.csv"), index=False)
   if refinement_history:
     pd.DataFrame(refinement_history).to_csv(os.path.join(solution_folder, "refinement.csv"), index=False)

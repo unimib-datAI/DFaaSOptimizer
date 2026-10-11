@@ -69,6 +69,7 @@ import argparse
 import json
 import sys
 import os
+from utils import step_time
 
 
 _NEG_INF = -1e18
@@ -198,25 +199,30 @@ def relaxed_flows(
   senders = np.argwhere(omega > 0)
   scale = max(1.0, float((gains.max(axis=1, initial=0.0) * omega).sum()))
   for t in range(int(options["iterations"])):
-    kappa_t = kappa * growth ** t
-    ell = base_load + q.sum(axis=0)
-    excess, slope = _excess_and_slope(ell - cap, delta)
-    needed = (unit_rep * excess).sum(axis=1)
-    violation = np.maximum(0.0, needed - rho / m_ref)
-    price = kappa_t * violation[:, None] * unit_rep * slope
-    adjusted = np.where(mask, gains - price[None, :, :], _NEG_INF)
-    best = adjusted.argmax(axis=1)
-    s = np.zeros_like(q)
-    for i, f in senders:
-      j = int(best[i, f])
-      if adjusted[i, j, f] > 0:
-        s[i, j, f] = omega[i, f]
-    gap = float(np.where(mask, adjusted * (s - q), 0.0).sum())
-    n_iter = t + 1
-    if gap <= tol * scale and t > 0:
+    # one iteration: every node computes its own rows (vectorized here)
+    with step_time.parallel_phase() as phase:
+      phase.uniform(Nn)
+      kappa_t = kappa * growth ** t
+      ell = base_load + q.sum(axis=0)
+      excess, slope = _excess_and_slope(ell - cap, delta)
+      needed = (unit_rep * excess).sum(axis=1)
+      violation = np.maximum(0.0, needed - rho / m_ref)
+      price = kappa_t * violation[:, None] * unit_rep * slope
+      adjusted = np.where(mask, gains - price[None, :, :], _NEG_INF)
+      best = adjusted.argmax(axis=1)
+      s = np.zeros_like(q)
+      for i, f in senders:
+        j = int(best[i, f])
+        if adjusted[i, j, f] > 0:
+          s[i, j, f] = omega[i, f]
+      gap = float(np.where(mask, adjusted * (s - q), 0.0).sum())
+      n_iter = t + 1
+      converged = gap <= tol * scale and t > 0
+      if not converged:
+        step = 2.0 / (t + 2.0)
+        q = (1.0 - step) * q + step * s
+    if converged:
       break
-    step = 2.0 / (t + 2.0)
-    q = (1.0 - step) * q + step * s
   ell = base_load + q.sum(axis=0)
   # report the violation of the exact (unsmoothed) relaxed memory constraint
   excess, _ = _excess_and_slope(ell - cap, 0.0)
@@ -236,6 +242,7 @@ def relaxed_flows(
   return q, stats
 
 
+@step_time.parallel
 def round_flows(
     q: np.ndarray,
     rng: np.random.Generator,
@@ -264,7 +271,7 @@ def round_flows(
     return q.copy()
   y = np.zeros_like(q)
   Nn, _, Nf = q.shape
-  for i in range(Nn):
+  for i in step_time.timed(range(Nn)):
     for f in range(Nf):
       v = q[i, :, f]
       if v.sum() <= tolerance:
@@ -287,7 +294,7 @@ def round_flows(
     # never forward more than the sender's (integer) residual demand: drop the
     # surplus from the receivers that were rounded up the most
     cap = np.floor(np.asarray(limit, dtype=float) + tolerance)
-    for i, f in np.argwhere(y.sum(axis=1) > cap + tolerance):
+    for i, f in step_time.timed(np.argwhere(y.sum(axis=1) > cap + tolerance), key=lambda item: int(item[0])):
       surplus = int(round(y[i, :, f].sum() - cap[i, f]))
       for j in np.argsort(-(y[i, :, f] - q[i, :, f]), kind="stable"):
         if surplus <= 0:
@@ -309,6 +316,7 @@ def _extra_memory(params, n, load, replicas, tol):
   return float((np.maximum(0.0, need - replicas[n]) * params["memory_requirement"]).sum())
 
 
+@step_time.parallel
 def repair_memory(
     y: np.ndarray,
     params: dict,
@@ -347,7 +355,7 @@ def repair_memory(
   Nn, Nf = params["Nn"], params["Nf"]
   ram = params["memory_requirement"]
   umax = params["max_utilization"]
-  for n in range(Nn):
+  for n in step_time.timed(range(Nn)):
     if not (y[:, n, :] - protected[:, n, :] > tol).any():
       continue
     guard = 0
@@ -430,10 +438,12 @@ def frankwolfe_assignments(
   if params is None:
     params = fw_parameters(data)
   omega = np.asarray(omega, dtype=float)
-  forbidden = ping_pong_forbidden_hosts(omega, y_prev, tolerance)
-  gains, mask = fw_gains_and_mask(
-    params, omega, neighborhood, forbidden, latency, fairness, options
-  )
+  with step_time.parallel_phase() as phase:  # each sender computes its own gains (vectorized)
+    phase.uniform(params["Nn"])
+    forbidden = ping_pong_forbidden_hosts(omega, y_prev, tolerance)
+    gains, mask = fw_gains_and_mask(
+      params, omega, neighborhood, forbidden, latency, fairness, options
+    )
   base_load = sp_x + y_prev.sum(axis=0)
   q, stats = relaxed_flows(
     params, omega, base_load, sp_r, sp_rho, gains, mask, options
@@ -537,7 +547,7 @@ def run(
   general_solver_options = solver_options.get("general", {})
   fw_options = frankwolfe_options(solver_options)
   rng = np.random.default_rng(seed)
-  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  time_limit = step_time.algorithm_time_limit(config)
   tolerance = config.get("tolerance", 1e-6)
   max_iterations = config["max_iterations"]
   max_steps = config["max_steps"]
@@ -575,13 +585,13 @@ def run(
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
   stats_rows = []
-  runtime_list = []
+  runtime_rows = []
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
-    total_runtime = 0
+    clock = step_time.start_step()
     ss = datetime.now()
     sp_data = deepcopy(data)
     if opt_solution is not None:
@@ -599,7 +609,6 @@ def run(
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism
     )
-    total_runtime += sp_runtime["tot"]
     it = 0
     stop_searching = False
     why_stop_searching = "max iterations"
@@ -613,22 +622,23 @@ def run(
     y = np.zeros((Nn, Nn, Nf))
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn, Nf))
-    fw_params = fw_parameters(sp_data)
-    # the local solution without any forwarding is a valid fallback: a bad
-    # first round can then never make the method worse than no coordination
-    csol = combine_solutions(
-      Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
-      None, y, None, None, None, None
-    )
-    feas = check_feasibility(
-      csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-      csol["sp"]["r"], csol["sp"]["U"], sp_data
-    )
-    if feas[0]:
-      best_centralized_cost = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+    with step_time.untimed():
+      fw_params = fw_parameters(sp_data)
+      # the local solution without any forwarding is a valid fallback: a bad
+      # first round can then never make the method worse than no coordination
+      csol = combine_solutions(
+        Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
+        None, y, None, None, None, None
       )
-      best_centralized_solution = deepcopy(csol)
+      feas = check_feasibility(
+        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+        csol["sp"]["r"], csol["sp"]["U"], sp_data
+      )
+      if feas[0]:
+        best_centralized_cost = compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        )
+        best_centralized_solution = deepcopy(csol)
     while not stop_searching:
       coordination_rho = (
         sp_rho if opt_solution is None else np.zeros_like(sp_rho)
@@ -639,11 +649,9 @@ def run(
         latency, fairness, fw_options, rng, tolerance=tolerance,
         params=fw_params,
       )
-      # every node runs its own share of each iteration in parallel; the
-      # simulation runs them in sequence, so charge the per-node average
-      # (as the other decentralized methods do).  Communication is one
+      # every node runs its own share of each iteration in parallel: the
+      # phases inside frankwolfe_assignments model it.  Communication is one
       # one-hop price exchange per Frank-Wolfe iteration (fw_stats).
-      total_runtime += (datetime.now() - s).total_seconds() / Nn
       fw_stats.pop("price", None)
       fw_stats.update({"t": t, "round": it})
       stats_rows.append(fw_stats)
@@ -653,37 +661,39 @@ def run(
         y[np.abs(y) < tolerance] = 0.0
         rmp_omega = y.sum(axis=1)
         fairness += (rmp_omega > tolerance)
-        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
-        if bad_nodes:
-          raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
+        with step_time.untimed():
+          bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+          if bad_nodes:
+            raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism
         )
-        total_runtime += spr_runtime
         sp_x, _, _, _, sp_r, sp_rho = spr_sol
         omega = sp_omega - rmp_omega
         omega[np.abs(omega) < tolerance] = 0.0
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None
-      )
-      cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-      )
-      feas = check_feasibility(
-        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-        csol["sp"]["r"], csol["sp"]["U"], sp_data
-      )
-      assert feas[0], feas[1]
-      if spr_obj < best_cost_so_far or it == 0:
-        best_cost_so_far = spr_obj
-        best_solution_so_far = deepcopy(csol)
-        best_it_so_far = it
-      if cobj > best_centralized_cost:
-        best_centralized_cost = cobj
-        best_centralized_solution = deepcopy(csol)
-        best_centralized_it = it
+      with step_time.untimed():
+        csol = combine_solutions(
+          Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
+          None, y, None, None, None, None
+        )
+        cobj = compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        )
+        feas = check_feasibility(
+          csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+          csol["sp"]["r"], csol["sp"]["U"], sp_data
+        )
+        assert feas[0], feas[1]
+        if spr_obj < best_cost_so_far or it == 0:
+          best_cost_so_far = spr_obj
+          best_solution_so_far = deepcopy(csol)
+          best_it_so_far = it
+        if cobj > best_centralized_cost:
+          best_centralized_cost = cobj
+          best_centralized_solution = deepcopy(csol)
+          best_centralized_it = it
+      total_runtime = step_time.current_modelled()
       if it + 1 >= max_iterations:
         stop_searching, why_stop_searching = True, "max iterations"
       elif fw_options["max_rounds"] and it + 1 >= fw_options["max_rounds"]:
@@ -693,10 +703,11 @@ def run(
       elif y_new.sum() <= tolerance:
         stop_searching, why_stop_searching = True, "no more assignments"
       elif total_runtime > time_limit:
-        stop_searching, why_stop_searching = True, "time limit"
+        stop_searching, why_stop_searching = True, f"reached time limit: {total_runtime} > {time_limit}"
       if not stop_searching:
         it += 1
       else:
+        runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
         sp_complete_solution, _, objf = decode_solutions(
           sp_data, best_solution_so_far, sp_complete_solution, None
         )
@@ -717,7 +728,6 @@ def run(
           save_checkpoint(
             spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
           )
-    runtime_list.append(total_runtime)
     if verbose > 0:
       print(
         f"    TOTAL RUNTIME [s] = {total_runtime} "
@@ -751,9 +761,7 @@ def run(
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
   )
-  pd.DataFrame({"tot": runtime_list}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   pd.DataFrame(stats_rows).to_csv(
     os.path.join(solution_folder, "frankwolfe_stats.csv"), index=False
   )
