@@ -115,6 +115,19 @@ modelled = (wall since step start) − Σ untimed_wall − Σ phase_wall + Σ lo
 - Results do not depend on the number of workers (same decisions, same
   welfare); only the simulation's wall time changes.
 
+## PLASMA negotiation order
+
+PLASMA and PLASMA-Welfare drop predefined turns (today: a fixed rotation
+starting at node `round mod N`): nodes negotiate in order of arrival, with
+the arrival order of each round a random permutation drawn from the run's
+seeded generator (asynchrony without a fixed rule, reproducible for a given
+seed on any machine and with any number of workers). Nodes that share no
+participant (a node and its neighbours) negotiate in the same parallel phase;
+nodes competing for the same resource keep their arrival order (successive
+phases). This is a deliberate change of the protocol: PLASMA results differ
+from the previous runs, and the regression reference for the two PLASMA
+methods is recaptured after the change.
+
 ## DP
 
 All local problems of the harmonized methods are solved by DP (`try_solve_local`).

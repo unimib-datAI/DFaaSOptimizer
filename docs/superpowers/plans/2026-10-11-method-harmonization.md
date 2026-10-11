@@ -15,7 +15,7 @@
 - Work in `~/Downloads/DFaaSOptimizer/.worktrees/feat-frank-wolfe` (branch `feat/frank-wolfe-relaxed-replicas`).
 - This repository's `CLAUDE.md` applies: before editing a function run GitNexus impact (`npx gitnexus impact <symbol>`, or the MCP tool) and report direct callers and risk; stop and tell the user on HIGH/CRITICAL; run `npx gitnexus detect_changes` (or `git diff --stat` if unavailable) before each commit.
 - Indentation 2 spaces (repository style). No new dependencies.
-- Decisions must not change: same welfare per step as before for every harmonized method on the regression instances (Task 0 baseline), with any number of workers. Only timing outputs and the time-budget key change.
+- Decisions must not change: same welfare per step as before for every harmonized method on the regression instances (Task 0 baseline), with any number of workers. Only timing outputs and the time-budget key change. Exception: PLASMA and PLASMA-Welfare switch to a seeded arrival order (spec), and their reference is recaptured in Task 7.
 - `algorithm_s` = modelled time; `wall_s` = wall time of the step decision. Formula: `modelled = wall − Σ untimed − Σ phase_wall + Σ longest_task`.
 - Time budget key: `solver_options.general.algorithm_time_limit` (seconds per step, modelled; default unlimited). `TimeLimit` is no longer read by harmonized runners as an algorithm budget.
 - `parallelism`: −1 = all cores (CLI default of every harmonized runner), 0 = in-process, k = k workers.
@@ -27,7 +27,7 @@
 - A parallel phase opened inside another one (double instrumentation of a helper called from an instrumented helper) must raise, not silently mis-time (Task 1 test `test_nested_phase_raises`; Task 9 contract run catches real nestings).
 - Observer code that stays timed inflates `algorithm_s` without any test failing; the contract test checks `algorithm_s ≤ wall_s` but not this. Task 9 adds `test_observer_time_is_excluded` on MADEA with an artificially slow `check_feasibility`.
 - A method whose time-based stop still reads `TimeLimit` or wall time keeps machine-dependent results (Task 9 `test_algorithm_time_limit_stops_every_iterative_method`).
-- Results depending on the number of workers (PLASMA in-process path uses a different turn order than the pool path today) (Task 9 contract compares welfare for 0 and 2 workers).
+- Results depending on the number of workers or on the machine (PLASMA arrival order must come from the seeded generator, never from timing or global random state) (Task 7 test `test_plasma_arrival_order_is_seeded_and_worker_independent`, Task 9 contract).
 - `runtime.csv` readers still expecting `tot` break silently in reports (Task 8 tests `benchmark_summary` and `families_extended` on a new-format folder).
 
 ---
@@ -837,35 +837,67 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Run: `npx gitnexus impact run_rounds; npx gitnexus impact _parallel_round; npx gitnexus impact PlasmaEngine; npx gitnexus impact run --file plasma/runner.py`
 Stop on HIGH/CRITICAL.
 
-- [ ] **Step 2: One turn order for both execution modes**
+- [ ] **Step 2: Arrival order instead of turns, the same for both execution modes**
 
-Today PLASMA-Welfare negotiates in conflict-free batches on the pool (`_negotiation_batches`, which keeps the original order for every pair sharing a participant) but in strict sequential turns in-process, and computes initial plans in `start_window(initialize=True)` in-process but on the pool otherwise. Make both modes use the same structure, so decisions and modelled time do not depend on `parallelism`:
+Today PLASMA-Welfare negotiates in a fixed rotation (`i = (round_ + offset) % count`), in strict sequence in-process and in conflict-free batches on the pool, and computes initial plans in `start_window(initialize=True)` in-process but on the pool otherwise. Replace the rotation by a seeded arrival order (spec: PLASMA negotiation order) and use one structure for both modes:
 
-- initial plans: always computed per alive node as one parallel phase — on the pool (`pool.map(_solve_plan, ...)`) when a pool exists, otherwise by calling `_solve_plan(_plan_job(node, ()))` per node inside `with step_time.task(i):`; then `start_window(load, round, initialize=False)` in both modes;
-- negotiation: `on_round` always iterates `self._negotiation_batches(round_)`; each batch is one parallel phase; for each node of the batch the offers + plan + accept work is the node's task (`with step_time.task(i):`; pool plans are recorded with `step_time.record(i, seconds)` measured inside a wrapper of `_solve_plan` that returns `(plan, seconds)`);
+- arrival order: at the start of each round `order = [int(i) for i in self.rng.permutation(len(self.nodes))]` (`self.rng` is the engine's seeded generator, created in `plasma/runner.run` from the run seed; if the engine stores it under another name, use that one — never `np.random` global state);
+- `_negotiation_batches(self, order)` takes that order instead of `round_` and keeps its rule: a node joins the first batch after every batch that holds one of its participants (itself and its neighbours), so competing nodes keep their arrival order;
+- initial plans: always computed per alive node as one parallel phase — on the pool (`pool.map(_solve_plan, ...)`) when a pool exists, otherwise `_solve_plan(_plan_job(node, ()))` per node inside `with step_time.task(i):`; then `start_window(load, round, initialize=False)` in both modes;
+- negotiation: `on_round` always iterates the batches of the round; each batch is one parallel phase; each node's offers + plan + accept work is its task (`with step_time.task(i):`; pool plans recorded with `step_time.record(i, seconds)` measured by a wrapper of `_solve_plan` that returns `(plan, seconds)`);
 - heartbeats (`_send_heartbeats`): one parallel phase, task per sending node.
 
-Verify on the regression instances that PLASMA-Welfare's welfare with `parallelism=0` equals the baseline captured in Task 0 (which used `parallelism=0`, i.e. the old sequential turns). If it differs, the batch order is not equivalent to the sequential order on these instances: stop and report to the user with both values before going on (deciding which order is the algorithm is the user's call).
+Add a test to `tests/test_step_time.py`:
+
+```python
+def test_plasma_arrival_order_is_seeded_and_worker_independent(tmp_path):
+  import sys
+  sys.path.insert(0, "experiments/harmonization")
+  from capture_baseline import DATA, welfare
+  from plasma import welfare as plasma_welfare
+  instance = sorted(p for p in DATA.iterdir() if (p / "metadata.json").exists())[0]
+  first = welfare(plasma_welfare.run, instance, 0)
+  assert welfare(plasma_welfare.run, instance, 0) == first   # same seed, same result
+  assert welfare(plasma_welfare.run, instance, 2) == first   # pool or not, same result
+```
 
 - [ ] **Step 3: Plain PLASMA**
 
-In the base `PlasmaEngine` round loop (sequential turns, single process by design: "The original PLASMA stays single-process"): per round, the nodes' local work that the protocol performs simultaneously (each node's turn computations that do not depend on another node's turn in the same round, and heartbeats) becomes a phase with one task per node, using the same `_negotiation_batches` rule (pairs sharing a participant keep their order: separate batches). No pool is added to plain PLASMA (its local work is tiny); only its time is modelled.
+In the base `PlasmaEngine` round loop apply the same arrival order (seeded permutation per round) and the same batch rule; each batch is a parallel phase with one task per node, heartbeats one phase. No pool is added to plain PLASMA (its local work is tiny; "The original PLASMA stays single-process"); only its order and its time change. `WelfareEngine` reuses the base implementation of the order and of `_negotiation_batches`.
 
 - [ ] **Step 4: Runner loop**
 
 In `plasma/runner.run`: `clock = step_time.start_step()` right before `engine.run_rounds(...)`; `runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))` right after it (instead of `elapsed`/`runtime_list`, l.120-140); the feasibility check, `decode_solution`, objective and message rows after it are observer code (they run after `end_step`, so outside the clock); `step_time.write_runtime(solution_folder, runtime_rows)` instead of the `tot` CSV (l.163); CLI `--parallelism` default `-1` in `plasma/cli.py`.
 
-- [ ] **Step 5: Regression**
+- [ ] **Step 5: New reference for PLASMA (deliberate protocol change)**
 
-Run the Task 3 Step 6 script with `["PLASMA", "PLASMA-Welfare"]`.
-Expected: `ok` for both (equal welfare with 0 and 2 workers).
+Recapture the two PLASMA entries of the baseline and check worker independence:
+
+```bash
+uv run python - <<'PY'
+import json, sys
+sys.path[:0] = ["experiments/harmonization", "."]
+from capture_baseline import runners, welfare, DATA
+base = json.load(open("tests/data/harmonization/baseline.json"))
+old = {k: base[k] for k in ("PLASMA", "PLASMA-Welfare")}
+for name in old:
+  for inst in sorted(p for p in DATA.iterdir() if (p / "metadata.json").exists()):
+    w0, w2 = welfare(runners()[name], inst, 0), welfare(runners()[name], inst, 2)
+    assert w0 == w2, (name, inst.name, w0, w2)
+    base[name][inst.name] = w0
+json.dump(base, open("tests/data/harmonization/baseline.json", "w"), indent=1)
+print("before", old); print("after ", {k: base[k] for k in old})
+PY
+```
+
+Expected: equal welfare with 0 and 2 workers; report the before/after values to the user in the task summary.
 
 - [ ] **Step 6: Commit**
 
 ```bash
 npx gitnexus detect_changes 2>/dev/null || git diff --stat
-git add plasma
-git commit -m "PLASMA on the step clock; one negotiation order for pool and in-process runs
+git add plasma tests/test_step_time.py tests/data/harmonization/baseline.json
+git commit -m "PLASMA: seeded arrival order instead of fixed turns, on the step clock
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
