@@ -1,0 +1,935 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "source": "\u010cili\u0107 et al. IEEE TSC 2026, github.com/AIoTwin/qedgeproxy (tsc-paper)",
+    "rule": "delaunay",
+    "name": "cilic-europe30-v1-delaunay",
+    "family": "cilic-europe30",
+    "nodes": 30,
+    "edges": 81,
+    "planar": true
+  },
+  "nodes": [
+    {
+      "pos": [
+        -111.36755710336895,
+        -1264.366746945572
+      ],
+      "city": "palermo",
+      "country": "Italy",
+      "id": 0
+    },
+    {
+      "pos": [
+        1111.7905073845711,
+        1163.3854449630724
+      ],
+      "city": "stpetersburg",
+      "country": "Russia",
+      "id": 1
+    },
+    {
+      "pos": [
+        -758.8865594055069,
+        192.58701840008752
+      ],
+      "city": "antwerp",
+      "country": "Belgium",
+      "id": 2
+    },
+    {
+      "pos": [
+        -1740.241689977826,
+        -1199.5067462338009
+      ],
+      "city": "lisbon",
+      "country": "Portugal",
+      "id": 3
+    },
+    {
+      "pos": [
+        -728.6494546595535,
+        324.5086793711919
+      ],
+      "city": "westpoort",
+      "country": "Netherlands",
+      "id": 4
+    },
+    {
+      "pos": [
+        8458.446249965324,
+        -702.0540029040391
+      ],
+      "city": "vladivostok",
+      "country": "Russia",
+      "id": 5
+    },
+    {
+      "pos": [
+        -602.557982981254,
+        414.67664538726495
+      ],
+      "city": "groningen",
+      "country": "Netherlands",
+      "id": 6
+    },
+    {
+      "pos": [
+        -586.9121232393203,
+        194.13262788044685
+      ],
+      "city": "dusseldorf",
+      "country": "Germany",
+      "id": 7
+    },
+    {
+      "pos": [
+        -169.01019825786193,
+        688.027133557583
+      ],
+      "city": "copenhagen",
+      "country": "Denmark",
+      "id": 8
+    },
+    {
+      "pos": [
+        -35.52197663693075,
+        66.25846223920445
+      ],
+      "city": "prague",
+      "country": "Czech Republic",
+      "id": 9
+    },
+    {
+      "pos": [
+        -1191.264155173131,
+        611.1136027975421
+      ],
+      "city": "newcastle",
+      "country": "United Kingdom",
+      "id": 10
+    },
+    {
+      "pos": [
+        -241.3885521886914,
+        -150.57164471768542
+      ],
+      "city": "munich",
+      "country": "Germany",
+      "id": 11
+    },
+    {
+      "pos": [
+        505.02586365306587,
+        -688.0100836688313
+      ],
+      "city": "nis",
+      "country": "Serbia",
+      "id": 12
+    },
+    {
+      "pos": [
+        1016.0372678928467,
+        -942.3351198902659
+      ],
+      "city": "istanbul",
+      "country": "Turkey",
+      "id": 13
+    },
+    {
+      "pos": [
+        -1038.6845174405053,
+        198.4358715415911
+      ],
+      "city": "maidstone",
+      "country": "United Kingdom",
+      "id": 14
+    },
+    {
+      "pos": [
+        229.81475738913323,
+        1093.3326411770001
+      ],
+      "city": "stockholm",
+      "country": "Sweden",
+      "id": 15
+    },
+    {
+      "pos": [
+        -847.0696876278188,
+        133.72042423445782
+      ],
+      "city": "roubaix",
+      "country": "France",
+      "id": 16
+    },
+    {
+      "pos": [
+        -28.905352664811033,
+        -381.60134380708513
+      ],
+      "city": "ljubljana",
+      "country": "Slovenia",
+      "id": 17
+    },
+    {
+      "pos": [
+        -528.7421747158701,
+        -214.3641741336682
+      ],
+      "city": "basel",
+      "country": "Switzerland",
+      "id": 18
+    },
+    {
+      "pos": [
+        452.05675493302857,
+        -758.4298307128302
+      ],
+      "city": "pristina",
+      "country": "Kosovo",
+      "id": 19
+    },
+    {
+      "pos": [
+        -212.49499772528648,
+        913.1968600128151
+      ],
+      "city": "gothenburg",
+      "country": "Sweden",
+      "id": 20
+    },
+    {
+      "pos": [
+        -1505.2431881383375,
+        568.1590026347492
+      ],
+      "city": "belfast",
+      "country": "United Kingdom",
+      "id": 21
+    },
+    {
+      "pos": [
+        -171.5672778278732,
+        -424.84505077915395
+      ],
+      "city": "venice",
+      "country": "Italy",
+      "id": 22
+    },
+    {
+      "pos": [
+        1127.9203341637667,
+        107.03364183976431
+      ],
+      "city": "kiev",
+      "country": "Ukraine",
+      "id": 23
+    },
+    {
+      "pos": [
+        159.00387878794342,
+        -149.39297849525266
+      ],
+      "city": "bratislava",
+      "country": "Slovakia",
+      "id": 24
+    },
+    {
+      "pos": [
+        -1342.9553161060073,
+        -1010.4753709380515
+      ],
+      "city": "madrid",
+      "country": "Spain",
+      "id": 25
+    },
+    {
+      "pos": [
+        711.2463852470032,
+        1105.9977433218155
+      ],
+      "city": "tallinn",
+      "country": "Estonia",
+      "id": 26
+    },
+    {
+      "pos": [
+        -765.0842268379072,
+        288.6483155283219
+      ],
+      "city": "thehague",
+      "country": "Netherlands",
+      "id": 27
+    },
+    {
+      "pos": [
+        -412.95125520377456,
+        -447.384262410006
+      ],
+      "city": "milan",
+      "country": "Italy",
+      "id": 28
+    },
+    {
+      "pos": [
+        -751.843755505052,
+        270.12324074933815
+      ],
+      "city": "rotterdam",
+      "country": "Netherlands",
+      "id": 29
+    }
+  ],
+  "edges": [
+    {
+      "rtt_ms": 82.908,
+      "network_latency": 0.082908,
+      "edge_length": 1630.1649488440871,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 3
+    },
+    {
+      "rtt_ms": 186.60750000000002,
+      "network_latency": 0.1866075,
+      "edge_length": 8588.242213045503,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 5
+    },
+    {
+      "rtt_ms": 40.6345,
+      "network_latency": 0.040634500000000004,
+      "edge_length": 1172.4956325072753,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 13
+    },
+    {
+      "rtt_ms": 74.9405,
+      "network_latency": 0.0749405,
+      "edge_length": 757.2444246085832,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 19
+    },
+    {
+      "rtt_ms": 48.659,
+      "network_latency": 0.048659,
+      "edge_length": 841.6773043806323,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 22
+    },
+    {
+      "rtt_ms": 62.144999999999996,
+      "network_latency": 0.062145,
+      "edge_length": 1257.4852837851158,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 25
+    },
+    {
+      "rtt_ms": 24.6875,
+      "network_latency": 0.0246875,
+      "edge_length": 870.8691675549337,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 28
+    },
+    {
+      "rtt_ms": 117.4935,
+      "network_latency": 0.1174935,
+      "edge_length": 7579.789900363565,
+      "edge_bandwidth": 100,
+      "source": 1,
+      "target": 5
+    },
+    {
+      "rtt_ms": 12.6135,
+      "network_latency": 0.0126135,
+      "edge_length": 884.7534226541908,
+      "edge_bandwidth": 100,
+      "source": 1,
+      "target": 15
+    },
+    {
+      "rtt_ms": 68.82,
+      "network_latency": 0.06881999999999999,
+      "edge_length": 1056.4749420946011,
+      "edge_bandwidth": 100,
+      "source": 1,
+      "target": 23
+    },
+    {
+      "rtt_ms": 23.235,
+      "network_latency": 0.023235,
+      "edge_length": 404.6343313148562,
+      "edge_bandwidth": 100,
+      "source": 1,
+      "target": 26
+    },
+    {
+      "rtt_ms": 12.0355,
+      "network_latency": 0.012035500000000001,
+      "edge_length": 171.98138156016645,
+      "edge_bandwidth": 100,
+      "source": 2,
+      "target": 7
+    },
+    {
+      "rtt_ms": 37.135999999999996,
+      "network_latency": 0.037135999999999995,
+      "edge_length": 106.02612891044191,
+      "edge_bandwidth": 100,
+      "source": 2,
+      "target": 16
+    },
+    {
+      "rtt_ms": 19.992,
+      "network_latency": 0.019992,
+      "edge_length": 467.5208133429114,
+      "edge_bandwidth": 100,
+      "source": 2,
+      "target": 18
+    },
+    {
+      "rtt_ms": 12.25,
+      "network_latency": 0.01225,
+      "edge_length": 96.2610195643157,
+      "edge_bandwidth": 100,
+      "source": 2,
+      "target": 27
+    },
+    {
+      "rtt_ms": 11.764,
+      "network_latency": 0.011764,
+      "edge_length": 77.85542282315791,
+      "edge_bandwidth": 100,
+      "source": 2,
+      "target": 29
+    },
+    {
+      "rtt_ms": 45.683499999999995,
+      "network_latency": 0.045683499999999995,
+      "edge_length": 1783.218016841972,
+      "edge_bandwidth": 100,
+      "source": 3,
+      "target": 21
+    },
+    {
+      "rtt_ms": 40.552,
+      "network_latency": 0.040552,
+      "edge_length": 439.9651391990289,
+      "edge_bandwidth": 100,
+      "source": 3,
+      "target": 25
+    },
+    {
+      "rtt_ms": 4.5435,
+      "network_latency": 0.0045435,
+      "edge_length": 155.01393913282482,
+      "edge_bandwidth": 100,
+      "source": 4,
+      "target": 6
+    },
+    {
+      "rtt_ms": 4.802,
+      "network_latency": 0.004802,
+      "edge_length": 192.58085553981326,
+      "edge_bandwidth": 100,
+      "source": 4,
+      "target": 7
+    },
+    {
+      "rtt_ms": 15.3065,
+      "network_latency": 0.015306499999999999,
+      "edge_length": 544.2010136553322,
+      "edge_bandwidth": 100,
+      "source": 4,
+      "target": 10
+    },
+    {
+      "rtt_ms": 2.8215,
+      "network_latency": 0.0028215,
+      "edge_length": 51.121994470399436,
+      "edge_bandwidth": 100,
+      "source": 4,
+      "target": 27
+    },
+    {
+      "rtt_ms": 2.6375,
+      "network_latency": 0.0026375,
+      "edge_length": 59.12488076776906,
+      "edge_bandwidth": 100,
+      "source": 4,
+      "target": 29
+    },
+    {
+      "rtt_ms": 183.345,
+      "network_latency": 0.183345,
+      "edge_length": 7446.286757277968,
+      "edge_bandwidth": 100,
+      "source": 5,
+      "target": 13
+    },
+    {
+      "rtt_ms": 109.1125,
+      "network_latency": 0.1091125,
+      "edge_length": 7375.041221519737,
+      "edge_bandwidth": 100,
+      "source": 5,
+      "target": 23
+    },
+    {
+      "rtt_ms": 12.5135,
+      "network_latency": 0.0125135,
+      "edge_length": 221.09829620580967,
+      "edge_bandwidth": 100,
+      "source": 6,
+      "target": 7
+    },
+    {
+      "rtt_ms": 16.451999999999998,
+      "network_latency": 0.016451999999999998,
+      "edge_length": 512.527239297105,
+      "edge_bandwidth": 100,
+      "source": 6,
+      "target": 8
+    },
+    {
+      "rtt_ms": 26.222,
+      "network_latency": 0.026222000000000002,
+      "edge_length": 665.5261548873303,
+      "edge_bandwidth": 100,
+      "source": 6,
+      "target": 9
+    },
+    {
+      "rtt_ms": 22.253500000000003,
+      "network_latency": 0.022253500000000002,
+      "edge_length": 620.6145626823617,
+      "edge_bandwidth": 100,
+      "source": 6,
+      "target": 10
+    },
+    {
+      "rtt_ms": 32.658,
+      "network_latency": 0.032658,
+      "edge_length": 632.9862058979656,
+      "edge_bandwidth": 100,
+      "source": 6,
+      "target": 20
+    },
+    {
+      "rtt_ms": 18.491,
+      "network_latency": 0.018491,
+      "edge_length": 566.0237592262789,
+      "edge_bandwidth": 100,
+      "source": 7,
+      "target": 9
+    },
+    {
+      "rtt_ms": 17.7785,
+      "network_latency": 0.017778500000000003,
+      "edge_length": 488.06513264008777,
+      "edge_bandwidth": 100,
+      "source": 7,
+      "target": 11
+    },
+    {
+      "rtt_ms": 19.8575,
+      "network_latency": 0.0198575,
+      "edge_length": 412.61771673909004,
+      "edge_bandwidth": 100,
+      "source": 7,
+      "target": 18
+    },
+    {
+      "rtt_ms": 6.116,
+      "network_latency": 0.006116,
+      "edge_length": 181.5957504074042,
+      "edge_bandwidth": 100,
+      "source": 7,
+      "target": 29
+    },
+    {
+      "rtt_ms": 20.000999999999998,
+      "network_latency": 0.020000999999999998,
+      "edge_length": 635.9366210122994,
+      "edge_bandwidth": 100,
+      "source": 8,
+      "target": 9
+    },
+    {
+      "rtt_ms": 10.363,
+      "network_latency": 0.010362999999999999,
+      "edge_length": 568.6245683695535,
+      "edge_bandwidth": 100,
+      "source": 8,
+      "target": 15
+    },
+    {
+      "rtt_ms": 17.1845,
+      "network_latency": 0.0171845,
+      "edge_length": 229.33018444296897,
+      "edge_bandwidth": 100,
+      "source": 8,
+      "target": 20
+    },
+    {
+      "rtt_ms": 15.306000000000001,
+      "network_latency": 0.015306,
+      "edge_length": 298.9922109559797,
+      "edge_bandwidth": 100,
+      "source": 9,
+      "target": 11
+    },
+    {
+      "rtt_ms": 36.084,
+      "network_latency": 0.036084000000000005,
+      "edge_length": 1060.7944906834525,
+      "edge_bandwidth": 100,
+      "source": 9,
+      "target": 15
+    },
+    {
+      "rtt_ms": 26.183999999999997,
+      "network_latency": 0.026184,
+      "edge_length": 1164.156615680521,
+      "edge_bandwidth": 100,
+      "source": 9,
+      "target": 23
+    },
+    {
+      "rtt_ms": 0.9295,
+      "network_latency": 0.0009295,
+      "edge_length": 290.42357397364646,
+      "edge_bandwidth": 100,
+      "source": 9,
+      "target": 24
+    },
+    {
+      "rtt_ms": 45.563500000000005,
+      "network_latency": 0.04556350000000001,
+      "edge_length": 1280.1252903278646,
+      "edge_bandwidth": 100,
+      "source": 9,
+      "target": 26
+    },
+    {
+      "rtt_ms": 11.072,
+      "network_latency": 0.011071999999999999,
+      "edge_length": 439.98119928603563,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 14
+    },
+    {
+      "rtt_ms": 47.79,
+      "network_latency": 0.04779,
+      "edge_length": 1024.3258064995493,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 20
+    },
+    {
+      "rtt_ms": 9.589500000000001,
+      "network_latency": 0.0095895,
+      "edge_length": 316.90366172846853,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 21
+    },
+    {
+      "rtt_ms": 16.803,
+      "network_latency": 0.016803000000000002,
+      "edge_length": 534.4279117050654,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 27
+    },
+    {
+      "rtt_ms": 12.053,
+      "network_latency": 0.012053000000000001,
+      "edge_length": 313.8850616726507,
+      "edge_bandwidth": 100,
+      "source": 11,
+      "target": 17
+    },
+    {
+      "rtt_ms": 25.6035,
+      "network_latency": 0.0256035,
+      "edge_length": 294.34943721498996,
+      "edge_bandwidth": 100,
+      "source": 11,
+      "target": 18
+    },
+    {
+      "rtt_ms": 29.3275,
+      "network_latency": 0.0293275,
+      "edge_length": 283.0210444930339,
+      "edge_bandwidth": 100,
+      "source": 11,
+      "target": 22
+    },
+    {
+      "rtt_ms": 14.9405,
+      "network_latency": 0.0149405,
+      "edge_length": 400.39416583841876,
+      "edge_bandwidth": 100,
+      "source": 11,
+      "target": 24
+    },
+    {
+      "rtt_ms": 20.3915,
+      "network_latency": 0.0203915,
+      "edge_length": 342.8286614144291,
+      "edge_bandwidth": 100,
+      "source": 11,
+      "target": 28
+    },
+    {
+      "rtt_ms": 67.518,
+      "network_latency": 0.067518,
+      "edge_length": 570.8010855912476,
+      "edge_bandwidth": 100,
+      "source": 12,
+      "target": 13
+    },
+    {
+      "rtt_ms": 16.762,
+      "network_latency": 0.016762,
+      "edge_length": 615.604466863546,
+      "edge_bandwidth": 100,
+      "source": 12,
+      "target": 17
+    },
+    {
+      "rtt_ms": 11.989,
+      "network_latency": 0.011989000000000001,
+      "edge_length": 88.1173493265425,
+      "edge_bandwidth": 100,
+      "source": 12,
+      "target": 19
+    },
+    {
+      "rtt_ms": 63.076499999999996,
+      "network_latency": 0.0630765,
+      "edge_length": 1009.9960627959861,
+      "edge_bandwidth": 100,
+      "source": 12,
+      "target": 23
+    },
+    {
+      "rtt_ms": 15.842500000000001,
+      "network_latency": 0.015842500000000002,
+      "edge_length": 640.1871601301957,
+      "edge_bandwidth": 100,
+      "source": 12,
+      "target": 24
+    },
+    {
+      "rtt_ms": 70.2295,
+      "network_latency": 0.0702295,
+      "edge_length": 593.2075306213296,
+      "edge_bandwidth": 100,
+      "source": 13,
+      "target": 19
+    },
+    {
+      "rtt_ms": 64.14250000000001,
+      "network_latency": 0.06414250000000002,
+      "edge_length": 1055.3163594927353,
+      "edge_bandwidth": 100,
+      "source": 13,
+      "target": 23
+    },
+    {
+      "rtt_ms": 28.947000000000003,
+      "network_latency": 0.028947000000000004,
+      "edge_length": 202.24819436599958,
+      "edge_bandwidth": 100,
+      "source": 14,
+      "target": 16
+    },
+    {
+      "rtt_ms": 1.9935,
+      "network_latency": 0.0019935,
+      "edge_length": 595.2916821766089,
+      "edge_bandwidth": 100,
+      "source": 14,
+      "target": 21
+    },
+    {
+      "rtt_ms": 24.408,
+      "network_latency": 0.024408000000000003,
+      "edge_length": 1246.6142591492428,
+      "edge_bandwidth": 100,
+      "source": 14,
+      "target": 25
+    },
+    {
+      "rtt_ms": 9.85,
+      "network_latency": 0.00985,
+      "edge_length": 288.08922935070854,
+      "edge_bandwidth": 100,
+      "source": 14,
+      "target": 27
+    },
+    {
+      "rtt_ms": 8.3385,
+      "network_latency": 0.0083385,
+      "edge_length": 477.5843581243099,
+      "edge_bandwidth": 100,
+      "source": 15,
+      "target": 20
+    },
+    {
+      "rtt_ms": 26.779,
+      "network_latency": 0.026779,
+      "edge_length": 1812.797127358082,
+      "edge_bandwidth": 100,
+      "source": 15,
+      "target": 21
+    },
+    {
+      "rtt_ms": 6.537,
+      "network_latency": 0.006537,
+      "edge_length": 481.59819052215846,
+      "edge_bandwidth": 100,
+      "source": 15,
+      "target": 26
+    },
+    {
+      "rtt_ms": 53.8725,
+      "network_latency": 0.053872500000000004,
+      "edge_length": 471.69406727009664,
+      "edge_bandwidth": 100,
+      "source": 16,
+      "target": 18
+    },
+    {
+      "rtt_ms": 54.67,
+      "network_latency": 0.05467,
+      "edge_length": 1247.0311039511641,
+      "edge_bandwidth": 100,
+      "source": 16,
+      "target": 25
+    },
+    {
+      "rtt_ms": 32.988,
+      "network_latency": 0.032987999999999996,
+      "edge_length": 175.283391345836,
+      "edge_bandwidth": 100,
+      "source": 16,
+      "target": 27
+    },
+    {
+      "rtt_ms": 20.101999999999997,
+      "network_latency": 0.020102,
+      "edge_length": 611.0026656968274,
+      "edge_bandwidth": 100,
+      "source": 17,
+      "target": 19
+    },
+    {
+      "rtt_ms": 44.7475,
+      "network_latency": 0.0447475,
+      "edge_length": 149.07193929079108,
+      "edge_bandwidth": 100,
+      "source": 17,
+      "target": 22
+    },
+    {
+      "rtt_ms": 24.161499999999997,
+      "network_latency": 0.024161499999999995,
+      "edge_length": 298.7149212643357,
+      "edge_bandwidth": 100,
+      "source": 17,
+      "target": 24
+    },
+    {
+      "rtt_ms": 30.4925,
+      "network_latency": 0.0304925,
+      "edge_length": 1138.743200765521,
+      "edge_bandwidth": 100,
+      "source": 18,
+      "target": 25
+    },
+    {
+      "rtt_ms": 25.4805,
+      "network_latency": 0.0254805,
+      "edge_length": 260.2035714239311,
+      "edge_bandwidth": 100,
+      "source": 18,
+      "target": 28
+    },
+    {
+      "rtt_ms": 60.583,
+      "network_latency": 0.060583,
+      "edge_length": 707.2381067507388,
+      "edge_bandwidth": 100,
+      "source": 19,
+      "target": 22
+    },
+    {
+      "rtt_ms": 32.959,
+      "network_latency": 0.032959,
+      "edge_length": 1338.001871015233,
+      "edge_bandwidth": 100,
+      "source": 20,
+      "target": 21
+    },
+    {
+      "rtt_ms": 31.814,
+      "network_latency": 0.031814,
+      "edge_length": 1586.954264884269,
+      "edge_bandwidth": 100,
+      "source": 21,
+      "target": 25
+    },
+    {
+      "rtt_ms": 27.361,
+      "network_latency": 0.027361,
+      "edge_length": 242.43399224273398,
+      "edge_bandwidth": 100,
+      "source": 22,
+      "target": 28
+    },
+    {
+      "rtt_ms": 26.058999999999997,
+      "network_latency": 0.026059,
+      "edge_length": 1002.2742684088466,
+      "edge_bandwidth": 100,
+      "source": 23,
+      "target": 24
+    },
+    {
+      "rtt_ms": 39.1345,
+      "network_latency": 0.0391345,
+      "edge_length": 1082.3799960068236,
+      "edge_bandwidth": 100,
+      "source": 23,
+      "target": 26
+    },
+    {
+      "rtt_ms": 59.8635,
+      "network_latency": 0.0598635,
+      "edge_length": 1087.1886449912854,
+      "edge_bandwidth": 100,
+      "source": 25,
+      "target": 28
+    },
+    {
+      "rtt_ms": 3.6675,
+      "network_latency": 0.0036675,
+      "edge_length": 22.770342041416544,
+      "edge_bandwidth": 100,
+      "source": 27,
+      "target": 29
+    }
+  ]
+}

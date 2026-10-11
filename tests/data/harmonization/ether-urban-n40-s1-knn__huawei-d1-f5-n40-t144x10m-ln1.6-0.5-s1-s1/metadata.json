@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "instance_id": "instance-3d69838516a6c67c",
+  "suite": "edge-datasets",
+  "generation": {
+    "generation_seed": 1,
+    "limits": {
+      "instance_type": "random",
+      "Nn": {
+        "min": 40,
+        "max": 40
+      },
+      "Nf": {
+        "min": 5,
+        "max": 5
+      },
+      "demand": {
+        "min": 0.2,
+        "max": 0.5,
+        "speedup_factors": {
+          "4096": 0.5,
+          "8192": 1.0,
+          "16384": 1.2,
+          "24576": 1.4,
+          "32768": 1.4
+        },
+        "saturation": 1.16445064484127,
+        "device_scale": 0.5653928866840943
+      },
+      "memory_requirement": {
+        "values_from": [
+          128,
+          256,
+          512,
+          1024
+        ]
+      },
+      "memory_capacity": {
+        "repeated_values": [
+          [
+            0.125,
+            4096
+          ],
+          [
+            0.125,
+            8192
+          ],
+          [
+            0.375,
+            16384
+          ],
+          [
+            0.25,
+            24576
+          ],
+          [
+            0.125,
+            32768
+          ]
+        ],
+        "min": 4096,
+        "max": 4096
+      },
+      "neighborhood": {
+        "p": 1.0
+      },
+      "max_utilization": {
+        "min": 0.8,
+        "max": 0.8
+      },
+      "load": {
+        "trace_type": "load_existing",
+        "path": "docs/edge-datasets/catalog/ether-urban/traces/huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1"
+      },
+      "weights": {
+        "alpha": {
+          "min": 1,
+          "max": 10
+        },
+        "beta_multiplier": {
+          "min": 0.1,
+          "max": 0.9
+        },
+        "gamma": {
+          "min": 1,
+          "max": 1
+        },
+        "delta_multiplier": {
+          "min": 1.0,
+          "max": 1.0
+        },
+        "edge_network_latency": {
+          "min": 0.005,
+          "max": 1.0
+        },
+        "edge_bandwidth": {
+          "min": 100,
+          "max": 100
+        }
+      }
+    },
+    "max_steps": 144,
+    "min_run_time": 0,
+    "max_run_time": 144,
+    "run_time_step": 1,
+    "topology": {
+      "path": "docs/edge-datasets/catalog/ether-urban/topologies/ether-urban-n40-s1-knn.json",
+      "sha256": "703f79696a5be86d07718418ed4349999e0304aecbef7e940db6027fd7b03a09"
+    },
+    "traces": {
+      "path": "docs/edge-datasets/catalog/ether-urban/traces/huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1",
+      "sha256": "b9f5805a5023589f1cb2dce88da255c44d465ee5b916161bfd636ca143a13025"
+    },
+    "config": "experiments/madea_pg_compact/config.json",
+    "beta": "random"
+  },
+  "files": {
+    "base_instance_data.json": "2f5980839dc0492a6a0f077dae1be183ea941448b21f03b46b52c935dad60607",
+    "load_limits.json": "b5ec543fecdfa56668042443daf80b445dbda65a14a6eec04757fa12b4b3aae4",
+    "input_requests_traces.json": "1113c58d098a9e6a30443263555a6865e04362f9432e7e54a69bc26b241e047e",
+    "graph.json": "e3677d2f148cf20620648922cd9531a11c0b6b54b68093d973c873a287c7e6a2"
+  }
+}

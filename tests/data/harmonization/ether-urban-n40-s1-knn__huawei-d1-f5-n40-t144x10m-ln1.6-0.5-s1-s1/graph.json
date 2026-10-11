@@ -1,0 +1,1120 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {
+    "source": "ether edge topology synthesizer (github.com/edgerun/ether)",
+    "rule": "knn",
+    "seed": 1,
+    "scenario": "urban",
+    "cells": 2,
+    "name": "ether-urban-n40-s1-knn",
+    "family": "ether-urban",
+    "nodes": 40,
+    "edges": 100,
+    "planar": false
+  },
+  "nodes": [
+    {
+      "ether_name": "rpi3_10",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 0
+    },
+    {
+      "ether_name": "rpi3_11",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 1
+    },
+    {
+      "ether_name": "rpi3_12",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 2
+    },
+    {
+      "ether_name": "rpi3_13",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 3
+    },
+    {
+      "ether_name": "rpi3_14",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 4
+    },
+    {
+      "ether_name": "rpi3_15",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 5
+    },
+    {
+      "ether_name": "rpi3_16",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 6
+    },
+    {
+      "ether_name": "rpi3_17",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 7
+    },
+    {
+      "ether_name": "rpi3_18",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 8
+    },
+    {
+      "ether_name": "rpi3_19",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 9
+    },
+    {
+      "ether_name": "nuc_1",
+      "arch": "x86",
+      "model": "nuci5",
+      "kind": "sffc",
+      "memory_mb": 16384,
+      "cpu_millis": 4000,
+      "speedup": 1.0,
+      "id": 10
+    },
+    {
+      "ether_name": "tx2_10",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 11
+    },
+    {
+      "ether_name": "tx2_11",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 12
+    },
+    {
+      "ether_name": "tx2_12",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 13
+    },
+    {
+      "ether_name": "tx2_13",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 14
+    },
+    {
+      "ether_name": "tx2_14",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 15
+    },
+    {
+      "ether_name": "tx2_15",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 16
+    },
+    {
+      "ether_name": "tx2_16",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 17
+    },
+    {
+      "ether_name": "tx2_17",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 18
+    },
+    {
+      "ether_name": "tx2_18",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 19
+    },
+    {
+      "ether_name": "tx2_19",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 20
+    },
+    {
+      "ether_name": "rpi3_20",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 21
+    },
+    {
+      "ether_name": "rpi3_21",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 22
+    },
+    {
+      "ether_name": "rpi3_22",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 23
+    },
+    {
+      "ether_name": "rpi3_23",
+      "arch": "arm32",
+      "model": "rpi3b+",
+      "kind": "sbc",
+      "memory_mb": 976,
+      "cpu_millis": 4000,
+      "speedup": 0.0743,
+      "id": 24
+    },
+    {
+      "ether_name": "nuc_2",
+      "arch": "x86",
+      "model": "nuci5",
+      "kind": "sffc",
+      "memory_mb": 16384,
+      "cpu_millis": 4000,
+      "speedup": 1.0,
+      "id": 25
+    },
+    {
+      "ether_name": "tx2_20",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 26
+    },
+    {
+      "ether_name": "tx2_21",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 27
+    },
+    {
+      "ether_name": "tx2_22",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 28
+    },
+    {
+      "ether_name": "tx2_23",
+      "arch": "aarch64",
+      "model": "nvidia_jetson_tx2",
+      "kind": "embai",
+      "memory_mb": 7859,
+      "cpu_millis": 4000,
+      "speedup": 0.4145,
+      "id": 29
+    },
+    {
+      "ether_name": "server_10",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 30
+    },
+    {
+      "ether_name": "server_11",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 31
+    },
+    {
+      "ether_name": "server_12",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 32
+    },
+    {
+      "ether_name": "server_13",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 33
+    },
+    {
+      "ether_name": "server_14",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 34
+    },
+    {
+      "ether_name": "server_15",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 35
+    },
+    {
+      "ether_name": "server_16",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 36
+    },
+    {
+      "ether_name": "server_17",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 37
+    },
+    {
+      "ether_name": "server_18",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 38
+    },
+    {
+      "ether_name": "server_19",
+      "arch": "x86",
+      "model": "server",
+      "kind": "server",
+      "memory_mb": 179291,
+      "cpu_millis": 88000,
+      "speedup": 0.9731,
+      "id": 39
+    }
+  ],
+  "edges": [
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 1
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 2
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 3
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 4
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 5
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 6
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 7
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 8
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 9
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 10
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 18
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 20
+    },
+    {
+      "rtt_ms": 50.01931010400537,
+      "network_latency": 0.05001931010400537,
+      "edge_bandwidth": 100,
+      "source": 0,
+      "target": 30
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 1,
+      "target": 18
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 1,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 2,
+      "target": 3
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 2,
+      "target": 20
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 3,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 4,
+      "target": 5
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 4,
+      "target": 20
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 5,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 6,
+      "target": 7
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 6,
+      "target": 20
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 7,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 8,
+      "target": 9
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 8,
+      "target": 20
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 9,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 11
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 12
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 13
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 14
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 15
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 16
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 17
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 18
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 10,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 11,
+      "target": 18
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 11,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 11,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 12,
+      "target": 18
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 12,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 12,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 13,
+      "target": 18
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 13,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 13,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 14,
+      "target": 18
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 14,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 14,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 15,
+      "target": 18
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 15,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 15,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 16,
+      "target": 18
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 16,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 16,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 17,
+      "target": 18
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 17,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 17,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 18,
+      "target": 19
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 18,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 19,
+      "target": 20
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 21,
+      "target": 22
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 21,
+      "target": 23
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 21,
+      "target": 24
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 21,
+      "target": 25
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 21,
+      "target": 29
+    },
+    {
+      "rtt_ms": 50.01931010400537,
+      "network_latency": 0.05001931010400537,
+      "edge_bandwidth": 100,
+      "source": 21,
+      "target": 30
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 22,
+      "target": 23
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 22,
+      "target": 29
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 23,
+      "target": 24
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 23,
+      "target": 29
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 24,
+      "target": 29
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 25,
+      "target": 26
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 25,
+      "target": 27
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 25,
+      "target": 28
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 25,
+      "target": 29
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 26,
+      "target": 27
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 26,
+      "target": 28
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 26,
+      "target": 29
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 27,
+      "target": 29
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 28,
+      "target": 29
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 30,
+      "target": 31
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 30,
+      "target": 32
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 30,
+      "target": 33
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 30,
+      "target": 34
+    },
+    {
+      "rtt_ms": 4.002448720401249,
+      "network_latency": 0.0040024487204012495,
+      "edge_bandwidth": 100,
+      "source": 30,
+      "target": 35
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 31,
+      "target": 32
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 31,
+      "target": 33
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 31,
+      "target": 34
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 32,
+      "target": 33
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 32,
+      "target": 34
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 35,
+      "target": 36
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 35,
+      "target": 37
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 35,
+      "target": 38
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 35,
+      "target": 39
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 36,
+      "target": 38
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 36,
+      "target": 39
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 37,
+      "target": 38
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 37,
+      "target": 39
+    },
+    {
+      "rtt_ms": 2.0012243602006246,
+      "network_latency": 0.0020012243602006248,
+      "edge_bandwidth": 100,
+      "source": 38,
+      "target": 39
+    }
+  ]
+}
