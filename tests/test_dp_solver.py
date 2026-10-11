@@ -144,3 +144,14 @@ def test_detailed_dp_matches_gurobi_objective_and_all_constraints(seed):
         v['incoming_load'][node, f] * v['neighborhood'].get((node, j), 0)
       )
   assert pyo.value(instance.OBJ) == pytest.approx(oracle['obj'], abs=1e-8)
+
+
+def test_restricted_dp_tolerates_float_noise_in_fixed_offload():
+  # Coordination arithmetic can hand LSPr omega_bar = load + 4e-15 (seen in faas-dual):
+  # DP must treat it as the load, not fall back to an external solver.
+  from models.sp import LSPr
+  data = deepcopy(_data())
+  values = data[None]
+  values['omega_bar'] = {(2, 1): 3.000000000000004, (2, 2): 0.0}
+  values['y_bar'] = {(m, 2, f): 0.0 for m in (1, 2, 3) for f in (1, 2)}
+  assert try_solve_local(LSPr(), data) is not None
