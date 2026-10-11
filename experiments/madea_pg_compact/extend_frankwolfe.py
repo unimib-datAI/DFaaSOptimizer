@@ -13,20 +13,11 @@ import hierarchical_frankwolfe as hfw
 import madea2
 
 def _one_shot2(config, parallelism, log_on_file=False, disable_plotting=False):
-  """One-shot writes no runtime.csv (the harness special-cases 'MADEA-one-shot' only)."""
-  folder = madea2.run_one_shot(config, parallelism, log_on_file, disable_plotting)
-  runtime = Path(folder) / 'runtime.csv'
-  if not runtime.exists():
-    pd.DataFrame({'tot': [float('nan')]}).to_csv(runtime, index=False)
-  return folder
+  return madea2.run_one_shot(config, parallelism, log_on_file, disable_plotting)
 
 
 def _one_shot2_b(config, parallelism, log_on_file=False, disable_plotting=False):
-  folder = madea2.run_one_shot_b(config, parallelism, log_on_file, disable_plotting)
-  runtime = Path(folder) / 'runtime.csv'
-  if not runtime.exists():
-    pd.DataFrame({'tot': [float('nan')]}).to_csv(runtime, index=False)
-  return folder
+  return madea2.run_one_shot_b(config, parallelism, log_on_file, disable_plotting)
 
 
 ALL_METHODS = {'FaaS-MAFW': run_frankwolfe, 'MAFW-PG': hfw.run_flat_pg,

@@ -34,6 +34,8 @@ def _single_column_sum(path):
   df = pd.read_csv(path)
   if df.shape[1] == 0 or len(df) == 0:
     return np.nan
+  if "algorithm_s" in df:  # harmonized runtime.csv (utils/step_time.py)
+    return float(df["algorithm_s"].sum())
   # centralized files may carry the model name as column; decentralized carry
   # the method label or "tot" -- in every case there is exactly one data column
   col = df.select_dtypes("number")

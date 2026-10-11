@@ -23,26 +23,11 @@ import re
 
 import networkx as nx
 import families_extended as families
-import one_shot_pg
-from extend_frankwolfe import ALL_METHODS
 
 REFERENCE_PROTOCOL = 'solutions/families-pg-standalone-hier-2026-10-09/protocol.json'
-def _extra_methods():
-  from functools import partial
-  from decentralized_potentialgame import run_pg_s, run_pg_r
-  from hierarchical_auction.iterative_engine import IterativeHierarchicalAuctionEngine
-  from hierarchical_auction.madea_level_cycles_runner import run as run_hierarchical_madea
-  from hierarchical_auction.runner import run as run_hierarchical_auction
-  return {'hierarchical-madea-pg': families.madea_pg.run_hierarchical,
-          'FaaS-MAPG-S': run_pg_s, 'FaaS-MAPG-R': run_pg_r,
-          'hierarchical-madea': run_hierarchical_madea,
-          'hierarchical-one-shot': partial(run_hierarchical_auction,
-                                           engine_class=IterativeHierarchicalAuctionEngine)}
-
-
-METHODS = {**dict(families.METHODS), 'one-shot-pg': one_shot_pg.run,
-           'hierarchical-one-shot-pg': one_shot_pg.run_hierarchical, **ALL_METHODS,
-           **_extra_methods()}
+import methods as _methods
+# harmonized methods only (DP local solves, shared pool, modelled time): methods.py
+METHODS = dict(_methods.HARMONIZED)
 SCALE_FAMILIES = ('synthetic-planar-cubic', 'zhang-regional', 'data7-pisa', 'wondernetwork')
 NAME = re.compile(r'^(?P<topo>.+)__(?P<src>huawei|azure)-d1-f(?P<f>\d+)-n(?P<n>\d+)-.*-s(?P<s>\d+)(?P<blat>-blat)?$')
 

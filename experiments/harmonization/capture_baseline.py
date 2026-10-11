@@ -20,33 +20,8 @@ CONFIG = ROOT / "experiments" / "madea_pg_compact" / "catalog_config_overnight.j
 
 
 def runners():
-  try:
-    from methods import HARMONIZED
-    return HARMONIZED
-  except ImportError:  # before Task 7: the same names, resolved by hand
-    from functools import partial
-    import decentralized_auction, decentralized_diffusion, decentralized_dual, decentralized_frankwolfe
-    import decentralized_gcaa, decentralized_powerd, hierarchical_frankwolfe, madea2, run_faasmacro, run_faasmadea
-    from hierarchical_auction import madea_cycles_runner, madea_level_cycles_runner, madea_runner, runner
-    from hierarchical_auction.iterative_engine import IterativeHierarchicalAuctionEngine
-    from plasma import welfare
-    from plasma.runner import run as plasma_run
-    return {
-      "MADEA": run_faasmadea.run, "MADEA-one-shot": decentralized_auction.run,
-      "MADEA2": madea2.run, "MADEA2-b": madea2.run_b,
-      "MADEA2-one-shot": madea2.run_one_shot, "MADEA2-b-one-shot": madea2.run_one_shot_b,
-      "FaaS-MAFW": decentralized_frankwolfe.run, "FaaS-MAFW-b": hierarchical_frankwolfe.run_mafw_b,
-      "hierarchical-MAFW": partial(hierarchical_frankwolfe.run, hierarchy=True, refine_welfare=False),
-      "hierarchical-madea": madea_level_cycles_runner.run,
-      "hierarchical-madea-cycles": madea_cycles_runner.run,
-      "hierarchical-madea-legacy": madea_runner.run,
-      "hierarchical-one-shot": partial(runner.run, engine_class=IterativeHierarchicalAuctionEngine),
-      "hierarchical": runner.run,
-      "PLASMA": plasma_run, "PLASMA-Welfare": welfare.run,
-      "faas-macro": run_faasmacro.run, "faas-macro-v0": partial(run_faasmacro.run, v0=True),
-      "faas-diffuse": decentralized_diffusion.run, "faas-powd": decentralized_powerd.run,
-      "faas-gcaa": decentralized_gcaa.run, "faas-dual": decentralized_dual.run,
-    }
+  from methods import HARMONIZED
+  return HARMONIZED
 
 
 def config_for(instance: Path, out: Path, steps: int = 2) -> dict:

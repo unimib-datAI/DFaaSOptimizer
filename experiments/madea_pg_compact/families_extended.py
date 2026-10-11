@@ -145,7 +145,7 @@ def run(output, deadline, workers, max_cases, plasma_workers=None, *, config=Non
         sol, replicas, detailed, *_ = load_solution(str(folder), 'LSPc')
         objectives = pd.read_csv(folder / 'obj.csv')
         termination = pd.read_csv(folder / 'termination_condition.csv')
-        runtime = None if name == 'MADEA-one-shot' else pd.read_csv(folder / 'runtime.csv')
+        runtime = pd.read_csv(folder / 'runtime.csv')  # every harmonized method writes it
         refinements = (pd.read_csv(folder / 'refinement.csv')
                        if name in {'MADEA-PG', 'one-shot-pg', 'hierarchical-one-shot-pg',
                                    'hierarchical-madea-pg'} else None)
@@ -175,7 +175,8 @@ def run(output, deadline, workers, max_cases, plasma_workers=None, *, config=Non
             item['accepted_trades'] = int(trades.iloc[step].accepted_trades)
           records.append(item)
         row.update(status='ok', wall_seconds=wall,
-          native_seconds=None if runtime is None else float(runtime['tot'].sum()),
+          native_seconds=float(runtime['algorithm_s'].sum()) if 'algorithm_s' in runtime else float(runtime.iloc[:, 0].sum()),
+          native_wall_seconds=float(runtime['wall_s'].sum()) if 'wall_s' in runtime else None,
           welfare_sum=float(sum(item['welfare'] for item in records)), feasible=True,
           folder=str(folder.relative_to(ROOT)))
         steps.extend(records)
