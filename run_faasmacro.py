@@ -759,7 +759,7 @@ def run(
   if "coordinator" in solver_options:
     for k, v in solver_options["coordinator"].items():
       coordinator_options[k] = v
-  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  time_limit = step_time.algorithm_time_limit(config)
   start_from_last_pi = solver_options.get("start_from_last_pi", False)
   use_detailed_pi = solver_options.get("use_detailed_pi", False)
   # -- maximum number of iterations
@@ -809,7 +809,7 @@ def run(
     "LSPr": [],
     "LRMP": {it: [] for it in range(max_iterations)}
   }
-  runtime_list: list[float] = []
+  runtime_rows: list[dict] = []
   ub = (
     max_run_time + run_time_step
   ) if max_run_time == min_run_time else max_run_time
@@ -850,7 +850,7 @@ def run(
     best_centralized_cost = -np.inf
     best_it_so_far = -1
     best_centralized_it = -1
-    total_runtime = 0
+    clock = step_time.start_step()
     ss = datetime.now()
     while not stop_searching:
       if verbose > 0:
@@ -918,7 +918,6 @@ def run(
           file = log_stream, 
           flush = True
         )
-      total_runtime += sp_runtime["tot"]
       # update neighborhood given the nodes availability
       if solver_options.get("update_neighborhood", False):
         rmp_data[None]["neighborhood"] = update_neighborhood(
@@ -952,7 +951,6 @@ def run(
           file = log_stream, 
           flush = True
         )
-      total_runtime += runtime
       # compute deviation
       s = datetime.now()
       dev, Nfthr, detailed_dev = compute_deviation(
@@ -998,7 +996,6 @@ def run(
         rmp_omega,
         parallelism
       )
-      total_runtime += spr_runtime
       # # -- rejection cost
       # rej_cost = 0
       # for n in range(Nn):
@@ -1029,14 +1026,15 @@ def run(
       odev_queue.append(odev)
       # merge solutions and compute the centralized objective value
       spr_x, _, _, _, spr_r, spr_rho = spr_sol
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, 
-        spr_x, spr_r, spr_rho,
-        rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
-      )
-      cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-      )
+      with step_time.untimed():
+        csol = combine_solutions(
+          Nn, Nf, sp_data, loadt, 
+          spr_x, spr_r, spr_rho,
+          rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
+        )
+        cobj = compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        )
       # update best solution so far
       if spr_obj < best_cost_so_far:
         sw_queue.append(social_welfare)
@@ -1061,6 +1059,7 @@ def run(
             file = log_stream,
             flush = True
           )
+      total_runtime = step_time.current_modelled()
       # check that the deviation is >= 0 (otherwise, no iterations needed)
       if not (dev < 0).all():
         if social_welfare < lower_bound and (
@@ -1127,6 +1126,7 @@ def run(
       if not stop_searching:
         it += 1
       else:
+        runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
         # save SP/RMP solutions
         sp_complete_solution, rmp_complete_solution, objf = decode_solutions(
           sp_data, 
@@ -1156,7 +1156,6 @@ def run(
             spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
           )
     ee = datetime.now()
-    runtime_list.append(total_runtime)
     if verbose > 0:
       print(
         f"    TOTAL RUNTIME [s] = {total_runtime} "
@@ -1243,9 +1242,7 @@ def run(
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
   )
-  pd.DataFrame({"tot": runtime_list}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False,
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   if verbose > 0:
     print(
       f"All solutions saved in: {solution_folder}", 

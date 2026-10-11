@@ -4,6 +4,7 @@ from typing import Tuple
 import argparse
 import json
 import os
+from utils import step_time
 import sys
 
 from networkx import adjacency_matrix
@@ -46,6 +47,7 @@ from utils.common import load_configuration
 from utils.faasmacro import compute_centralized_objective
 
 
+@step_time.parallel
 def pair_scores(
   data: dict,
   neighborhood: np.array,
@@ -64,7 +66,7 @@ def pair_scores(
   scores = np.full((nn, nn, nf), -np.inf)
   eligible = np.zeros((nn, nn, nf), dtype=bool)
 
-  for i in range(nn):
+  for i in step_time.timed(range(nn)):
     for j in np.flatnonzero(neighborhood[i]):
       j = int(j)
       for f in range(nf):
@@ -81,6 +83,7 @@ def pair_scores(
   return scores, eligible
 
 
+@step_time.parallel
 def buyer_price_response(
   omega: np.array,
   capacity: np.array,
@@ -234,19 +237,22 @@ def dual_coordination_round(
       )
     else:
       alpha = dual_options["alpha0"] / np.sqrt(k)
-    lam = np.maximum(0.0, lam + alpha * subgradient)
+    with step_time.parallel_phase() as phase:  # each seller updates its own price
+      phase.uniform(nn)
+      lam = np.maximum(0.0, lam + alpha * subgradient)
 
   memory_bids = {"i": [], "j": [], "f": []}
   placed = best_y.sum(axis=1)
-  for i, f in zip(*np.nonzero(omega > 0)):
-    i, f = int(i), int(f)
-    if placed[i, f] + 1e-12 < omega[i, f]:
-      memory_requirement = data[None]["memory_requirement"][f + 1]
-      for j in np.nonzero(neighborhood[i, :])[0]:
-        if rho[int(j)] >= memory_requirement and not forbidden[int(j), f]:
-          memory_bids["i"].append(i)
-          memory_bids["j"].append(int(j))
-          memory_bids["f"].append(f)
+  with step_time.parallel_phase():  # each buyer asks for replicas it still needs
+    for i, f in step_time.timed(zip(*np.nonzero(omega > 0)), key=lambda item: int(item[0])):
+      i, f = int(i), int(f)
+      if placed[i, f] + 1e-12 < omega[i, f]:
+        memory_requirement = data[None]["memory_requirement"][f + 1]
+        for j in np.nonzero(neighborhood[i, :])[0]:
+          if rho[int(j)] >= memory_requirement and not forbidden[int(j), f]:
+            memory_bids["i"].append(i)
+            memory_bids["j"].append(int(j))
+            memory_bids["f"].append(f)
   memory_bids = pd.DataFrame(memory_bids)
 
   gap_info = {
@@ -311,7 +317,7 @@ def run(
   dual_options.setdefault("gap_tolerance", 0.01)
   dual_options.setdefault("latency_weight", 0.0)
   dual_options.setdefault("fairness_weight", 0.0)
-  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  time_limit = step_time.algorithm_time_limit(config)
   tolerance = config.get("tolerance", 1e-6)
   max_iterations = config["max_iterations"]
   max_steps = config["max_steps"]
@@ -349,13 +355,13 @@ def run(
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
   certificate_rows = []
-  runtime_list = []
+  runtime_rows = []
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
-    total_runtime = 0
+    clock = step_time.start_step()
     ss = datetime.now()
     sp_data = deepcopy(data)
     if opt_solution is not None:
@@ -373,7 +379,6 @@ def run(
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism
     )
-    total_runtime += sp_runtime["tot"]
     it = 0
     stop_searching = False
     best_solution_so_far = None
@@ -394,7 +399,6 @@ def run(
       coordination_rho = (
         sp_rho if opt_solution is None else np.zeros_like(sp_rho)
       )
-      total_runtime += (datetime.now() - s).total_seconds()
       s = datetime.now()
       y_inc, memory_bids, gap_info, n_active = dual_coordination_round(
         omega, residual_capacity, sp_data, neighborhood, coordination_rho,
@@ -403,7 +407,6 @@ def run(
       )
       additional_replicas = np.zeros((Nn, Nf))
       rt = (datetime.now() - s).total_seconds()
-      total_runtime += (rt / n_active) if n_active else rt
       rmp_omega = y.sum(axis=1)
       allocation_changed = (np.abs(y_inc) > tolerance).any()
       if allocation_changed:
@@ -411,16 +414,14 @@ def run(
         y[np.abs(y) < tolerance] = 0.0
         rmp_omega = y.sum(axis=1)
         fairness += (rmp_omega > tolerance)
-        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
-        if bad_nodes:
-          raise RuntimeError(
-            f"LSPr infeasible from fixed y assignments: {bad_nodes}"
-          )
+        with step_time.untimed():
+          bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+          if bad_nodes:
+            raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism
         )
-        total_runtime += spr_runtime
         sp_x, _, _, _, sp_r, sp_rho = spr_sol
         omega = sp_omega - rmp_omega
         omega[np.abs(omega) < tolerance] = 0.0
@@ -434,27 +435,28 @@ def run(
           capacity, residual_capacity, ell, blackboard = _capacity_state(
             sp_x, y, sp_r, sp_data
           )
-        total_runtime += (datetime.now() - s).total_seconds()
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None
-      )
-      cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-      )
-      feas = check_feasibility(
-        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-        csol["sp"]["r"], csol["sp"]["U"], sp_data
-      )
-      assert feas[0], feas[1]
-      if spr_obj < best_cost_so_far or it == 0:
-        best_cost_so_far = spr_obj
-        best_solution_so_far = deepcopy(csol)
-        best_it_so_far = it
-      if cobj > best_centralized_cost:
-        best_centralized_cost = cobj
-        best_centralized_solution = deepcopy(csol)
-        best_centralized_it = it
+      with step_time.untimed():
+        csol = combine_solutions(
+          Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
+          None, y, None, None, None, None
+        )
+        cobj = compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        )
+        feas = check_feasibility(
+          csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+          csol["sp"]["r"], csol["sp"]["U"], sp_data
+        )
+        assert feas[0], feas[1]
+        if spr_obj < best_cost_so_far or it == 0:
+          best_cost_so_far = spr_obj
+          best_solution_so_far = deepcopy(csol)
+          best_it_so_far = it
+        if cobj > best_centralized_cost:
+          best_centralized_cost = cobj
+          best_centralized_solution = deepcopy(csol)
+          best_centralized_it = it
+      total_runtime = step_time.current_modelled()
       stop_searching, why_stop_searching = check_stopping_criteria(
         it, max_iterations, blackboard, omega, rmp_omega,
         a=additional_replicas, memory_bids=memory_bids,
@@ -479,6 +481,7 @@ def run(
       if not stop_searching:
         it += 1
       else:
+        runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
         sp_complete_solution, _, objf = decode_solutions(
           sp_data, best_solution_so_far, sp_complete_solution, None
         )
@@ -503,7 +506,6 @@ def run(
           save_checkpoint(
             spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
           )
-    runtime_list.append(total_runtime)
     if verbose > 0:
       print(
         f"    TOTAL RUNTIME [s] = {total_runtime} "
@@ -552,9 +554,7 @@ def run(
     os.path.join(solution_folder, "coordination_certificate.csv"),
     index=False,
   )
-  pd.DataFrame({"tot": runtime_list}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   if verbose > 0:
     print(f"All solutions saved in: {solution_folder}", file=log_stream, flush=True)
   if log_on_file:

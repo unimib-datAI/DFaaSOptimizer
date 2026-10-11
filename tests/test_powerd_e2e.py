@@ -65,8 +65,8 @@ def test_powerd_runner_produces_expected_artifacts(tmp_path):
   assert np.isfinite(pd.to_numeric(obj["FaaS-MAPoD"], errors="coerce")).all()
 
   runtime = pd.read_csv(Path(folder, "runtime.csv"))
-  assert "tot" in runtime.columns
-  assert (runtime["tot"] >= 0).all()
+  assert "algorithm_s" in runtime.columns
+  assert (runtime["algorithm_s"] >= 0).all()
 
   assert Path(folder, "termination_condition.csv").exists()
   assert Path(folder, "LSPc_solution.csv").exists()

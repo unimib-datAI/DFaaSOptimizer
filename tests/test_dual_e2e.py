@@ -100,8 +100,8 @@ def test_dual_runner_produces_expected_artifacts_with_gap(tmp_path):
   assert np.isfinite(pd.to_numeric(obj["FaaS-MALD"], errors="coerce")).all()
 
   runtime = pd.read_csv(Path(folder, "runtime.csv"))
-  assert "tot" in runtime.columns
-  assert (runtime["tot"] >= 0).all()
+  assert "algorithm_s" in runtime.columns
+  assert (runtime["algorithm_s"] >= 0).all()
 
   certificate = pd.read_csv(Path(folder, "coordination_certificate.csv"))
   assert list(certificate.columns) == [
