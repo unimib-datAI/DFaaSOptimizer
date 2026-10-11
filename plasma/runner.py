@@ -6,6 +6,7 @@ import sys
 from datetime import datetime
 
 import numpy as np
+from utils import step_time
 import pandas as pd
 
 from run_centralized_model import (
@@ -99,7 +100,7 @@ def run(
   ])
   cs = init_complete_solution()
   obj_list = []
-  runtime_list = []
+  runtime_rows = []
   msg_rows = []
   trade_rows = []
   ub = (
@@ -117,9 +118,9 @@ def run(
       (n + 1, f + 1): arrivals[n, f] for n in range(Nn) for f in range(Nf)
     }})
     msgs_before, hb_before = engine.msg_count, engine.hb_count
-    started = datetime.now()
+    clock = step_time.start_step()
     res = engine.run_rounds(opts.rounds_per_step, arrivals)
-    elapsed = (datetime.now() - started).total_seconds()
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
     if welfare:
       trade_rows.append({'time': t, 'rounds': opts.rounds_per_step,
                          'accepted_trades': engine.accepted_trades})
@@ -137,7 +138,6 @@ def run(
     obj_list.append(
       compute_centralized_objective(data, res.x, res.y, res.z)
     )
-    runtime_list.append(elapsed)
     seconds = opts.rounds_per_step * opts.W
     msg_rows.append({
       "t": t,
@@ -160,9 +160,7 @@ def run(
     [f"{criterion} (it: {opts.rounds_per_step}; obj. deviation: {None})"]
     * len(obj_list)
   ).to_csv(os.path.join(solution_folder, "termination_condition.csv"))
-  pd.DataFrame({"tot": runtime_list}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   pd.DataFrame(msg_rows).to_csv(
     os.path.join(solution_folder, "plasma_messages.csv"), index=False
   )

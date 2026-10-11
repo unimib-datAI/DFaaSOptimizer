@@ -146,7 +146,7 @@ def test_failed_parallel_negotiation_releases_offers_without_moving_traffic():
     with macro.parallel_solver_session() as state:
       state['pool'] = mp.Pool(processes=2)
       state['workers'] = 2
-      engine._parallel_round(0, state['pool'])
+      engine._negotiate_batch(0, [0, 1], state['pool'])  # 0 and 1 share no participant
   assert {child.pid for child in mp.active_children()} == children
   assert all(node.reservation is None for node in nodes)
   assert [node.z.tolist() for node in nodes] == [[0], [0], [10], [10]]

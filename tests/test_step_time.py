@@ -138,3 +138,35 @@ def test_timed_loop_records_each_iteration_to_its_node_even_on_break(now):
 
 def test_current_modelled_without_clock_is_zero():
   assert step_time.current_modelled() == 0.0
+
+
+def test_plasma_arrival_order_is_seeded_and_worker_independent(tmp_path):
+  import sys
+  sys.path.insert(0, "experiments/harmonization")
+  from capture_baseline import DATA, welfare
+  from plasma import welfare as plasma_welfare
+  instance = sorted(p for p in DATA.iterdir() if (p / "metadata.json").exists())[0]
+  first = welfare(plasma_welfare.run, instance, 0)
+  assert welfare(plasma_welfare.run, instance, 0) == first   # same seed, same result
+  assert welfare(plasma_welfare.run, instance, 2) == first   # pool or not, same result
+
+
+def test_plasma_arrival_order_is_a_seeded_permutation_per_round():
+  from types import SimpleNamespace
+  import numpy as np
+  from plasma.engine import PlasmaEngine
+  nodes = [SimpleNamespace(params=SimpleNamespace(nbrs=[])) for _ in range(6)]
+  engine = PlasmaEngine(nodes, SimpleNamespace(), np.random.default_rng(5))
+  expected = np.random.default_rng(5)
+  assert engine._arrival_order() == [int(i) for i in expected.permutation(6)]
+  assert engine._arrival_order() == [int(i) for i in expected.permutation(6)]
+
+
+def test_plasma_batches_keep_arrival_order_between_competitors():
+  from types import SimpleNamespace
+  import numpy as np
+  from plasma.engine import PlasmaEngine
+  nbrs = {0: [1], 1: [0], 2: [3], 3: [2]}          # two disjoint pairs
+  nodes = [SimpleNamespace(params=SimpleNamespace(nbrs=nbrs[i])) for i in range(4)]
+  engine = PlasmaEngine(nodes, SimpleNamespace(), np.random.default_rng(0))
+  assert engine._negotiation_batches([2, 0, 3, 1]) == [[2, 0], [3, 1]]

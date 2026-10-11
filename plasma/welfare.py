@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from math import isfinite
 from numbers import Integral
 import multiprocessing as mp
+from time import perf_counter
 
 import numpy as np
 
@@ -18,6 +19,7 @@ from plasma.core.sbm import minimize_replica_costs
 from plasma.core.types import Heartbeat
 from plasma.engine import PlasmaEngine, StepResult
 from run_faasmacro import parallel_solver_run, parallel_solver_session, _available_cpu_count
+from utils import step_time
 
 
 @dataclass(frozen=True)
@@ -279,6 +281,13 @@ def _solve_plan(job):
   return node.plan(reservations)
 
 
+def _timed_plan(job):
+  """Worker side: the plan and the node's own computation time."""
+  started = perf_counter()
+  plan = _solve_plan(job)
+  return plan, perf_counter() - started
+
+
 class WelfareEngine(PlasmaEngine):
   def __init__(self, nodes, opts, rng, *, parallelism=0):
     super().__init__(nodes, opts, rng)
@@ -292,48 +301,45 @@ class WelfareEngine(PlasmaEngine):
     self.msg_count += 2  # one request and one reply, batched by neighbor
     return getattr(self.nodes[target], operation)(source, *payload)
 
-  def _negotiation_batches(self, round_):
-    """Keep the original turn order for every pair sharing a participant."""
-    levels, batches = {}, []
-    count = len(self.nodes)
-    for offset in range(count):
-      i = (round_ + offset) % count
-      participants = {i, *self.nodes[i].params.nbrs}
-      level = 1 + max((levels.get(j, -1) for j in participants), default=-1)
-      if level == len(batches):
-        batches.append([])
-      batches[level].append(i)
-      for j in participants:
-        levels[j] = level
-    return batches
+  def _sender(self, i):
+    def send(target, operation, *payload):
+      return self._send(i, target, operation, *payload)
+    return send
 
-  def _parallel_round(self, round_, pool):
-    for batch in self._negotiation_batches(round_):
-      with ExitStack() as stack:
-        pending = []
-        for i in batch:
+  def _negotiate_batch(self, round_, batch, pool):
+    """One parallel phase: the nodes of a conflict-free batch negotiate at once."""
+    with step_time.parallel_phase() as phase, ExitStack() as stack:
+      if pool is None:
+        for i in step_time.timed(batch):
+          self.accepted_trades += self.nodes[i].negotiate(round_, self._sender(i))
+        return
+      pending = []
+      for i in step_time.timed(batch):
+        send = self._sender(i)
+        reservations = stack.enter_context(self.nodes[i].offers(round_, send))
+        if reservations:
+          pending.append((i, reservations, send))
+      # A single ready plan is cheaper inline than a process round trip.
+      if len(pending) == 1:
+        i, reservations, send = pending[0]
+        with step_time.task(i):
           node = self.nodes[i]
-          def send(target, operation, *payload, source=i):
-            return self._send(source, target, operation, *payload)
-          reservations = stack.enter_context(node.offers(round_, send))
-          if reservations:
-            pending.append((node, reservations, send))
-        # A single ready plan is cheaper inline than a process round trip.
-        if len(pending) == 1:
-          node, reservations, send = pending[0]
           self.accepted_trades += node.accept_plan(reservations, node.plan(reservations), send)
-        elif pending:
-          plans = pool.map(_solve_plan, [_plan_job(n, r) for n, r, _ in pending], chunksize=1)
-          for (node, reservations, send), plan in zip(pending, plans):
-            self.accepted_trades += node.accept_plan(reservations, plan, send)
+      elif pending:
+        results = pool.map(_timed_plan, [_plan_job(self.nodes[i], r) for i, r, _ in pending],
+                           chunksize=1)
+        for (i, reservations, send), (plan, seconds) in zip(pending, results):
+          phase.add(i, seconds)
+          with step_time.task(i):
+            self.accepted_trades += self.nodes[i].accept_plan(reservations, plan, send)
 
   @parallel_solver_run
   def run_rounds(self, n_rounds, arrivals):
     if not isinstance(n_rounds, Integral) or n_rounds < 1:
       raise ValueError('n_rounds must be positive')
     for node, load in zip(self.nodes, arrivals):
-      node.start_window(load, self.clock.round, initialize=not self.parallelism)
-    alive = [node for node in self.nodes if node.alive]
+      node.start_window(load, self.clock.round, initialize=False)
+    alive = [i for i, node in enumerate(self.nodes) if node.alive]
     pool = None
     if self.parallelism and alive:
       with parallel_solver_session() as state:
@@ -342,23 +348,23 @@ class WelfareEngine(PlasmaEngine):
           state['workers'] = max(1, min(available, len(alive)))
           state['pool'] = mp.Pool(processes=state['workers'])
         pool = state['pool']
-      plans = pool.map(_solve_plan, [_plan_job(node, ()) for node in alive], chunksize=1)
-      for node, plan in zip(alive, plans):
+    # initial plans: every alive node optimizes its own RAM at once
+    with step_time.parallel_phase() as phase:
+      if pool is not None:
+        results = pool.map(_timed_plan, [_plan_job(self.nodes[i], ()) for i in alive], chunksize=1)
+      else:
+        results = [_timed_plan((self.nodes[i], ())) for i in alive]
+      for i, (plan, seconds) in zip(alive, results):
+        phase.add(i, seconds)
+        node = self.nodes[i]
         node.r, node.x = plan.r, plan.x
         node.z = node.load - node.x
     self.accepted_trades = 0
 
     def on_round(round_):
-      # Fixed local turns rotate for fairness, independently of any welfare.
-      if pool is not None:
-        self._parallel_round(round_, pool)
-      else:
-        count = len(self.nodes)
-        for offset in range(count):
-          i = (round_ + offset) % count
-          self.accepted_trades += self.nodes[i].negotiate(
-            round_, lambda target, operation, *payload: self._send(i, target, operation, *payload),
-          )
+      # No predefined turns: nodes negotiate in a seeded random arrival order.
+      for batch in self._negotiation_batches(self._arrival_order()):
+        self._negotiate_batch(round_, batch, pool)
       self._send_heartbeats(round_)
 
     self.clock.run(n_rounds, on_round)

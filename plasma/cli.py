@@ -13,7 +13,7 @@ def parse_arguments() -> argparse.Namespace:
     formatter_class=argparse.ArgumentDefaultsHelpFormatter,
   )
   parser.add_argument("-c", "--config", type=str, default="manual_config.json")
-  parser.add_argument("-j", "--parallelism", type=int, default=0)
+  parser.add_argument("-j", "--parallelism", type=int, default=-1)
   parser.add_argument("--disable_plotting", default=False,
                       action="store_true")
   return parser.parse_known_args()[0]
