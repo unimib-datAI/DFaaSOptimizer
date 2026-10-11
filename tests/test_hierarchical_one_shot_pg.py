@@ -27,6 +27,7 @@ def test_hierarchical_pg_preserves_incumbent_and_accepts_without_global_observer
   config.update(seed=7, max_steps=2, max_run_time=2, run_time_step=1,
                 verbose=0, checkpoint_interval=1, solver_name='glpk',
                 max_hierarchy_depth=3, base_solution_folder=str(tmp_path / 'runs'))
+  config['solver_options']['general']['algorithm_time_limit'] = 30  # modelled-time budget
   config['limits']['Nn'] = {'min': 10, 'max': 10}
   config['limits']['Nf'] = {'min': 3, 'max': 3}
   source = tmp_path / 'instance'
@@ -64,7 +65,7 @@ def test_hierarchical_pg_preserves_incumbent_and_accepts_without_global_observer
   np.testing.assert_allclose(stats.welfare_before, pd.read_csv(baseline / 'obj.csv').iloc[:, 0])
   np.testing.assert_allclose(stats.welfare_after, pd.read_csv(refined / 'obj.csv')['HierarchicalOneShotPG'])
   assert (stats.welfare_after >= stats.welfare_before - 1e-6).all()
-  assert (pd.read_csv(refined / 'runtime.csv')['tot'] >= stats.seconds).all()
+  assert (pd.read_csv(refined / 'runtime.csv')['algorithm_s'] >= stats.seconds).all()
   solutions = [load_solution(str(folder), 'LSPc') for folder in (baseline, refined, unchanged, observed)]
   for step in range(2):
     arrays = [encode_solution(10, 3, sol[0], sol[2], sol[1], step) for sol in solutions]
@@ -133,6 +134,7 @@ def test_hierarchy_stops_stalled_rounds_but_preserves_price_progress_and_pg_time
   config.update(seed=7, max_steps=1, max_run_time=1, run_time_step=1,
                 checkpoint_interval=1, solver_name='glpk', max_iterations=10,
                 base_solution_folder=str(tmp_path / 'runs'))
+  config['solver_options']['general']['algorithm_time_limit'] = 30  # modelled-time budget
   config['limits']['Nn'] = {'min': 40, 'max': 40}
   config['limits']['Nf'] = {'min': 5, 'max': 5}
   source = tmp_path / 'instance'
@@ -152,8 +154,9 @@ def test_hierarchy_stops_stalled_rounds_but_preserves_price_progress_and_pg_time
     return result
   monkeypatch.setattr(IterativeHierarchicalAuctionEngine, 'run_higher_levels', record)
   if mode == 'budget':
-    # Only the orchestration clock is simulated; local solves and PG remain real.
-    monkeypatch.setattr(runner, 'time', SimpleNamespace(monotonic=lambda: clock[0]))
+    # Only the modelled clock is simulated; local solves and PG remain real.
+    from utils import step_time
+    monkeypatch.setattr(step_time, 'perf_counter', lambda: clock[0])
   folder = Path(one_shot_pg.run_hierarchical(config, 0, log_on_file=True, disable_plotting=True))
   stats = pd.read_csv(folder / 'refinement.csv').iloc[0]
   termination = (folder / 'termination_condition.csv').read_text()

@@ -49,6 +49,7 @@ from run_faasmacro import (
   solve_subproblem,
 )
 from utils.common import load_configuration
+from utils import step_time
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -130,7 +131,7 @@ def run(
   general_solver_options = solver_options.get("general", {})
   auction_options = build_auction_options(config)
   auction_options["unit_bids"] = solver_options.get("auction", {}).get("unit_bids", False)
-  time_limit = general_solver_options.get("TimeLimit", float("inf"))
+  time_limit = step_time.algorithm_time_limit(config)
   tolerance = config.get("tolerance", 1e-6)
 
   max_iterations = config["max_iterations"]
@@ -176,10 +177,11 @@ def run(
   spc_complete_solution = init_complete_solution()
   obj_dict: dict[str, list[Any]] = {"LSPr_final": []}
   tc_dict: dict[str, list[Any]] = {"LSPr": []}
-  runtime_list: list[float] = []
+  runtime_rows: list[dict] = []
   refinement_history = []
 
   for t in range(min_run_time, ub, run_time_step):
+    clock = step_time.start_step()
     started = time.monotonic()
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
@@ -201,7 +203,6 @@ def run(
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism,
     )
-    total_runtime = sp_runtime["tot"] if isinstance(sp_runtime, dict) else 0.0
 
     it = 0
     stop_searching = False
@@ -260,7 +261,6 @@ def run(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism, sp_x
         )
-        total_runtime += spr_runtime if isinstance(spr_runtime, (int, float)) else 0.0
 
         # sp_x = spr_sol[0]
         sp_r = spr_sol[4]
@@ -293,9 +293,6 @@ def run(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism, sp_x
         )
-        total_runtime += (
-          spr_runtime if isinstance(spr_runtime, (int, float)) else 0.0
-        )
 
         # sp_x = spr_sol[0]
         sp_r = spr_sol[4]
@@ -306,7 +303,7 @@ def run(
       stopping_bids = bids_for_stopping(
         bids, len(result.accepted_allocations),
       )
-      total_runtime = time.monotonic() - started
+      total_runtime = step_time.current_modelled()
       stop_searching, why_stop_searching = check_stopping_criteria(
         it=it, max_iterations=max_iterations, blackboard=blackboard,
         omega=omega, rmp_omega=rmp_omega, bids=stopping_bids,
@@ -326,21 +323,22 @@ def run(
         if not stop_searching and stagnant_rounds >= 2:
           stop_searching, why_stop_searching = True, "assignments, replicas and prices stalled"
 
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt,
-        sp_x, sp_r, sp_rho,
-        np.zeros((Nn, Nf)), y, np.zeros((Nn, Nf)),
-        np.zeros((Nn, Nf)), np.zeros((Nn, Nn, Nf)),
-        np.zeros((Nn,)),
-      )
-      cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"],
-      )
+      with step_time.untimed():
+        csol = combine_solutions(
+          Nn, Nf, sp_data, loadt,
+          sp_x, sp_r, sp_rho,
+          np.zeros((Nn, Nf)), y, np.zeros((Nn, Nf)),
+          np.zeros((Nn, Nf)), np.zeros((Nn, Nn, Nf)),
+          np.zeros((Nn,)),
+        )
+        cobj = compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"],
+        )
 
-      if cobj > best_centralized_cost:
-        best_centralized_cost = cobj
-        best_centralized_solution = csol
-        best_centralized_it = it
+        if cobj > best_centralized_cost:
+          best_centralized_cost = cobj
+          best_centralized_solution = csol
+          best_centralized_it = it
 
       if not stop_searching:
         it += 1
@@ -349,13 +347,14 @@ def run(
         if refine_welfare:
           from madea_pg import refine_solution
           incumbent, refinement = refine_solution(
-            sp_data, incumbent, config, time_limit - (time.monotonic() - started),
+            sp_data, incumbent, config, time_limit - step_time.current_modelled(),
           )
           refinement_history.append({"time": t, **refinement,
                                      "hierarchy_rounds": it + 1,
                                      "hierarchy_pg_reserve": pg_reserve,
                                      "hierarchy_time_budget": hierarchy_time_limit})
-        total_runtime = time.monotonic() - started
+        total_runtime = step_time.current_modelled()
+        runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
         spc_complete_solution, _, final_objective = decode_solutions(
           sp_data,
           incumbent,
@@ -367,7 +366,6 @@ def run(
           f"best centralized it: {best_centralized_it}; "
           f"total runtime: {total_runtime})"
         )
-        runtime_list.append(total_runtime)
         if t % checkpoint_interval == 0 or t == max_steps - 1:
           save_checkpoint(
             spc_complete_solution,
@@ -406,9 +404,7 @@ def run(
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv"),
   )
-  pd.DataFrame({"tot": runtime_list}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False,
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
 
   if verbose > 0:
     print(f"All solutions saved in: {solution_folder}", file=log_stream, flush=True)

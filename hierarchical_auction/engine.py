@@ -15,6 +15,7 @@ from typing import cast
 import numpy as np
 
 from hierarchical_auction.flow_mapper import apply_allocations
+from utils import step_time
 from hierarchical_auction.pricing import (
   compute_effective_bid,
   compute_structure_price,
@@ -185,12 +186,13 @@ class HierarchicalAuctionEngine:
     level_accepted: list[AcceptedAllocation] = []
     # Buyer demand is shared across overlapping structures and sellers.
     remaining_demand = current_omega.copy()
-    for k in range(self._num_nodes):
-      for f in range(self._num_functions):
-        accepted = token_manager.resolve_node_function(k, f, remaining_demand)
-        if accepted:
-          token_manager.commit(accepted)
-          level_accepted.extend(accepted)
+    with step_time.parallel_phase():  # each seller node resolves its own token requests
+      for k in step_time.timed(range(self._num_nodes)):
+        for f in range(self._num_functions):
+          accepted = token_manager.resolve_node_function(k, f, remaining_demand)
+          if accepted:
+            token_manager.commit(accepted)
+            level_accepted.extend(accepted)
 
     if not level_accepted:
       return LevelResult(current_y, current_omega)
@@ -199,23 +201,25 @@ class HierarchicalAuctionEngine:
     )
     return LevelResult(current_y, current_omega, level_accepted)
 
+  @step_time.parallel
   def _aggregate_residual_demand(
     self,
     structures: dict[int, Structure],
     omega: FloatArray,
   ) -> None:
     """Ω_{S_i^(ℓ)}^f = Σ_{k∈S_i^(ℓ)} ω_k^{f,res}  (Eq.24)."""
-    for s in structures.values():
+    for s in step_time.timed(structures.values(), key=id):
       members = sorted(s.member_nodes)
       s.residual_demand = omega[members, :].sum(axis=0)
 
+  @step_time.parallel
   def _populate_indicative_tokens(
     self,
     structures: dict[int, Structure],
     token_manager: CapacityTokenManager,
   ) -> None:
     """T_{S_i^(ℓ)}^f = Σ_{k∈S} T_k^f (indicative only)."""
-    for s in structures.values():
+    for s in step_time.timed(structures.values(), key=id):
       members = sorted(s.member_nodes)
       s.indicative_tokens = token_manager.tokens[members, :].sum(axis=0)
 
@@ -237,6 +241,7 @@ class HierarchicalAuctionEngine:
     idx = min(level - 1, len(eta_list) - 1)
     return float(eta_list[idx])
 
+  @step_time.parallel
   def _generate_level_requests(
     self,
     buyer_structures: dict[int, Structure],
@@ -262,7 +267,7 @@ class HierarchicalAuctionEngine:
     sending = current_y.sum(axis=1) > 1e-10
     receiving = current_y.sum(axis=0) > 1e-10
 
-    for root, buyer_s in buyer_structures.items():
+    for root, buyer_s in step_time.timed(buyer_structures.items(), key=lambda item: item[0]):
       buyer_s.structure_price = compute_structure_price(
         buyer_s, node_prices, token_manager.tokens, eta=eta,
       )

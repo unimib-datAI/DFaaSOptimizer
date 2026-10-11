@@ -45,6 +45,7 @@ from run_faasmadea import (
   start_additional_replicas,
 )
 from utils.common import load_configuration
+from utils import step_time
 from utils.faasmacro import relative_objective_gap
 
 
@@ -112,7 +113,7 @@ def run(
   general_solver_options = solver_options.get("general", {})
   auction_options = build_auction_options(config)
   first_level_options = level1_options(auction_options)
-  time_limit = general_solver_options.get("TimeLimit", float("inf"))
+  time_limit = step_time.algorithm_time_limit(config)
   tolerance = config.get("tolerance", 1e-6)
   max_iterations = config["max_iterations"]
   max_steps = config["max_steps"]
@@ -143,13 +144,13 @@ def run(
   complete_solution = init_complete_solution()
   objectives = []
   termination_conditions = []
-  runtimes = []
+  runtime_rows = []
 
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
+    clock = step_time.start_step()
     started_at = time.monotonic()
-    total_runtime = 0
     loadt = get_current_load(traces, agents, t)
     sp_data = deepcopy(base_data)
     sp_data[None]["incoming_load"] = loadt
@@ -167,7 +168,6 @@ def run(
         file = log_stream, 
         flush = True
       )
-    total_runtime += sp_runtime['tot']
     u0 = np.ones((Nn, Nf)) * 0.8
     p = np.zeros((Nn, Nf))
     y = np.zeros((Nn, Nn, Nf))
@@ -201,7 +201,6 @@ def run(
         and all(value == accepted_queue[0] for value in accepted_queue)
       )
       e = time.monotonic()
-      total_runtime += (e - s)
       if verbose > 1:
         print(
           f"        compute_residual_capacity: DONE ",
@@ -219,7 +218,6 @@ def run(
       )
       e = time.monotonic()
       rt = (e - s)
-      total_runtime += rt/max(n_auctions, 1)
       if verbose > 1:
         print(
           f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
@@ -240,7 +238,6 @@ def run(
         )
         e = time.monotonic()
         rt = (e - s)
-        total_runtime += rt/max(n_auctions, 1)
         if verbose > 1:
           print(
            f"        evaluate_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
@@ -250,14 +247,14 @@ def run(
           )
         y += auction_y
         rmp_omega = compute_offloaded_demand(y)
-        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
-        if bad_nodes:
-          raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
+        with step_time.untimed():
+          bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+          if bad_nodes:
+            raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism, sp_x
         )
-        total_runtime += spr_runtime
         if verbose > 1:
           print(
             f"        solve 'restricted problem': DONE ({spr_tc}; "
@@ -285,7 +282,6 @@ def run(
         )
         sp_r += additional_replicas
         e = time.monotonic()
-        total_runtime += (e - s)
         if verbose > 1:
           print(
             f"        additional replicas started: DONE "
@@ -309,7 +305,6 @@ def run(
       y = result.y
       rmp_omega = compute_offloaded_demand(y)
       e = time.monotonic()
-      total_runtime += (e - s)
       if verbose > 1:
         print(
           f"        higher-level auction: DONE (y = {y.tolist()}; "
@@ -318,14 +313,14 @@ def run(
           flush = True
         )
       if result.accepted_allocations:
-        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
-        if bad_nodes:
-          raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
+        with step_time.untimed():
+          bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+          if bad_nodes:
+            raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism, sp_x
         )
-        total_runtime += spr_runtime
         _, _, _, _, sp_r, sp_rho = spr_sol
         if verbose > 1:
           print(
@@ -340,31 +335,33 @@ def run(
       accepted_queue.append(float(rmp_omega.sum()))
 
       _, final_residual, _ = compute_residual_capacity(sp_x, y, sp_r, sp_data)
-      combined = combine_solutions(
-        Nn, Nf, sp_data, loadt,
-        sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None,
-      )
-      cost = compute_centralized_objective(
-        sp_data, combined["sp"]["x"], combined["sp"]["y"], combined["sp"]["z"],
-      )
-      prev_cobj = best_cost
-      if cost > best_cost:
-        best_cost = cost
-        best_solution = deepcopy(combined)
-        best_it = it
-        if verbose > 0:
-          print(
-            f"        best centralized solution updated; obj = {cost}",
-            file = log_stream,
-            flush = True
-          )
+      with step_time.untimed():
+        combined = combine_solutions(
+          Nn, Nf, sp_data, loadt,
+          sp_x, sp_r, sp_rho,
+          None, y, None, None, None, None,
+        )
+        cost = compute_centralized_objective(
+          sp_data, combined["sp"]["x"], combined["sp"]["y"], combined["sp"]["z"],
+        )
+        prev_cobj = best_cost
+        if cost > best_cost:
+          best_cost = cost
+          best_solution = deepcopy(combined)
+          best_it = it
+          if verbose > 0:
+            print(
+              f"        best centralized solution updated; obj = {cost}",
+              file = log_stream,
+              flush = True
+            )
       
-      odev_queue.append(
-        relative_objective_gap(prev_cobj, best_cost)
-      )
+        odev_queue.append(
+          relative_objective_gap(prev_cobj, best_cost)
+        )
 
       elapsed = time.monotonic() - started_at
+      total_runtime = step_time.current_modelled()
       s = time.monotonic()
       stop, reason = check_stopping_criteria(
         it=it,
@@ -392,6 +389,7 @@ def run(
           flush = True
         )
       if stop:
+        runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
         complete_solution, _, objective = decode_solutions(
           sp_data, best_solution, complete_solution, None,
         )
@@ -400,7 +398,6 @@ def run(
           f"{reason} (it: {it}; obj. deviation: None; best it: {best_it}; "
           f"best centralized it: {best_it}; total runtime: {total_runtime})"
         )
-        runtimes.append(total_runtime)
         if t % checkpoint_interval == 0 or t == max_steps - 1:
           save_checkpoint(
             complete_solution, os.path.join(solution_folder, "LSPc"), t
@@ -439,9 +436,7 @@ def run(
   pd.DataFrame(termination_conditions).to_csv(
     os.path.join(solution_folder, "termination_condition.csv"),
   )
-  pd.DataFrame({"tot": runtimes}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False,
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   if log_on_file:
     log_stream.close()
   return solution_folder

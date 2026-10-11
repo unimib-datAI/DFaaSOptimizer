@@ -108,7 +108,14 @@ def cycle_run(tmp_path, monkeypatch, request):
   }}
   # Only replace solver calls. Bidding, feasibility, scoring and the cycle
   # itself stay real, so ordering tests also run without an external solver.
+  # The modelled clock advances only by the solve times the stubs declare
+  # (0.25 s per subproblem, 0.1 s per welfare solve): budgets are deterministic.
+  from utils import step_time
+  clock = {"t": 0.0}
+  monkeypatch.setattr(step_time, "perf_counter", lambda: clock["t"])
+
   def solve(sp_data, *args, **kwargs):
+    clock["t"] += 0.25
     return (
       sp_data, np.array([[2.], [1.]]), np.zeros((2, 2, 1)), np.zeros((2, 1)),
       np.array([[98.], [0.]]), np.array([[1.], [2.]]), np.zeros(2),
@@ -116,6 +123,7 @@ def cycle_run(tmp_path, monkeypatch, request):
     )
 
   def welfare(spr, sp_data, agents, solver_name, options, y, rmp_omega, parallelism, x):
+    clock["t"] += 0.1
     r = np.ceil((x + y.sum(axis=0)) * 0.4)
     rho = np.array([1., 2.]) - r[:, 0]
     return (x, y, None, None, r, rho), 0.0, "optimal", 0.1
@@ -197,7 +205,7 @@ def test_time_limit_stops_at_phase_boundaries(cycle_run, limit, madea_count, hie
   events, folder = cycle_run(
     [(True, "max iterations reached")] * 3,
     hierarchy_quantity=0.25,
-    solver_options={"general": {"TimeLimit": limit}, "auction": {
+    solver_options={"general": {"algorithm_time_limit": limit}, "auction": {
       "eta": 0.0, "epsilon": 0.001, "zeta": 0.01, "unit_bids": True,
     }},
   )

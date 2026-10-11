@@ -46,6 +46,7 @@ from run_faasmadea import (
   neigh_dict_to_matrix,
 )
 from utils.common import load_configuration
+from utils import step_time
 
 
 def run(
@@ -81,7 +82,7 @@ def _run(
   solver_name = config["solver_name"]
   solver_options = config.get("solver_options", {})
   general_solver_options = solver_options.get("general", {})
-  time_limit = general_solver_options.get("TimeLimit", np.inf)
+  time_limit = step_time.algorithm_time_limit(config)
   max_cycles = config.get("max_cycles")
   if max_cycles is not None and (type(max_cycles) is not int or max_cycles < 1):
     raise ValueError("max_cycles must be a positive integer or null")
@@ -107,15 +108,13 @@ def _run(
   )
   Nn = base_data[None]["Nn"][None]
   Nf = base_data[None]["Nf"][None]
-  use_wall_time = False
   pg_reserve = 0.0
   if refine_welfare:
     from madea_pg import refinement_options
     pg_options = refinement_options(config)
     requested = (pg_options["time_limit_per_node"] * Nn
                  if "time_limit_per_node" in pg_options else pg_options["time_limit"])
-    use_wall_time = pg_options["max_sweeps"] > 0 and requested > 0
-    if use_wall_time:
+    if pg_options["max_sweeps"] > 0 and requested > 0:
       pg_reserve = min(requested, time_limit / 2)
   hierarchy_time_limit = time_limit - pg_reserve
   neighborhood = neigh_dict_to_matrix(base_data[None]["neighborhood"], Nn)
@@ -125,14 +124,14 @@ def _run(
   complete_solution = init_complete_solution()
   objectives = []
   termination_conditions = []
-  runtimes = []
+  runtime_rows = []
 
   for t in range(min_run_time, ub, run_time_step):
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
+    clock = step_time.start_step()
     started_at = time.monotonic()
     cycle_started_at = datetime.now()
-    total_runtime = 0
     loadt = get_current_load(traces, agents, t)
     sp_data = deepcopy(base_data)
     sp_data[None]["incoming_load"] = loadt
@@ -150,11 +149,10 @@ def _run(
         file = log_stream,
         flush = True
       )
-    total_runtime += sp_runtime['tot']
     state = MadeaState(
       y=np.zeros((Nn, Nn, Nf)), omega=deepcopy(sp_omega),
       p=np.zeros((Nn, Nf)), fairness=np.zeros((Nn, Nf)),
-      sp_r=sp_r, sp_rho=sp_rho, total_runtime=total_runtime,
+      sp_r=sp_r, sp_rho=sp_rho, total_runtime=step_time.current_modelled(),
     )
     engine = engine_class(
       neighborhood=neighborhood,
@@ -166,16 +164,16 @@ def _run(
     previous_cycle_progress = None
     completed_cycles = 0
     while True:
-      if use_wall_time:
-        state.total_runtime = time.monotonic() - started_at
+      state.total_runtime = step_time.current_modelled()
       if state.total_runtime >= hierarchy_time_limit:
         reason = f"reached time limit: {state.total_runtime} >= {hierarchy_time_limit}"
-        # The initial local solve may exhaust the budget before the first auction.
-        if state.best_centralized_solution is None:
-          state.best_centralized_solution = combine_solutions(
-            Nn, Nf, sp_data, loadt, sp_x, state.sp_r, state.sp_rho,
-            None, state.y, None, None, None, None,
-          )
+        with step_time.untimed():
+          # The initial local solve may exhaust the budget before the first auction.
+          if state.best_centralized_solution is None:
+            state.best_centralized_solution = combine_solutions(
+              Nn, Nf, sp_data, loadt, sp_x, state.sp_r, state.sp_rho,
+              None, state.y, None, None, None, None,
+            )
         break
       if max_cycles is not None and completed_cycles >= max_cycles:
         reason = f"max cycles reached: {completed_cycles} >= {max_cycles}"
@@ -185,9 +183,7 @@ def _run(
         agents=agents, loadt=loadt, neighborhood=neighborhood, latency=latency,
         config=config, auction_options=auction_options,
         parallelism=parallelism, log_stream=log_stream,
-        started_at=cycle_started_at,
-        **({"wall_started_at": started_at, "auction_time_limit": hierarchy_time_limit}
-           if use_wall_time else {}),
+        started_at=cycle_started_at, auction_time_limit=hierarchy_time_limit,
       )
       # Use the actual reason, including its existing priority over other tests.
       reason = state.reason
@@ -222,7 +218,6 @@ def _run(
       state.y = result.y
       rmp_omega = compute_offloaded_demand(state.y)
       e = time.monotonic()
-      state.total_runtime += e - s
       if verbose > 1:
         print(
           f"        higher-level auction: DONE (y = {state.y.tolist()}; "
@@ -230,14 +225,14 @@ def _run(
           file=log_stream, flush=True,
         )
       if result.accepted_allocations:
-        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, state.y)
-        if bad_nodes:
-          raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
+        with step_time.untimed():
+          bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, state.y)
+          if bad_nodes:
+            raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
         spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
           spr, sp_data, agents, solver_name, general_solver_options,
           state.y, rmp_omega, parallelism, sp_x,
         )
-        state.total_runtime += spr_runtime
         _, _, _, _, state.sp_r, state.sp_rho = spr_sol
         state.fairness += (rmp_omega > 0).astype(state.fairness.dtype)
         if verbose > 1:
@@ -248,34 +243,34 @@ def _run(
           )
       state.omega = sp_omega - rmp_omega
       state.omega[np.abs(state.omega) < tolerance] = 0.0
-      # Preserve a better hierarchical incumbent even if the next cycle swaps it.
-      combined = combine_solutions(
-        Nn, Nf, sp_data, loadt, sp_x, state.sp_r, state.sp_rho,
-        None, state.y, None, None, None, None,
-      )
-      cost = compute_centralized_objective(
-        sp_data, combined["sp"]["x"], combined["sp"]["y"], combined["sp"]["z"],
-      )
-      if cost > state.best_centralized_cost:
-        state.best_centralized_cost = cost
-        state.best_centralized_solution = deepcopy(combined)
-        state.best_centralized_it = state.iterations - 1
-        if verbose > 0:
-          print(
-            f"        best centralized solution updated; obj = {cost}",
-            file=log_stream, flush=True,
-          )
+      with step_time.untimed():
+        # Preserve a better hierarchical incumbent even if the next cycle swaps it.
+        combined = combine_solutions(
+          Nn, Nf, sp_data, loadt, sp_x, state.sp_r, state.sp_rho,
+          None, state.y, None, None, None, None,
+        )
+        cost = compute_centralized_objective(
+          sp_data, combined["sp"]["x"], combined["sp"]["y"], combined["sp"]["z"],
+        )
+        if cost > state.best_centralized_cost:
+          state.best_centralized_cost = cost
+          state.best_centralized_solution = deepcopy(combined)
+          state.best_centralized_it = state.iterations - 1
+          if verbose > 0:
+            print(
+              f"        best centralized solution updated; obj = {cost}",
+              file=log_stream, flush=True,
+            )
       completed_cycles += 1
 
     if refine_welfare:
       from madea_pg import refine_solution
-      if use_wall_time:
-        state.total_runtime = time.monotonic() - started_at
       state.best_centralized_solution, refinement = refine_solution(
-        sp_data, state.best_centralized_solution, config, time_limit - state.total_runtime,
+        sp_data, state.best_centralized_solution, config, time_limit - step_time.current_modelled(),
       )
-      state.total_runtime += refinement["seconds"]
       refinement_history.append({"time": t, **refinement})
+    state.total_runtime = step_time.current_modelled()
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
     complete_solution, _, objective = decode_solutions(
       sp_data, state.best_centralized_solution, complete_solution, None,
     )
@@ -287,7 +282,6 @@ def _run(
       f"best centralized it: {state.best_centralized_it}; "
       f"total runtime: {state.total_runtime})"
     )
-    runtimes.append(state.total_runtime)
     if t % checkpoint_interval == 0 or t == max_steps - 1:
       save_checkpoint(
         complete_solution, os.path.join(solution_folder, "LSPc"), t,
@@ -325,9 +319,7 @@ def _run(
   pd.DataFrame(termination_conditions).to_csv(
     os.path.join(solution_folder, "termination_condition.csv"),
   )
-  pd.DataFrame({"tot": runtimes}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False,
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   if log_on_file:
     log_stream.close()
   return solution_folder

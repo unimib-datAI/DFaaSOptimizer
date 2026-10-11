@@ -47,7 +47,7 @@ def test_one_shot_pg_preserves_baseline_and_uses_local_acceptance(tmp_path, monk
   assert (stats.welfare_after >= stats.welfare_before - 1e-6).all()
   np.testing.assert_allclose(stats.welfare_before, pd.read_csv(baseline / 'obj.csv').iloc[:, 0])
   np.testing.assert_allclose(stats.welfare_after, pd.read_csv(refined / 'obj.csv')['One-shot-PG'])
-  assert (pd.read_csv(refined / 'runtime.csv')['tot'] >= stats.seconds).all()
+  assert (pd.read_csv(refined / 'runtime.csv')['algorithm_s'] >= stats.seconds).all()
   solutions = [load_solution(str(folder), 'LSPc') for folder in (baseline, refined, unchanged, observed)]
   for step in range(2):
     arrays = [encode_solution(10, 3, sol[0], sol[2], sol[1], step) for sol in solutions]
