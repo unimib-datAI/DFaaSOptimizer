@@ -36,7 +36,9 @@ class Phase:
   def longest(self, wall: float) -> float:
     if self.nodes:
       return wall / self.nodes
-    return min(wall, max(self.tasks.values(), default=0.0))
+    if not self.tasks:  # nothing recorded: count it all (a forgotten timed() errs high)
+      return wall
+    return min(wall, max(self.tasks.values()))
 
 
 class StepClock:

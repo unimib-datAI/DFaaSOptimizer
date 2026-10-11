@@ -104,7 +104,7 @@ def run_one(case, method, output, config):
   families.cases = lambda: [case]
   families.instance = instance
   families.METHODS = [(method, METHODS[method])]
-  families.run(output, datetime.now(timezone.utc) + timedelta(hours=1), 0, 1, config=config)
+  families.run(output, datetime.now(timezone.utc) + timedelta(hours=1), -1, 1, config=config)  # all cores
 
 
 if __name__ == '__main__':

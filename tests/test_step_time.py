@@ -170,3 +170,33 @@ def test_plasma_batches_keep_arrival_order_between_competitors():
   nodes = [SimpleNamespace(params=SimpleNamespace(nbrs=nbrs[i])) for i in range(4)]
   engine = PlasmaEngine(nodes, SimpleNamespace(), np.random.default_rng(0))
   assert engine._negotiation_batches([2, 0, 3, 1]) == [[2, 0], [3, 1]]
+
+
+def test_phase_without_tasks_counts_its_full_wall_time(now):
+  # A helper that forgets to time its per-node loop must err high, never vanish.
+  clock = step_time.start_step()
+  with step_time.parallel_phase():
+    now.t = 3.0
+  assert clock.modelled() == pytest.approx(3.0)
+
+
+def test_hierarchy_seller_resolution_is_sequential_time(now):
+  # Sellers resolve one after another against shared buyer demand and tokens:
+  # their resolution time adds up, it is not one parallel phase.
+  import numpy as np
+  from types import SimpleNamespace
+  from hierarchical_auction.engine import HierarchicalAuctionEngine
+  engine = HierarchicalAuctionEngine(np.array([[0, 1, 0], [1, 0, 1], [0, 1, 0]]), 1, np.ones(1))
+  engine._aggregate_residual_demand = lambda *a, **k: None
+  engine._populate_indicative_tokens = lambda *a, **k: None
+  engine._generate_level_requests = lambda *a, **k: []
+
+  def resolve(k, f, remaining):
+    now.t += 1.0
+    return []
+
+  tokens = SimpleNamespace(resolve_node_function=resolve, commit=lambda accepted: None)
+  clock = step_time.start_step()
+  engine._run_level_iteration({}, 2, tokens, np.zeros((3, 3, 1)), np.zeros((3, 1)),
+                              np.zeros((3, 1)), np.zeros((3, 3)), np.zeros((3, 1)))
+  assert clock.modelled() == pytest.approx(3.0)

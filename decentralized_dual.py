@@ -102,7 +102,7 @@ def buyer_price_response(
   dual_term = 0.0
   rows = []
 
-  for i, f in zip(*np.nonzero(omega > 0)):
+  for i, f in step_time.timed(zip(*np.nonzero(omega > 0)), key=lambda item: int(item[0])):
     ranked = sorted(
       (
         (j, s[i, j, f] - lam[j, f])

@@ -91,3 +91,32 @@ def test_observer_time_is_excluded(tmp_path, monkeypatch):
   folder = run_folder("MADEA", INSTANCES[0], 0, tmp_path)
   frame = pd.read_csv(folder / "runtime.csv")
   assert (frame.wall_s - frame.algorithm_s >= 0.2).all()
+
+
+def test_run_py_runtime_comparison_reads_the_new_format():
+  import run
+  frame = pd.DataFrame({"step": [0, 1], "algorithm_s": [1.0, 2.0], "wall_s": [5.0, 5.0]})
+  assert run.runtime_series(frame, "FaaS-MADeA").tolist() == [1.0, 2.0]
+  assert run.runtime_series(pd.DataFrame({"tot": [3.0]}), "FaaS-MAPG").tolist() == [3.0]  # excluded methods
+  assert run.runtime_series(pd.DataFrame({"LoadManagementModel": [4.0]}), "LoadManagementModel").tolist() == [4.0]
+
+
+def test_families_harness_sets_the_modelled_budget(tmp_path, monkeypatch):
+  sys.path.insert(0, str(ROOT / "experiments" / "madea_pg_compact"))
+  import families_extended as families
+  from datetime import datetime, timedelta, timezone
+  seen = {}
+
+  def runner(cfg, workers, **kwargs):
+    seen.update(general=cfg["solver_options"]["general"], workers=workers)
+    raise RuntimeError("stop after capturing the configuration")
+
+  instance = sorted(p for p in (ROOT / "tests/data/harmonization").iterdir() if (p / "metadata.json").exists())[0]
+  case = dict(id="c", phase="static", nodes=300, functions=5, seed=1, repeat=0, profile=[1.0], steps=1)
+  monkeypatch.setattr(families, "cases", lambda: [case])
+  monkeypatch.setattr(families, "instance", lambda config, case, output: (instance, None, None, None))
+  monkeypatch.setattr(families, "METHODS", [("M", runner)])
+  config = json.loads((ROOT / "experiments/madea_pg_compact/catalog_config_overnight.json").read_text())
+  families.run(tmp_path, datetime.now(timezone.utc) + timedelta(hours=1), -1, 1, config=config)
+  assert seen["general"]["algorithm_time_limit"] == 150.0   # max(30, 0.5 * 300) modelled seconds
+  assert seen["workers"] == -1

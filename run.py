@@ -78,6 +78,15 @@ CENTRALIZED_MODEL_KEYS = (
 )
 
 
+
+def runtime_series(frame, method_name):
+  """Per-step runtime of one method: modelled algorithm time for harmonized
+  methods (utils/step_time.py), 'tot' for older files, the model column for
+  the centralized reference."""
+  if method_name == "LoadManagementModel":
+    return frame[method_name]
+  return frame["algorithm_s"] if "algorithm_s" in frame else frame["tot"]
+
 def resolve_centralized_model_key(folder: str, default: str) -> str:
   for key in CENTRALIZED_MODEL_KEYS:
     if os.path.exists(os.path.join(folder, f"{key}_solution.csv")):
@@ -584,8 +593,7 @@ def results_postprocessing(
     if reference_method_name in found_methods and len(runtimes) > 1:
       runtime_comparison = {}
       for mname in found_methods:
-        key_col = mname if mname == "LoadManagementModel" else "tot"
-        runtime_comparison[mname] = runtimes[mname][key_col].tolist()
+        runtime_comparison[mname] = runtime_series(runtimes[mname], mname).tolist()
         if mname != "LoadManagementModel":
           runtime_comparison[f"iteration_{mname}"] = all_tc[
             (

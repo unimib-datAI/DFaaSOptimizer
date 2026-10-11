@@ -186,13 +186,14 @@ class HierarchicalAuctionEngine:
     level_accepted: list[AcceptedAllocation] = []
     # Buyer demand is shared across overlapping structures and sellers.
     remaining_demand = current_omega.copy()
-    with step_time.parallel_phase():  # each seller node resolves its own token requests
-      for k in step_time.timed(range(self._num_nodes)):
-        for f in range(self._num_functions):
-          accepted = token_manager.resolve_node_function(k, f, remaining_demand)
-          if accepted:
-            token_manager.commit(accepted)
-            level_accepted.extend(accepted)
+    # Sequential: each seller consumes the shared buyer demand and tokens left
+    # by the sellers before it, so the resolution order matters (not a phase).
+    for k in range(self._num_nodes):
+      for f in range(self._num_functions):
+        accepted = token_manager.resolve_node_function(k, f, remaining_demand)
+        if accepted:
+          token_manager.commit(accepted)
+          level_accepted.extend(accepted)
 
     if not level_accepted:
       return LevelResult(current_y, current_omega)

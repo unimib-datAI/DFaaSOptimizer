@@ -36,3 +36,12 @@ def test_missing_obj_is_failure(tmp_path):
 def test_present_obj_is_not_failure(tmp_path):
   run = _make_run(tmp_path, [5.0])
   assert run_failed(run) is False
+
+
+def test_read_run_runtime_uses_algorithm_time_of_the_new_format(tmp_path):
+  # runtime.csv of harmonized methods: step, algorithm_s, wall_s, parallel_phases, workers
+  run = tmp_path / "run"
+  run.mkdir()
+  (run / "runtime.csv").write_text(
+    "step,algorithm_s,wall_s,parallel_phases,workers\n0,1.0,9.0,3,4\n1,3.0,9.0,3,4\n")
+  assert read_run_runtime(run) == pytest.approx(2.0)

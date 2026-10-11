@@ -107,8 +107,8 @@ def run(output, deadline, workers, max_cases, plasma_workers=None, *, config=Non
     available_logical_cpus=_available_cpu_count(), deadline_utc=deadline.isoformat(),
     started_utc=datetime.now(timezone.utc).isoformat(),
     source_hashes={p: hashlib.sha256((ROOT / p).read_bytes()).hexdigest() for p in watched},
-    runtime_accounting='actual full runner wall time including pool startup/shutdown; no replay or observer inside decision loop',
-    native_limits='MADEA and one-shot <=100 iterations; general TimeLimit=max(30,0.5*N); PG <=5 sweeps and 0.25 seconds/node bounded by remaining native time; PLASMA 20 rounds/step',
+    runtime_accounting='native_seconds = modelled algorithm time (runtime.csv algorithm_s: parallel phases count their longest node task, observer code excluded); wall_seconds = full runner wall time',
+    native_limits='MADEA and one-shot <=100 iterations; algorithm_time_limit=max(30,0.5*N) modelled seconds per step; PG <=5 sweeps and 0.25 seconds/node bounded by remaining native time; PLASMA 20 rounds/step',
     note='Different stopping criteria; not an equal-wall-budget comparison. fixed_sum integer rounding is unchanged; actual input totals are recorded.')
   (output / 'protocol.json').write_text(json.dumps(protocol, indent=2))
   signal.signal(signal.SIGALRM, timeout_handler)
@@ -129,7 +129,8 @@ def run(output, deadline, workers, max_cases, plasma_workers=None, *, config=Non
       cfg.update(seed=case['seed'], max_steps=case['steps'], min_run_time=0,
         max_run_time=case['steps'], base_solution_folder=str(output / 'runs' / case['id'] / name))
       cfg['limits'].update(instance_type='materialized', path=str(source.resolve()))
-      cfg['solver_options']['general']['TimeLimit'] = max(30., .5 * case['nodes'])
+      # per-step algorithm budget in modelled time (utils/step_time.py); TimeLimit stays solver-only
+      cfg['solver_options']['general']['algorithm_time_limit'] = max(30., .5 * case['nodes'])
       row = dict(case_id=case['id'], phase=case['phase'], nodes=case['nodes'],
         functions=case['functions'], seed=case['seed'], repeat=case['repeat'],
         load_scale=case['profile'][0], steps=case['steps'], method=name,
