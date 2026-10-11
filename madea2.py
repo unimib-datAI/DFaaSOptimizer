@@ -58,12 +58,35 @@ def define_bids(
     "i": [], "j": [], "f": [], "d": [], "v": []
   }
 
-  def memory_bid_value(i, j, f):
+  # "beta" (default): the memory bid reveals the buyer's private advantage
+  # beta + gamma.  "bid": it carries only an auction bid built like the
+  # capacity bids, b = p_j + epsilon + (u_j - u_next), so the seller learns
+  # no more than in MADEA (see docs/decentralized-algorithms/information-model.md)
+  value_mode = auction_options.get("memory_bid_value", "beta")
+  if value_mode not in {"beta", "bid"}:
+    raise ValueError("memory_bid_value must be 'beta' or 'bid'")
+  bid_cache = {}
+
+  def private_value(i, j, f):
     return (
       data[None]["beta"][(i+1,j+1,f+1)] + data[None]["gamma"][(i+1,f+1)]
       - auction_options["latency_weight"] * latency[i,j]
       - auction_options["fairness_weight"] * fairness[i,f]
     )
+
+  def memory_bid_value(i, j, f):
+    if value_mode == "beta":
+      return private_value(i, j, f)
+    if (i, f) not in bid_cache:
+      sellers = sorted(set(np.nonzero(neighborhood[i,:])[0]) & set(np.nonzero(rho)[0]))
+      utility = {k: private_value(i, k, f) - p[k,f] for k in sellers}
+      order = sorted(sellers, key=lambda k: -utility[k])
+      bid_cache[(i, f)] = {
+        k: p[k,f] + auction_options["epsilon"]
+           + (utility[k] - utility[order[idx+1]] if idx + 1 < len(order) else 0.0)
+        for idx, k in enumerate(order)
+      }
+    return bid_cache[(i, f)].get(j, p[j,f] + auction_options["epsilon"])
 
   for i,f in zip(potential_buyers, functions_to_share):
     # identify potential sellers
@@ -423,3 +446,23 @@ def run_one_shot(config, parallelism, log_on_file=False, disable_plotting=False,
 
 def run_one_shot_pg(config, parallelism, log_on_file=False, disable_plotting=False):
   return run_one_shot(config, parallelism, log_on_file, disable_plotting, refine_welfare=True)
+
+
+def _bid_only(config):
+  """Same configuration with memory bids that carry the auction bid, not beta."""
+  config = deepcopy(config)
+  config.setdefault("solver_options", {}).setdefault("auction", {})["memory_bid_value"] = "bid"
+  return config
+
+
+def run_b(config, parallelism, log_on_file=False, disable_plotting=False):
+  """MADEA2-b: MADEA2 without revealing beta to the sellers."""
+  return run(_bid_only(config), parallelism, log_on_file, disable_plotting)
+
+
+def run_one_shot_b(config, parallelism, log_on_file=False, disable_plotting=False):
+  return run_one_shot(_bid_only(config), parallelism, log_on_file, disable_plotting)
+
+
+def run_one_shot_b_pg(config, parallelism, log_on_file=False, disable_plotting=False):
+  return run_one_shot(_bid_only(config), parallelism, log_on_file, disable_plotting, refine_welfare=True)

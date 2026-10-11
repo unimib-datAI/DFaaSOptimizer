@@ -1,0 +1,8 @@
+## Note di metodo (campagna catalogo edge-datasets, 11/10/2026)
+
+- Campione: 75 istanze estratte con seme fisso (`catalog_campaign.py --sample`, seed 20261010) dal catalogo rigenerato la sera del 10/10 e congelate in `solutions/catalog-sample-2026-10-10/instances` (non versionate). 44 "main" (taglia ~80, Nf 5 e 10), 22 "small" (~40), 9 "scale" (taglia massima della famiglia: n160, n500 in 5 famiglie). Tutte con β < α.
+- Eseguito nel workspace cloud (2 core, 7 GB), una run per core alla volta, config `catalog_config_overnight.json` (config del 09/10, Gurobi a licenza ristretta per LSPr, use_dp=true). Solo passo 0 (statico).
+- Centralizzato: LoadManagementModel con HiGHS, limite 60 s (120 s per n160); incumbent validato con `validate_centralized_solution` e misurato con la stessa funzione di welfare dei metodi decentralizzati. 24 ottimi, 43 al limite di tempo (gap medio dal bound 0,1%); i 5 casi n500 non entrano in memoria e mancano.
+- Copertura: la sessione si è fermata la notte del 10/10 (dalle ~22:10 alle 6:37) e il workspace è stato riavviato verso le 7:56; la campagna è girata dalle 6:39 alle 7:55 e dalle 9:30 alle 10:00. Risultato: 32-33 istanze per gli 11 metodi principali, 18 per le varianti "-b" (solo istanze già complete, confronti appaiati), nessun metodo del secondo gruppo (hierarchical-madea(-pg), MAPG-S/R, hierarchical-MAFW(-PG), hierarchical-one-shot).
+- Le distanze medie delle varianti "-b" sono su un sottoinsieme diverso: confrontarle solo tramite i confronti diretti.
+- Varianti "-b": vedi `docs/decentralized-algorithms/information-model.md` (MADEA2 e la riparazione di MAFW usano β dei mittenti; le "-b" no).

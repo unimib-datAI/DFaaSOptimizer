@@ -21,11 +21,22 @@ def _one_shot2(config, parallelism, log_on_file=False, disable_plotting=False):
   return folder
 
 
+def _one_shot2_b(config, parallelism, log_on_file=False, disable_plotting=False):
+  folder = madea2.run_one_shot_b(config, parallelism, log_on_file, disable_plotting)
+  runtime = Path(folder) / 'runtime.csv'
+  if not runtime.exists():
+    pd.DataFrame({'tot': [float('nan')]}).to_csv(runtime, index=False)
+  return folder
+
+
 ALL_METHODS = {'FaaS-MAFW': run_frankwolfe, 'MAFW-PG': hfw.run_flat_pg,
                'hierarchical-MAFW': hfw.run_hierarchical,
                'hierarchical-MAFW-PG': hfw.run_hierarchical_pg,
                'MADEA2': madea2.run, 'MADEA2-one-shot': _one_shot2,
-               'one-shot2-pg': madea2.run_one_shot_pg}
+               'one-shot2-pg': madea2.run_one_shot_pg,
+               'MADEA2-b': madea2.run_b, 'MADEA2-b-one-shot': _one_shot2_b,
+               'one-shot2-b-pg': madea2.run_one_shot_b_pg,
+               'FaaS-MAFW-b': hfw.run_mafw_b, 'MAFW-b-PG': hfw.run_flat_pg_b}
 METHODS = [('FaaS-MAFW', run_frankwolfe)]
 
 

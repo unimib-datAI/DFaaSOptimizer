@@ -281,3 +281,22 @@ def run(
 run_hierarchical = partial(run, hierarchy=True, refine_welfare=False)
 run_hierarchical_pg = partial(run, hierarchy=True, refine_welfare=True)
 run_flat_pg = partial(run, hierarchy=False, refine_welfare=True)
+
+
+def _price_repair(config):
+  """Same configuration, with the receiver-side (price-based) repair order."""
+  config = deepcopy(config)
+  config.setdefault("solver_options", {}).setdefault("frankwolfe", {})["repair_order"] = "price"
+  return config
+
+
+def run_mafw_b(config, parallelism, log_on_file=False, disable_plotting=False):
+  """FaaS-MAFW-b: MAFW whose repair does not use the senders' beta."""
+  from decentralized_frankwolfe import run as run_mafw
+  return run_mafw(_price_repair(config), parallelism, log_on_file, disable_plotting)
+
+
+def run_flat_pg_b(config, parallelism, log_on_file=False, disable_plotting=False):
+  return run(_price_repair(config), parallelism, log_on_file, disable_plotting,
+             hierarchy=False, refine_welfare=True)
+

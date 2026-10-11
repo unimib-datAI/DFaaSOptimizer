@@ -449,8 +449,15 @@ def frankwolfe_assignments(
     i, j, f = np.unravel_index(int(np.argmax(q)), q.shape)
     if np.floor(omega[i, f] + tolerance) >= 1:
       y_round[i, j, f] = 1.0
+  if options["repair_order"] == "price":
+    # receiver-side information only: rank incoming units by the price the
+    # receiver itself advertised for that function (identical for all
+    # senders of f), not by the senders' private advantages
+    repair_gains = np.broadcast_to(stats["price"][None, :, :], gains.shape)
+  else:
+    repair_gains = gains
   y_total, removed = repair_memory(
-    y_prev + y_round, params, gains, sp_x, sp_r, sp_rho, integer, tolerance,
+    y_prev + y_round, params, repair_gains, sp_x, sp_r, sp_rho, integer, tolerance,
     protected=y_prev,
   )
   y_new = np.maximum(0.0, y_total - y_prev)
@@ -495,6 +502,11 @@ def frankwolfe_options(solver_options: dict) -> dict:
   options.setdefault("latency_weight", 0.0)
   options.setdefault("fairness_weight", 0.0)
   options.setdefault("max_rounds", 0)  # 0 = only the global max_iterations applies
+  # "gain": the receiver drops the incoming units with the lowest sender
+  # advantage (needs the senders' beta); "price": it uses only its own prices
+  options.setdefault("repair_order", "gain")
+  if options["repair_order"] not in {"gain", "price"}:
+    raise ValueError("frankwolfe repair_order must be one of: gain, price")
   if int(options["max_rounds"]) < 0:
     raise ValueError("frankwolfe max_rounds must be >= 0")
   if int(options["iterations"]) < 1:
