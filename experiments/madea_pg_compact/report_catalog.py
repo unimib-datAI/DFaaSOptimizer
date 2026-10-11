@@ -73,6 +73,19 @@ def main(folder, output):
     wins = full.eq(full.max(axis=1), axis=0).sum()
     lines += [f'## Classifica tra i decentralizzati ({len(full)} casi completi per tutti i metodi mostrati)', '',
               pd.DataFrame({'posizione media': r.mean(), 'vittorie': wins}).sort_values('posizione media').round(2).to_markdown(), '']
+  every = rank.dropna(axis=1, how='all').dropna()
+  if len(every) and every.shape[1] > full.shape[1]:
+    r = every.rank(axis=1, ascending=False, method='average')
+    wins = every.eq(every.max(axis=1), axis=0).sum()
+    dist = None
+    if 'centralized' in W:
+      ref = W['centralized'].reindex(every.index)
+      dist = (every.rsub(ref, axis=0)).div(ref.abs(), axis=0).mul(100).mean()
+    table = pd.DataFrame({'posizione media': r.mean(), 'vittorie': wins})
+    if dist is not None:
+      table['distanza media dal centralizzato %'] = dist
+    lines += [f'## Classifica con tutti i metodi, varianti "-b" comprese ({len(every)} casi completi per tutti)', '',
+              table.sort_values('posizione media').round(3).to_markdown(), '']
   rows = []
   for a, b in PAIRS:
     if a in W and b in W:

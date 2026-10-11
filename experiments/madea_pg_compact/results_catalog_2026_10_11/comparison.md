@@ -85,6 +85,27 @@ Stato del centralizzato: TerminationCondition.maxTimeLimit: 43, TerminationCondi
 | FaaS-MAFW                |              7.76 |          0 |
 | MADEA                    |              7.85 |          0 |
 
+## Classifica con tutti i metodi, varianti "-b" comprese (17 casi completi per tutti)
+
+| method                   |   posizione media |   vittorie |   distanza media dal centralizzato % |
+|:-------------------------|------------------:|-----------:|-------------------------------------:|
+| PLASMA-Welfare           |             4.118 |         10 |                                1.273 |
+| one-shot2-b-pg           |             7.118 |          1 |                                2.538 |
+| one-shot-pg              |             7.147 |          2 |                                2.733 |
+| one-shot2-pg             |             7.206 |          3 |                                2.502 |
+| hierarchical-one-shot-pg |             7.353 |          0 |                                2.696 |
+| MADEA-PG                 |             7.735 |          1 |                                2.777 |
+| MAFW-PG                  |             8.441 |          1 |                                2.68  |
+| MADEA2                   |             8.559 |          2 |                                2.457 |
+| MAFW-b-PG                |             8.853 |          2 |                                2.772 |
+| MADEA2-one-shot          |             9.118 |          0 |                                2.655 |
+| MADEA2-b                 |             9.265 |          1 |                                2.644 |
+| MADEA-one-shot           |             9.882 |          1 |                                2.913 |
+| MADEA                    |            10     |          0 |                                2.971 |
+| MADEA2-b-one-shot        |            10.029 |          0 |                                2.701 |
+| FaaS-MAFW                |            10.412 |          0 |                                2.764 |
+| FaaS-MAFW-b              |            10.765 |          0 |                                2.838 |
+
 ## Confronti diretti (differenza % di welfare)
 
 | confronto                                |   casi |   vince |   pari |   perde |   diff_media |    min |   max |
