@@ -127,8 +127,9 @@ def _run(
   runtime_rows = []
 
   for t in range(min_run_time, ub, run_time_step):
-    if verbose > 0:
-      print(f"t = {t}", file=log_stream, flush=True)
+    with step_time.untimed():
+      if verbose > 0:
+        print(f"t = {t}", file=log_stream, flush=True)
     clock = step_time.start_step()
     started_at = time.monotonic()
     cycle_started_at = datetime.now()
@@ -142,13 +143,14 @@ def _run(
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism,
     )
-    if verbose > 1:
-      print(
-        f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
-        f"x = {sp_x.tolist()}; runtime = {sp_runtime['tot']})",
-        file = log_stream,
-        flush = True
-      )
+    with step_time.untimed():
+      if verbose > 1:
+        print(
+          f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
+          f"x = {sp_x.tolist()}; runtime = {sp_runtime['tot']})",
+          file = log_stream,
+          flush = True
+        )
     state = MadeaState(
       y=np.zeros((Nn, Nn, Nf)), omega=deepcopy(sp_omega),
       p=np.zeros((Nn, Nf)), fairness=np.zeros((Nn, Nf)),
@@ -218,12 +220,13 @@ def _run(
       state.y = result.y
       rmp_omega = compute_offloaded_demand(state.y)
       e = time.monotonic()
-      if verbose > 1:
-        print(
-          f"        higher-level auction: DONE (y = {state.y.tolist()}; "
-          f"rmp_omega = {rmp_omega.tolist()}; runtime = {(e - s)})",
-          file=log_stream, flush=True,
-        )
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        higher-level auction: DONE (y = {state.y.tolist()}; "
+            f"rmp_omega = {rmp_omega.tolist()}; runtime = {(e - s)})",
+            file=log_stream, flush=True,
+          )
       if result.accepted_allocations:
         with step_time.untimed():
           bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, state.y)
@@ -235,12 +238,13 @@ def _run(
         )
         _, _, _, _, state.sp_r, state.sp_rho = spr_sol
         state.fairness += (rmp_omega > 0).astype(state.fairness.dtype)
-        if verbose > 1:
-          print(
-            f"        solve 'restricted problem': DONE ({spr_tc}; "
-            f"obj: {spr_obj}; runtime = {spr_runtime})",
-            file=log_stream, flush=True,
-          )
+        with step_time.untimed():
+          if verbose > 1:
+            print(
+              f"        solve 'restricted problem': DONE ({spr_tc}; "
+              f"obj: {spr_obj}; runtime = {spr_runtime})",
+              file=log_stream, flush=True,
+            )
       state.omega = sp_omega - rmp_omega
       state.omega[np.abs(state.omega) < tolerance] = 0.0
       with step_time.untimed():
@@ -256,11 +260,12 @@ def _run(
           state.best_centralized_cost = cost
           state.best_centralized_solution = deepcopy(combined)
           state.best_centralized_it = state.iterations - 1
-          if verbose > 0:
-            print(
-              f"        best centralized solution updated; obj = {cost}",
-              file=log_stream, flush=True,
-            )
+          with step_time.untimed():
+            if verbose > 0:
+              print(
+                f"        best centralized solution updated; obj = {cost}",
+                file=log_stream, flush=True,
+              )
       completed_cycles += 1
 
     if refine_welfare:
@@ -270,7 +275,7 @@ def _run(
       )
       refinement_history.append({"time": t, **refinement})
     state.total_runtime = step_time.current_modelled()
-    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
     complete_solution, _, objective = decode_solutions(
       sp_data, state.best_centralized_solution, complete_solution, None,
     )
@@ -286,12 +291,13 @@ def _run(
       save_checkpoint(
         complete_solution, os.path.join(solution_folder, "LSPc"), t,
       )
-    if verbose > 0:
-      elapsed = time.monotonic() - started_at
-      print(
-        f"    TOTAL RUNTIME [s] = {state.total_runtime} (wallclock: {elapsed})",
-        file=log_stream, flush=True,
-      )
+    with step_time.untimed():
+      if verbose > 0:
+        elapsed = time.monotonic() - started_at
+        print(
+          f"    TOTAL RUNTIME [s] = {state.total_runtime} (wallclock: {elapsed})",
+          file=log_stream, flush=True,
+        )
 
   solution, offloaded, detailed = join_complete_solution(complete_solution)
   save_solution(

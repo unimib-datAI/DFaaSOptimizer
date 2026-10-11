@@ -638,7 +638,7 @@ In `run_faasmadea.run`, inside `for t in range(min_run_time, ub, run_time_step):
 
 - right after the step's loads are computed (`data = update_data(...)` / `loadt = ...`), insert `clock = step_time.start_step()`;
 - remove `total_runtime` accumulations of the step (the subproblem `sp_runtime["tot"]` addition and any other `+=`);
-- replace `runtime_list.append(total_runtime)` (l.1034) with `runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))`;
+- replace `runtime_list.append(total_runtime)` (l.1034) with `runtime_rows.append(dict(step=t, **step_time.end_step(clock)))`;
 - initialize `runtime_rows = []` where `runtime_list = []` was (l.944);
 - replace the `pd.DataFrame({"tot": runtime_list}).to_csv(...)` block (l.1084-1086) with `step_time.write_runtime(solution_folder, runtime_rows)`;
 - wrap the per-step export block (`decode_solutions`, `save_checkpoint`, the best-solution bookkeeping after the cycle) in `with step_time.untimed():`;
@@ -867,7 +867,7 @@ In the base `PlasmaEngine` round loop apply the same arrival order (seeded permu
 
 - [ ] **Step 4: Runner loop**
 
-In `plasma/runner.run`: `clock = step_time.start_step()` right before `engine.run_rounds(...)`; `runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))` right after it (instead of `elapsed`/`runtime_list`, l.120-140); the feasibility check, `decode_solution`, objective and message rows after it are observer code (they run after `end_step`, so outside the clock); `step_time.write_runtime(solution_folder, runtime_rows)` instead of the `tot` CSV (l.163); CLI `--parallelism` default `-1` in `plasma/cli.py`.
+In `plasma/runner.run`: `clock = step_time.start_step()` right before `engine.run_rounds(...)`; `runtime_rows.append(dict(step=t, **step_time.end_step(clock)))` right after it (instead of `elapsed`/`runtime_list`, l.120-140); the feasibility check, `decode_solution`, objective and message rows after it are observer code (they run after `end_step`, so outside the clock); `step_time.write_runtime(solution_folder, runtime_rows)` instead of the `tot` CSV (l.163); CLI `--parallelism` default `-1` in `plasma/cli.py`.
 
 - [ ] **Step 5: New reference for PLASMA (deliberate protocol change)**
 

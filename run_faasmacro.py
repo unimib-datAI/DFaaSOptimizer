@@ -128,12 +128,12 @@ def _solve_agents_parallel(data, agents, model, solver, options, parallelism, pr
   count = min(state['workers'], len(agents))
   # One fresh snapshot per chunk, rather than serializing the network per node.
   tasks = [(data, options, solver, model, agents[i::count], prices) for i in range(count)]
-  results = state['pool'].map(_solve_parallel_batch, tasks, chunksize=1)
-  by_agent = {}
-  for batch in results:
-    for agent, result, seconds in batch:
-      by_agent[agent] = result
-      step_time.record(agent, seconds)
+  with step_time.offloaded(state['workers']):
+    results = state['pool'].map(_solve_parallel_batch, tasks, chunksize=1)
+    for batch in results:
+      for agent, _, seconds in batch:
+        step_time.record(agent, seconds)
+  by_agent = {agent: result for batch in results for agent, result, _ in batch}
   return {agent: by_agent[agent] for agent in agents}
 
 
@@ -814,8 +814,9 @@ def run(
     max_run_time + run_time_step
   ) if max_run_time == min_run_time else max_run_time
   for t in range(min_run_time, ub, run_time_step):
-    if verbose > 0:
-      print(f"t = {t}", file = log_stream, flush = True)
+    with step_time.untimed():
+      if verbose > 0:
+        print(f"t = {t}", file = log_stream, flush = True)
     social_welfare = np.inf
     lower_bound = np.inf
     # get current load and generate data
@@ -853,37 +854,40 @@ def run(
     clock = step_time.start_step()
     ss = datetime.now()
     while not stop_searching:
-      if verbose > 0:
-        print(f"    it = {it} (psi = {psi})", file = log_stream, flush = True)
+      with step_time.untimed():
+        if verbose > 0:
+          print(f"    it = {it} (psi = {psi})", file = log_stream, flush = True)
       # if it == 10:
       #   print("here")
       # extract optimal solution (if provided)
-      if opt_solution is not None:
-        opt_x, _, _, _, _ = encode_solution(
-          Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
-        )
-        opt_r_for_x = np.zeros((Nn,Nf))
-        sp_data[None]["r_bar"] = {}
-        for n in range(Nn):
-          for f in range(Nf):
-            opt_r_for_x[n,f] = sp_data[None][
-              "demand"
-            ][(n+1,f+1)] * opt_x[n,f] / sp_data[None]["max_utilization"][f+1]
-            if np.floor(opt_r_for_x[n,f]) > 0 and (
-                (opt_r_for_x[n,f] / np.floor(opt_r_for_x[n,f]) - 1) > 1e-6
-              ):
-              sp_data[None]["r_bar"][(n+1,f+1)] = int(
-                np.ceil(opt_r_for_x[n,f])
-              )
-            else:
-              if int(np.floor(opt_r_for_x[n,f])) == 0 and (
-                  opt_r_for_x[n,f] > 1e-6
+      # oracle replicas from a reference solution: experiment input, not algorithm work
+      with step_time.untimed():
+        if opt_solution is not None:
+          opt_x, _, _, _, _ = encode_solution(
+            Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
+          )
+          opt_r_for_x = np.zeros((Nn,Nf))
+          sp_data[None]["r_bar"] = {}
+          for n in range(Nn):
+            for f in range(Nf):
+              opt_r_for_x[n,f] = sp_data[None][
+                "demand"
+              ][(n+1,f+1)] * opt_x[n,f] / sp_data[None]["max_utilization"][f+1]
+              if np.floor(opt_r_for_x[n,f]) > 0 and (
+                  (opt_r_for_x[n,f] / np.floor(opt_r_for_x[n,f]) - 1) > 1e-6
                 ):
                 sp_data[None]["r_bar"][(n+1,f+1)] = int(
                   np.ceil(opt_r_for_x[n,f])
                 )
               else:
-                sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r_for_x[n,f])
+                if int(np.floor(opt_r_for_x[n,f])) == 0 and (
+                    opt_r_for_x[n,f] > 1e-6
+                  ):
+                  sp_data[None]["r_bar"][(n+1,f+1)] = int(
+                    np.ceil(opt_r_for_x[n,f])
+                  )
+                else:
+                  sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r_for_x[n,f])
       s = datetime.now()
       # solve sub-problem
       (
@@ -911,13 +915,14 @@ def run(
       e = datetime.now()
       obj_dict["LSP"][it].append(obj["tot"])
       tc_dict["LSP"][it].append(tc["tot"])
-      if verbose > 1:
-        print(
-          f"        sp: DONE ",
-          f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})", 
-          file = log_stream, 
-          flush = True
-        )
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        sp: DONE ",
+            f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})", 
+            file = log_stream, 
+            flush = True
+          )
       # update neighborhood given the nodes availability
       if solver_options.get("update_neighborhood", False):
         rmp_data[None]["neighborhood"] = update_neighborhood(
@@ -945,12 +950,13 @@ def run(
       )
       obj_dict["LRMP"][it].append(obj)
       tc_dict["LRMP"][it].append(tc)
-      if verbose > 1:
-        print(
-          f"        rmp: DONE ({tc}; obj = {obj}; runtime = {runtime})", 
-          file = log_stream, 
-          flush = True
-        )
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        rmp: DONE ({tc}; obj = {obj}; runtime = {runtime})", 
+            file = log_stream, 
+            flush = True
+          )
       # compute deviation
       s = datetime.now()
       dev, Nfthr, detailed_dev = compute_deviation(
@@ -958,14 +964,15 @@ def run(
       )
       e = datetime.now()
       dev_queue.append(dev)
-      if verbose > 1:
-        print(
-          f"        compute_deviation: DONE (dev = {dev}; "
-          f"Nf = {Nfthr}; omega = {sp_omega.sum(axis=0)}; ", 
-          f"ni = {rmp_omega.sum(axis=0)}; runtime = {(e-s).total_seconds()})", 
-          file = log_stream, 
-          flush = True
-        )
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        compute_deviation: DONE (dev = {dev}; "
+            f"Nf = {Nfthr}; omega = {sp_omega.sum(axis=0)}; ", 
+            f"ni = {rmp_omega.sum(axis=0)}; runtime = {(e-s).total_seconds()})", 
+            file = log_stream, 
+            flush = True
+          )
       # compute lower bound
       s = datetime.now()
       lb = compute_lower_bound(
@@ -978,13 +985,14 @@ def run(
       )
       lower_bound = min(lower_bound, lb)
       e = datetime.now()
-      if verbose > 1:
-        print(
-          f"        compute_lower_bound: DONE (current: {lb};"
-          f" bound: {lower_bound}; runtime = {(e-s).total_seconds()})", 
-          file = log_stream, 
-          flush = True
-        )
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        compute_lower_bound: DONE (current: {lb};"
+            f" bound: {lower_bound}; runtime = {(e-s).total_seconds()})", 
+            file = log_stream, 
+            flush = True
+          )
       # solve "restricted problem"
       spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
         spr, 
@@ -1008,13 +1016,14 @@ def run(
       social_welfare = min(social_welfare, spr_obj)
       current_sw_queue.append(social_welfare)
       obj_dict["LSPr"][it].append(spr_obj)
-      if verbose > 1:
-        print(
-          f"        compute_social_welfare: DONE ({spr_tc}; current: {spr_obj}"
-          f"; sw: {social_welfare}; runtime = {spr_runtime})", 
-          file = log_stream, 
-          flush = True
-        )
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        compute_social_welfare: DONE ({spr_tc}; current: {spr_obj}"
+            f"; sw: {social_welfare}; runtime = {spr_runtime})", 
+            file = log_stream, 
+            flush = True
+          )
       # compute price deviation
       odev = relative_objective_gap(spr_obj, obj_dict["LSP"][it][-1])
       x_cost = 0
@@ -1043,22 +1052,24 @@ def run(
         best_it_so_far = it
         final_pi = deepcopy(pi)
         final_detailed_pi = deepcopy(detailed_pi)
-        if verbose > 0:
-          print(
-            f"        best solution updated; obj = {cobj}",
-            file = log_stream,
-            flush = True
-          )
+        with step_time.untimed():
+          if verbose > 0:
+            print(
+              f"        best solution updated; obj = {cobj}",
+              file = log_stream,
+              flush = True
+            )
       if cobj > best_centralized_cost:
         best_centralized_cost = cobj
         best_centralized_solution = csol
         best_centralized_it = it
-        if verbose > 0:
-          print(
-            f"        best centralized solution updated; obj = {cobj}",
-            file = log_stream,
-            flush = True
-          )
+        with step_time.untimed():
+          if verbose > 0:
+            print(
+              f"        best centralized solution updated; obj = {cobj}",
+              file = log_stream,
+              flush = True
+            )
       total_runtime = step_time.current_modelled()
       # check that the deviation is >= 0 (otherwise, no iterations needed)
       if not (dev < 0).all():
@@ -1076,13 +1087,14 @@ def run(
           detailed_pi
         )
         pi_queue.append(pi)
-        if verbose > 1:
-          print(
-            "        update_prices: DONE "
-            f"({pi if not use_detailed_pi else detailed_pi.flatten()})", 
-            file = log_stream, 
-            flush = True
-          )
+        with step_time.untimed():
+          if verbose > 1:
+            print(
+              "        update_prices: DONE "
+              f"({pi if not use_detailed_pi else detailed_pi.flatten()})", 
+              file = log_stream, 
+              flush = True
+            )
         # check stopping criterion
         s = datetime.now()
         stop_searching, why_stop_searching, psi = check_stopping_criteria(
@@ -1101,16 +1113,17 @@ def run(
           time_limit
         )
         e = datetime.now()
-        if verbose > 1:
-          print(
-            f"        check_stopping_criteria: DONE "
-            f"(runtime = {(e - s).total_seconds()}; "
-            f"total runtime = {total_runtime}; "
-            f"wallclock: {(datetime.now() - ss).total_seconds()}) "
-            f"--> stop? {stop_searching} ({why_stop_searching})", 
-            file = log_stream, 
-            flush = True
-          )
+        with step_time.untimed():
+          if verbose > 1:
+            print(
+              f"        check_stopping_criteria: DONE "
+              f"(runtime = {(e - s).total_seconds()}; "
+              f"total runtime = {total_runtime}; "
+              f"wallclock: {(datetime.now() - ss).total_seconds()}) "
+              f"--> stop? {stop_searching} ({why_stop_searching})", 
+              file = log_stream, 
+              flush = True
+            )
       else:
         stop_searching = True
         why_stop_searching = "dev < 0"
@@ -1126,7 +1139,7 @@ def run(
       if not stop_searching:
         it += 1
       else:
-        runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
+        runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
         # save SP/RMP solutions
         sp_complete_solution, rmp_complete_solution, objf = decode_solutions(
           sp_data, 
@@ -1156,13 +1169,14 @@ def run(
             spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
           )
     ee = datetime.now()
-    if verbose > 0:
-      print(
-        f"    TOTAL RUNTIME [s] = {total_runtime} "
-        f"(wallclock: {(ee-ss).total_seconds()})",
-        file = log_stream,
-        flush = True
-      )
+    with step_time.untimed():
+      if verbose > 0:
+        print(
+          f"    TOTAL RUNTIME [s] = {total_runtime} "
+          f"(wallclock: {(ee-ss).total_seconds()})",
+          file = log_stream,
+          flush = True
+        )
   # join
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
     sp_complete_solution
@@ -1243,12 +1257,13 @@ def run(
     os.path.join(solution_folder, "termination_condition.csv")
   )
   step_time.write_runtime(solution_folder, runtime_rows)
-  if verbose > 0:
-    print(
-      f"All solutions saved in: {solution_folder}", 
-      file = log_stream, 
-      flush = True
-    )
+  with step_time.untimed():
+    if verbose > 0:
+      print(
+        f"All solutions saved in: {solution_folder}", 
+        file = log_stream, 
+        flush = True
+      )
   # close log stream if needed
   if log_on_file:
     log_stream.close()

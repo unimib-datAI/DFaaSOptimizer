@@ -183,8 +183,9 @@ def run(
   for t in range(min_run_time, ub, run_time_step):
     clock = step_time.start_step()
     started = time.monotonic()
-    if verbose > 0:
-      print(f"t = {t}", file=log_stream, flush=True)
+    with step_time.untimed():
+      if verbose > 0:
+        print(f"t = {t}", file=log_stream, flush=True)
 
     loadt = get_current_load(input_requests_traces, agents, t)
     data = deepcopy(base_instance_data)
@@ -222,8 +223,9 @@ def run(
     )
 
     while not stop_searching:
-      if verbose > 0:
-        print(f"    it = {it}", file=log_stream, flush=True)
+      with step_time.untimed():
+        if verbose > 0:
+          print(f"    it = {it}", file=log_stream, flush=True)
 
       if pg_reserve > 0:
         previous_y, previous_r, previous_p = y.copy(), sp_r.copy(), p.copy()
@@ -354,7 +356,7 @@ def run(
                                      "hierarchy_pg_reserve": pg_reserve,
                                      "hierarchy_time_budget": hierarchy_time_limit})
         total_runtime = step_time.current_modelled()
-        runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
+        runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
         spc_complete_solution, _, final_objective = decode_solutions(
           sp_data,
           incumbent,
@@ -406,8 +408,9 @@ def run(
   )
   step_time.write_runtime(solution_folder, runtime_rows)
 
-  if verbose > 0:
-    print(f"All solutions saved in: {solution_folder}", file=log_stream, flush=True)
+  with step_time.untimed():
+    if verbose > 0:
+      print(f"All solutions saved in: {solution_folder}", file=log_stream, flush=True)
   if log_on_file and log_stream is not sys.stdout:
     log_stream.close()
 

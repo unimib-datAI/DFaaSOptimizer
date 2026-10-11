@@ -254,7 +254,7 @@ def run(
       refinement_history.append({"time": t, **refinement, "coordination_rounds": it + 1,
                                  "pg_reserve": pg_reserve})
     total = step_time.current_modelled()
-    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
     spc_complete_solution, _, final_objective = decode_solutions(
       sp_data, incumbent, spc_complete_solution, None
     )
@@ -262,9 +262,10 @@ def run(
     tc_dict["LSPr"].append(
       f"{why} (it: {it}; best centralized it: {best_it}; total runtime: {total})"
     )
-    if verbose > 0:
-      print(f"t = {t}: {why}, rounds {it + 1}, welfare {final_objective}",
-            file=log_stream, flush=True)
+    with step_time.untimed():
+      if verbose > 0:
+        print(f"t = {t}: {why}, rounds {it + 1}, welfare {final_objective}",
+              file=log_stream, flush=True)
     if t % checkpoint_interval == 0 or t == max_steps - 1:
       save_checkpoint(spc_complete_solution, os.path.join(solution_folder, "LSPc"), t)
 

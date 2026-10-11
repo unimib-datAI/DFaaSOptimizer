@@ -61,7 +61,8 @@ One clock per step, `utils/step_time.py`, reachable from any function of the
 step through a context variable (no signature changes along call chains):
 
 ```
-modelled = (wall since step start) − Σ untimed_wall − Σ phase_wall + Σ longest task of each phase
+modelled = (wall since step start) − Σ untimed_wall − Σ phase_wall + Σ phase time
+phase time = longest task + phase wall outside tasks and pool calls (set-up, merging)
 ```
 
 - `step_clock()`: context manager opened by each runner around the decision
@@ -73,7 +74,8 @@ modelled = (wall since step start) − Σ untimed_wall − Σ phase_wall + Σ lo
   It is recorded with its wall time and the duration of each task, whether
   the tasks run on the pool or in a loop of the main process. Task duration =
   the node's own computation (for pool tasks measured inside the worker, so
-  it excludes transfer and queueing).
+  it excludes transfer and queueing). The pool call is marked `offloaded`; the
+  phase's own set-up and merging around tasks and pool calls is sequential.
 - Everything else in the step is sequential and counts with its wall time:
   coordinators, master problems, global aggregation steps that the algorithm
   defines as such.
@@ -89,7 +91,9 @@ modelled = (wall since step start) − Σ untimed_wall − Σ phase_wall + Σ lo
   `check_ls_pr_feasibility_from_fixed_y` and `check_feasibility`, decoding and
   accumulating solutions for export, verbose logging, checkpoints) is not part
   of the algorithm: it runs inside `step_time.untimed()` and its wall time is
-  removed from the modelled time (it still counts in `wall_s`).
+  removed from the modelled time (it still counts in `wall_s`), also inside a
+  phase or a task. Every `if verbose` block of the harmonized runners is
+  untimed (a test enforces it), as is MACrO's oracle `opt_solution` encoding.
 - Today each runner approximates this differently (mean agent runtime for
   subproblems, phase time divided by the number of auctions, sellers or
   nodes, full wall time elsewhere). All these accumulations are replaced by
@@ -145,7 +149,7 @@ or route the problem to an existing DP model), not to work around.
 | `algorithm_s` | modelled algorithm time of the step (the limit applies to it) |
 | `wall_s` | wall time of the step's decision (simulation cost) |
 | `parallel_phases` | number of parallel phases in the step |
-| `workers` | pool size (0 = in-process) |
+| `workers` | size of the pool used in the step (0 = all phases in-process) |
 
 Readers of the old one-column `tot` file (`benchmark_summary.py`,
 `compare_results.py`, `families_extended.py`, `extend_frankwolfe.py`,

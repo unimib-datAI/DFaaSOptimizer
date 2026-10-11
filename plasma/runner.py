@@ -107,8 +107,9 @@ def run(
     max_run_time + run_time_step
   ) if max_run_time == min_run_time else max_run_time
   for t in range(min_run_time, ub, run_time_step):
-    if verbose > 0:
-      print(f"t = {t}", file=log_stream, flush=True)
+    with step_time.untimed():
+      if verbose > 0:
+        print(f"t = {t}", file=log_stream, flush=True)
     loadt = get_current_load(input_requests_traces, agents, t)
     arrivals = np.array([
       [int(round(loadt[(n + 1, f + 1)] * opts.W)) for f in range(Nf)]
@@ -120,7 +121,7 @@ def run(
     msgs_before, hb_before = engine.msg_count, engine.hb_count
     clock = step_time.start_step()
     res = engine.run_rounds(opts.rounds_per_step, arrivals)
-    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
     if welfare:
       trade_rows.append({'time': t, 'rounds': opts.rounds_per_step,
                          'accepted_trades': engine.accepted_trades})
@@ -166,9 +167,10 @@ def run(
   )
   if welfare:
     pd.DataFrame(trade_rows).to_csv(os.path.join(solution_folder, 'plasma_welfare.csv'), index=False)
-  if verbose > 0:
-    print(f"All solutions saved in: {solution_folder}", file=log_stream,
-          flush=True)
+  with step_time.untimed():
+    if verbose > 0:
+      print(f"All solutions saved in: {solution_folder}", file=log_stream,
+            flush=True)
   if log_on_file:
     log_stream.close()
   return solution_folder

@@ -4,7 +4,8 @@ Each node is modelled as its own machine: a parallel phase (per-node work done
 simultaneously) counts its longest task, sequential code counts its wall time,
 observer code (checks, export, logging) does not count.
 
-  modelled = wall - sum(untimed) - sum(phase wall) + sum(longest task per phase)
+  modelled = wall - sum(untimed) - sum(phase wall) + sum(phase time)
+  phase time = longest task + phase wall outside tasks and pool calls (set-up, merging)
 """
 from __future__ import annotations
 
@@ -25,6 +26,8 @@ class Phase:
   def __init__(self) -> None:
     self.tasks: dict = {}
     self.nodes = 0
+    self.covered = 0.0  # wall time of in-process tasks and pool calls
+    self.paused = 0.0   # untimed wall time inside the phase
 
   def add(self, key, seconds: float) -> None:
     self.tasks[key] = self.tasks.get(key, 0.0) + seconds
@@ -34,11 +37,18 @@ class Phase:
     self.nodes = max(self.nodes, int(nodes))
 
   def longest(self, wall: float) -> float:
+    wall -= self.paused
     if self.nodes:
       return wall / self.nodes
     if not self.tasks:  # nothing recorded: count it all (a forgotten timed() errs high)
       return wall
-    return min(wall, max(self.tasks.values()))
+    return min(wall, wall - self.covered + max(self.tasks.values()))
+
+  def timed_task(self, key, started: float, paused: float) -> None:
+    """In-process task from ``started``, minus the untimed time spent in it."""
+    seconds = perf_counter() - started - (self.paused - paused)
+    self.add(key, seconds)
+    self.covered += seconds
 
 
 class StepClock:
@@ -46,6 +56,7 @@ class StepClock:
     self.started = perf_counter()
     self.removed = 0.0
     self.phases = 0
+    self.workers = 0
 
   def wall(self) -> float:
     return perf_counter() - self.started
@@ -60,9 +71,9 @@ def start_step() -> StepClock:
   return clock
 
 
-def end_step(clock: StepClock, workers: int) -> dict:
+def end_step(clock: StepClock) -> dict:
   row = dict(algorithm_s=clock.modelled(), wall_s=clock.wall(), parallel_phases=clock.phases,
-             workers=workers)
+             workers=clock.workers)
   _clock.set(None)
   return row
 
@@ -96,33 +107,45 @@ def parallel(fn):
 
 @contextmanager
 def task(key):
+  phase = _phase.get()
+  started, paused = perf_counter(), phase.paused if phase else 0.0
+  try:
+    yield
+  finally:
+    if phase is not None:
+      phase.timed_task(key, started, paused)
+
+
+def record(key, seconds: float) -> None:
+  """Task measured elsewhere (in a pool worker): call it inside ``offloaded``."""
+  phase = _phase.get()
+  if phase is not None:
+    phase.add(key, seconds)
+
+
+@contextmanager
+def offloaded(workers: int):
+  """A pool call of the current phase: its wall time is covered by the recorded tasks."""
   started = perf_counter()
   try:
     yield
   finally:
-    phase = _phase.get()
+    phase, clock = _phase.get(), _clock.get()
     if phase is not None:
-      phase.add(key, perf_counter() - started)
-
-
-def record(key, seconds: float) -> None:
-  phase = _phase.get()
-  if phase is not None:
-    phase.add(key, seconds)
+      phase.covered += perf_counter() - started
+    if clock is not None:
+      clock.workers = max(clock.workers, workers)
 
 
 def timed(items, key=lambda item: item):
   """Iterate ``items`` timing each loop iteration as a task of ``key(item)``.
 
   Same as wrapping the loop body in ``task(key(item))``, without re-indenting it;
-  an iteration left with ``break`` is still recorded.
+  an iteration left with ``break`` or an exception is recorded in its own phase.
   """
   for item in items:
-    started = perf_counter()
-    try:
+    with task(key(item)):
       yield item
-    finally:
-      record(key(item), perf_counter() - started)
 
 
 def current_modelled() -> float:
@@ -136,8 +159,10 @@ def untimed():
   try:
     yield
   finally:
-    clock = _clock.get()
-    if clock is not None and _phase.get() is None:  # inside a phase only tasks count anyway
+    phase, clock = _phase.get(), _clock.get()
+    if phase is not None:
+      phase.paused += perf_counter() - started
+    elif clock is not None:
       clock.removed += perf_counter() - started
 
 

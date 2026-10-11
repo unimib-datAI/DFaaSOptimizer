@@ -53,7 +53,8 @@ def test_runtime_contract_and_worker_independence(name, tmp_path):
     frame = pd.read_csv(folder / "runtime.csv")
     assert tuple(frame.columns) == step_time.COLUMNS and len(frame) == 2
     assert (frame.algorithm_s > 0).all() and (frame.algorithm_s <= frame.wall_s + 1e-3).all()
-    assert (frame.parallel_phases >= 1).all() and (frame.workers == parallelism).all()
+    pool = 0 if name == "PLASMA" else parallelism   # PLASMA negotiates in-process, no pool
+    assert (frame.parallel_phases >= 1).all() and (frame.workers == pool).all()
     got = [float(v) for v in pd.read_csv(folder / "obj.csv").iloc[:, -1]]
     assert got == pytest.approx(BASELINE[name][instance.name], abs=1e-6), (name, parallelism)
 

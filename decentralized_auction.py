@@ -134,8 +134,9 @@ def run(
   refinement_history = []
   runtime_rows = []
   for t in range(min_run_time, ub, run_time_step):
-    if verbose > 0:
-      print(f"t = {t}", file = log_stream, flush = True)
+    with step_time.untimed():
+      if verbose > 0:
+        print(f"t = {t}", file = log_stream, flush = True)
     # get current load and generate data
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
@@ -158,13 +159,14 @@ def run(
       parallelism
     )
     e = datetime.now()
-    if verbose > 1:
-      print(
-        f"    sp: DONE ",
-        f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})",
-        file = log_stream,
-        flush = True
-      )
+    with step_time.untimed():
+      if verbose > 1:
+        print(
+          f"    sp: DONE ",
+          f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})",
+          file = log_stream,
+          flush = True
+        )
     # define target operating point and initial prices
     u0 = np.ones((Nn,Nf)) * 0.9
     p = np.zeros((Nn,Nf))
@@ -184,22 +186,24 @@ def run(
     fairness = np.zeros((Nn,Nf))
     odev_queue = deque(maxlen=patience)
     while not stop_searching:
-      if verbose > 0:
-        print(f"    it = {it}", file = log_stream, flush = True)
+      with step_time.untimed():
+        if verbose > 0:
+          print(f"    it = {it}", file = log_stream, flush = True)
       # compute residual computational capacity
       s = datetime.now()
       capacity, blackboard, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data
       )
       e = datetime.now()
-      if verbose > 1:
-        print(
-          f"        compute_residual_capacity: DONE ",
-          f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
-          f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})",
-          file = log_stream,
-          flush = True
-        )
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        compute_residual_capacity: DONE ",
+            f"({capacity.tolist()}; blackboard = {blackboard.tolist()}; "
+            f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})",
+            file = log_stream,
+            flush = True
+          )
       # buyers define their bids
       s = datetime.now()
       bids, memory_bids, n_auctions = define_bids(
@@ -216,15 +220,16 @@ def run(
       )
       e = datetime.now()
       rt = (e - s).total_seconds()
-      if verbose > 1:
-        print(
-          f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
-          f"n_auctions = {n_auctions}; tot runtime = {rt})",
-          file = log_stream,
-          flush = True
-        )
-        if verbose > 2:
-          print(bids, file = log_stream, flush = True)
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
+            f"n_auctions = {n_auctions}; tot runtime = {rt})",
+            file = log_stream,
+            flush = True
+          )
+          if verbose > 2:
+            print(bids, file = log_stream, flush = True)
       # sellers accept/reject bids
       a = np.zeros((Nn,Nf))
       if len(bids) > 0:
@@ -243,12 +248,13 @@ def run(
           may_replace_existing_assignments = False
         )
         e = datetime.now()
-        if verbose > 1:
-          print(
-           f"        evaluate_bids: DONE; runtime = {(e - s).total_seconds()})",
-           file = log_stream,
-           flush = True
-          )
+        with step_time.untimed():
+          if verbose > 1:
+            print(
+             f"        evaluate_bids: DONE; runtime = {(e - s).total_seconds()})",
+             file = log_stream,
+             flush = True
+            )
         # update effective load, number of replicas and fairness matrix
         y += auction_y
         rmp_omega = np.zeros((Nn,Nf))
@@ -269,13 +275,14 @@ def run(
           parallelism,
           sp_x
         )
-        if verbose > 1:
-          print(
-            f"        solve 'restricted problem': DONE ({spr_tc}; "
-            f"obj: {spr_obj}; runtime = {spr_runtime})",
-            file = log_stream,
-            flush = True
-          )
+        with step_time.untimed():
+          if verbose > 1:
+            print(
+              f"        solve 'restricted problem': DONE ({spr_tc}; "
+              f"obj: {spr_obj}; runtime = {spr_runtime})",
+              file = log_stream,
+              flush = True
+            )
         # -- update solution
         _, _, _, _, sp_r, sp_rho = spr_sol # x, y, z, omega, r, rho
         for i in range(Nn):
@@ -283,14 +290,15 @@ def run(
             omega[i,f] = sp_omega[i,f] - rmp_omega[i,f]
             if abs(omega[i,f]) < tolerance:
               omega[i,f] = 0.0
-        if verbose > 1:
-          print(
-            f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
-            f"omega = {omega.tolist()}; x: {sp_x.tolist()}; "
-            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()})",
-            file = log_stream,
-            flush = True
-          )
+        with step_time.untimed():
+          if verbose > 1:
+            print(
+              f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
+              f"omega = {omega.tolist()}; x: {sp_x.tolist()}; "
+              f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()})",
+              file = log_stream,
+              flush = True
+            )
       else:
         # tentatively start additional replicas
         s = datetime.now()
@@ -320,23 +328,25 @@ def run(
           best_cost_so_far = spr_obj
           best_solution_so_far = csol
           best_it_so_far = it
-          if verbose > 0:
-            print(
-              f"        best solution updated; obj = {spr_obj}",
-              file = log_stream,
-              flush = True
-            )
+          with step_time.untimed():
+            if verbose > 0:
+              print(
+                f"        best solution updated; obj = {spr_obj}",
+                file = log_stream,
+                flush = True
+              )
         prev_cobj = best_centralized_cost
         if cobj > best_centralized_cost:
           best_centralized_cost = cobj
           best_centralized_solution = csol
           best_centralized_it = it
-          if verbose > 0:
-            print(
-              f"        best centralized solution updated; obj = {cobj}",
-              file = log_stream,
-              flush = True
-            )
+          with step_time.untimed():
+            if verbose > 0:
+              print(
+                f"        best centralized solution updated; obj = {cobj}",
+                file = log_stream,
+                flush = True
+              )
         odev_queue.append(
           relative_objective_gap(prev_cobj, best_centralized_cost)
         )
@@ -358,16 +368,17 @@ def run(
         time_limit = time_limit
       )
       e = datetime.now()
-      if verbose > 1:
-        print(
-          f"        check_stopping_criteria: DONE "
-          f"(runtime = {(e - s).total_seconds()}; "
-          f"total runtime = {total_runtime}; "
-          f"wallclock: {(datetime.now() - ss).total_seconds()}) "
-          f"--> stop? {stop_searching} ({why_stop_searching})",
-          file = log_stream,
-          flush = True
-        )
+      with step_time.untimed():
+        if verbose > 1:
+          print(
+            f"        check_stopping_criteria: DONE "
+            f"(runtime = {(e - s).total_seconds()}; "
+            f"total runtime = {total_runtime}; "
+            f"wallclock: {(datetime.now() - ss).total_seconds()}) "
+            f"--> stop? {stop_searching} ({why_stop_searching})",
+            file = log_stream,
+            flush = True
+          )
       # -- move to next iteration, or...
       if not stop_searching:
         it += 1
@@ -410,15 +421,16 @@ def run(
               spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
             )
     total_runtime = step_time.current_modelled()
-    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
     ee = datetime.now()
-    if verbose > 0:
-      print(
-        f"    TOTAL RUNTIME [s] = {total_runtime} "
-        f"(wallclock: {(ee-ss).total_seconds()})",
-        file = log_stream,
-        flush = True
-      )
+    with step_time.untimed():
+      if verbose > 0:
+        print(
+          f"    TOTAL RUNTIME [s] = {total_runtime} "
+          f"(wallclock: {(ee-ss).total_seconds()})",
+          file = log_stream,
+          flush = True
+        )
   # join
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
     sp_complete_solution
@@ -468,12 +480,13 @@ def run(
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
   )
-  if verbose > 0:
-    print(
-      f"All solutions saved in: {solution_folder}",
-      file = log_stream,
-      flush = True
-    )
+  with step_time.untimed():
+    if verbose > 0:
+      print(
+        f"All solutions saved in: {solution_folder}",
+        file = log_stream,
+        flush = True
+      )
   # close log stream if needed
   if log_on_file:
     log_stream.close()

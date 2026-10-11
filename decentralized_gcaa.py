@@ -166,8 +166,9 @@ def run(
   # the null assignment (utility 0) for this round
   no_replica_sellers = np.zeros((Nn,))
   for t in range(min_run_time, ub, run_time_step):
-    if verbose > 0:
-      print(f"t = {t}", file = log_stream, flush = True)
+    with step_time.untimed():
+      if verbose > 0:
+        print(f"t = {t}", file = log_stream, flush = True)
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
     clock = step_time.start_step()
@@ -180,12 +181,13 @@ def run(
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism
     )
-    if verbose > 1:
-      print(
-        f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
-        f"runtime = {sp_runtime['tot']})",
-        file = log_stream, flush = True
-      )
+    with step_time.untimed():
+      if verbose > 1:
+        print(
+          f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
+          f"runtime = {sp_runtime['tot']})",
+          file = log_stream, flush = True
+        )
     it = 0
     stop_searching = False
     best_solution_so_far = None
@@ -199,8 +201,9 @@ def run(
     omega = deepcopy(sp_omega)
     fairness = np.zeros((Nn, Nf))
     while not stop_searching:
-      if verbose > 0:
-        print(f"    it = {it}", file = log_stream, flush = True)
+      with step_time.untimed():
+        if verbose > 0:
+          print(f"    it = {it}", file = log_stream, flush = True)
       capacity, residual_capacity, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data
       )
@@ -210,8 +213,9 @@ def run(
         no_replica_sellers, gcaa_options, latency, fairness,
         force_memory_bids = False
       )
-      if verbose > 2:
-        print(bids, file = log_stream, flush = True)
+      with step_time.untimed():
+        if verbose > 2:
+          print(bids, file = log_stream, flush = True)
       rmp_omega = np.zeros((Nn, Nf))
       if len(bids) > 0:
         auction_y = resolve_gcaa_round(bids, residual_capacity, y)
@@ -288,14 +292,15 @@ def run(
               spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
             )
     total_runtime = step_time.current_modelled()
-    runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
+    runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
     ee = datetime.now()
-    if verbose > 0:
-      print(
-        f"    TOTAL RUNTIME [s] = {total_runtime} "
-        f"(wallclock: {(ee-ss).total_seconds()})",
-        file = log_stream, flush = True
-      )
+    with step_time.untimed():
+      if verbose > 0:
+        print(
+          f"    TOTAL RUNTIME [s] = {total_runtime} "
+          f"(wallclock: {(ee-ss).total_seconds()})",
+          file = log_stream, flush = True
+        )
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
     sp_complete_solution
   )
@@ -324,11 +329,12 @@ def run(
     os.path.join(solution_folder, "termination_condition.csv")
   )
   step_time.write_runtime(solution_folder, runtime_rows)
-  if verbose > 0:
-    print(
-      f"All solutions saved in: {solution_folder}",
-      file = log_stream, flush = True
-    )
+  with step_time.untimed():
+    if verbose > 0:
+      print(
+        f"All solutions saved in: {solution_folder}",
+        file = log_stream, flush = True
+      )
   if log_on_file:
     log_stream.close()
   return solution_folder

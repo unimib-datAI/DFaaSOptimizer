@@ -292,6 +292,7 @@ class WelfareEngine(PlasmaEngine):
   def __init__(self, nodes, opts, rng, *, parallelism=0):
     super().__init__(nodes, opts, rng)
     self.parallelism = parallelism
+    self.workers = 0  # pool size, set by run_rounds
 
   def _send(self, source, target, operation, *payload):
     if target not in self.nodes[source].params.nbrs:
@@ -326,10 +327,12 @@ class WelfareEngine(PlasmaEngine):
           node = self.nodes[i]
           self.accepted_trades += node.accept_plan(reservations, node.plan(reservations), send)
       elif pending:
-        results = pool.map(_timed_plan, [_plan_job(self.nodes[i], r) for i, r, _ in pending],
-                           chunksize=1)
-        for (i, reservations, send), (plan, seconds) in zip(pending, results):
-          phase.add(i, seconds)
+        with step_time.offloaded(self.workers):
+          results = pool.map(_timed_plan, [_plan_job(self.nodes[i], r) for i, r, _ in pending],
+                             chunksize=1)
+          for (i, _, _), (_, seconds) in zip(pending, results):
+            phase.add(i, seconds)
+        for (i, reservations, send), (plan, _) in zip(pending, results):
           with step_time.task(i):
             self.accepted_trades += self.nodes[i].accept_plan(reservations, plan, send)
 
@@ -340,22 +343,24 @@ class WelfareEngine(PlasmaEngine):
     for node, load in zip(self.nodes, arrivals):
       node.start_window(load, self.clock.round, initialize=False)
     alive = [i for i, node in enumerate(self.nodes) if node.alive]
-    pool = None
+    pool, self.workers = None, 0
     if self.parallelism and alive:
       with parallel_solver_session() as state:
         if state['pool'] is None:
           available = _available_cpu_count() if self.parallelism < 0 else self.parallelism
           state['workers'] = max(1, min(available, len(alive)))
           state['pool'] = mp.Pool(processes=state['workers'])
-        pool = state['pool']
+        pool, self.workers = state['pool'], state['workers']
     # initial plans: every alive node optimizes its own RAM at once
     with step_time.parallel_phase() as phase:
-      if pool is not None:
-        results = pool.map(_timed_plan, [_plan_job(self.nodes[i], ()) for i in alive], chunksize=1)
-      else:
-        results = [_timed_plan((self.nodes[i], ())) for i in alive]
-      for i, (plan, seconds) in zip(alive, results):
-        phase.add(i, seconds)
+      with step_time.offloaded(self.workers):
+        if pool is not None:
+          results = pool.map(_timed_plan, [_plan_job(self.nodes[i], ()) for i in alive], chunksize=1)
+        else:
+          results = [_timed_plan((self.nodes[i], ())) for i in alive]
+        for i, (_, seconds) in zip(alive, results):
+          phase.add(i, seconds)
+      for i, (plan, _) in zip(alive, results):
         node = self.nodes[i]
         node.r, node.x = plan.r, plan.x
         node.z = node.load - node.x

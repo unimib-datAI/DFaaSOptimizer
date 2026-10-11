@@ -251,8 +251,9 @@ def run(
   tc_dict = {"LSPr": []}
   runtime_rows = []
   for t in range(min_run_time, ub, run_time_step):
-    if verbose > 0:
-      print(f"t = {t}", file=log_stream, flush=True)
+    with step_time.untimed():
+      if verbose > 0:
+        print(f"t = {t}", file=log_stream, flush=True)
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
     clock = step_time.start_step()
@@ -373,7 +374,7 @@ def run(
       if not stop_searching:
         it += 1
       else:
-        runtime_rows.append(dict(step=t, **step_time.end_step(clock, step_time.workers(parallelism))))
+        runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
         sp_complete_solution, _, objf = decode_solutions(
           sp_data, best_solution_so_far, sp_complete_solution, None
         )
@@ -394,12 +395,13 @@ def run(
           save_checkpoint(
             spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
           )
-    if verbose > 0:
-      print(
-        f"    TOTAL RUNTIME [s] = {total_runtime} "
-        f"(wallclock: {(datetime.now() - ss).total_seconds()})",
-        file=log_stream, flush=True
-      )
+    with step_time.untimed():
+      if verbose > 0:
+        print(
+          f"    TOTAL RUNTIME [s] = {total_runtime} "
+          f"(wallclock: {(datetime.now() - ss).total_seconds()})",
+          file=log_stream, flush=True
+        )
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
     sp_complete_solution
   )
@@ -428,8 +430,9 @@ def run(
     os.path.join(solution_folder, "termination_condition.csv")
   )
   step_time.write_runtime(solution_folder, runtime_rows)
-  if verbose > 0:
-    print(f"All solutions saved in: {solution_folder}", file=log_stream, flush=True)
+  with step_time.untimed():
+    if verbose > 0:
+      print(f"All solutions saved in: {solution_folder}", file=log_stream, flush=True)
   if log_on_file:
     log_stream.close()
   return solution_folder

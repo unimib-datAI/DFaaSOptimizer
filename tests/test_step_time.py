@@ -40,21 +40,24 @@ def test_phase_counts_its_longest_task(now):
       now.t = 3.0                   # node 0: 2 s
     with step_time.task(1):
       now.t = 4.0                   # node 1: 1 s
-    now.t = 4.5                     # 0.5 s of phase overhead (not a task)
+    now.t = 4.5                     # 0.5 s of phase set-up/wrap-up outside tasks: sequential
   now.t = 5.0                       # 0.5 s sequential
-  assert clock.modelled() == pytest.approx(1.0 + 2.0 + 0.5)
-  assert step_time.end_step(clock, 0) == {"algorithm_s": pytest.approx(3.5), "wall_s": 5.0,
-                                          "parallel_phases": 1, "workers": 0}
+  assert clock.modelled() == pytest.approx(1.0 + 2.0 + 0.5 + 0.5)
+  assert step_time.end_step(clock) == {"algorithm_s": pytest.approx(4.0), "wall_s": 5.0,
+                                       "parallel_phases": 1, "workers": 0}
 
 
 def test_tasks_of_one_node_add_up_and_pool_records_match_in_process(now):
   clock = step_time.start_step()
   with step_time.parallel_phase() as phase:
-    phase.add(7, 1.0)
-    step_time.record(7, 2.0)        # same node twice in the phase: 3 s
-    step_time.record(8, 2.5)
-    now.t = 4.0                     # pool wall time, transfers included
-  assert clock.modelled() == pytest.approx(3.0)
+    with step_time.offloaded(workers=3):
+      phase.add(7, 1.0)
+      step_time.record(7, 2.0)      # same node twice in the phase: 3 s
+      step_time.record(8, 2.5)
+      now.t = 4.0                   # pool wall time, transfers included
+    now.t = 4.5                     # merging the results: sequential
+  assert clock.modelled() == pytest.approx(3.0 + 0.5)
+  assert step_time.end_step(clock)["workers"] == 3   # the pool size actually used
 
 
 def test_uniform_phase_divides_wall_by_nodes(now):
@@ -121,7 +124,7 @@ def test_solve_subproblem_is_one_phase_with_one_task_per_agent(monkeypatch):
   data = {None: {"Nn": {None: 3}, "Nf": {None: 1}}}
   clock = step_time.start_step()
   run_faasmacro.solve_subproblem(data, [0, 1, 2], None, "missing_solver", {}, 0)
-  row = step_time.end_step(clock, 0)
+  row = step_time.end_step(clock)
   assert row["parallel_phases"] == 1
   assert row["algorithm_s"] == pytest.approx(0.05, abs=0.02) and row["wall_s"] >= 0.08
 
@@ -200,3 +203,50 @@ def test_hierarchy_seller_resolution_is_sequential_time(now):
   engine._run_level_iteration({}, 2, tokens, np.zeros((3, 3, 1)), np.zeros((3, 1)),
                               np.zeros((3, 1)), np.zeros((3, 3)), np.zeros((3, 1)))
   assert clock.modelled() == pytest.approx(3.0)
+
+
+def test_untimed_inside_a_phase_is_removed_from_tasks_and_overhead(now):
+  clock = step_time.start_step()
+  with step_time.parallel_phase():
+    with step_time.task(0):
+      now.t = 1.0                   # node 0: 1 s of work
+      with step_time.untimed():
+        now.t = 5.0                 # logging inside the task
+    with step_time.untimed():
+      now.t = 7.0                   # logging between tasks
+  assert clock.modelled() == pytest.approx(1.0) and clock.wall() == 7.0
+
+
+def test_timed_iteration_left_by_an_exception_stays_in_its_phase(now):
+  step_time.start_step()
+  loop = step_time.timed([0])
+  with pytest.raises(ValueError):
+    with step_time.parallel_phase():
+      for _ in loop:
+        now.t += 2.0
+        raise ValueError
+  with step_time.parallel_phase() as later:
+    loop.close()                    # the generator finishes late, e.g. at garbage collection
+  assert later.tasks == {}
+
+
+def test_verbose_output_of_harmonized_runners_is_untimed():
+  # Verbose logging is observer code: every `if verbose ...` block runs untimed.
+  import ast
+  from pathlib import Path
+  files = ["run_faasmadea.py", "run_faasmacro.py", "decentralized_auction.py", "madea2.py",
+           "decentralized_diffusion.py", "decentralized_dual.py", "decentralized_frankwolfe.py",
+           "decentralized_gcaa.py", "decentralized_powerd.py", "hierarchical_frankwolfe.py",
+           *map(str, Path("hierarchical_auction").glob("*.py")), *map(str, Path("plasma").rglob("*.py"))]
+  bare = []
+  for name in files:
+    tree = ast.parse(Path(name).read_text())
+    guarded = set()
+    for node in ast.walk(tree):
+      if isinstance(node, ast.With) and "untimed" in ast.unparse(node.items[0].context_expr):
+        guarded.update(id(child) for child in ast.walk(node))
+    for node in ast.walk(tree):
+      if (isinstance(node, ast.If) and "verbose" in ast.unparse(node.test)
+          and id(node) not in guarded):
+        bare.append(f"{name}:{node.lineno}")
+  assert not bare, bare
