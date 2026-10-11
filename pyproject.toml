@@ -33,6 +33,7 @@ dependencies = [
   "tqdm==4.67.1",
   "tzdata==2025.2",
   "seaborn>=0.13.2",
+  "highspy>=1.15.1",
 ]
 
 [tool.uv]
