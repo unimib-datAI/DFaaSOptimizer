@@ -38,6 +38,12 @@ CASES = [
   ("MADEA2", "run_faasmadea", "FaaS-MADeA", "solve_subproblem"),
   ("MADEA2-b", "run_faasmadea", "FaaS-MADeA", "solve_subproblem"),
   ("MADEA-PG", "run_faasmadea", "FaaS-MADeA-PG", "solve_subproblem"),
+  ("MADEA-one-shot", "decentralized_auction", "FaaS-MADeA(1s)", "solve_subproblem"),
+  ("MADEA2-one-shot", "decentralized_auction", "FaaS-MADeA(1s)", "solve_subproblem"),
+  ("MADEA2-b-one-shot", "decentralized_auction", "FaaS-MADeA(1s)", "solve_subproblem"),
+  ("one-shot-pg", "decentralized_auction", "One-shot-PG", "solve_subproblem"),
+  ("one-shot2-pg", "decentralized_auction", "One-shot-PG", "solve_subproblem"),
+  ("one-shot2-b-pg", "decentralized_auction", "One-shot-PG", "solve_subproblem"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
