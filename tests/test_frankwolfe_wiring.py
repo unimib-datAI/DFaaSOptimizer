@@ -7,6 +7,7 @@ import pytest
 
 import decentralized_frankwolfe
 import run
+from frame_stubs import ONE_NODE, stub_frame
 
 
 def test_frankwolfe_run_uses_fixed_replicas_and_does_not_mutate_config(tmp_path, monkeypatch):
@@ -19,17 +20,7 @@ def test_frankwolfe_run_uses_fixed_replicas_and_does_not_mutate_config(tmp_path,
     }
   }
   m = decentralized_frankwolfe
-  monkeypatch.setattr(
-    m, "init_problem", lambda *args, **kwargs: (base_data, {}, [], nx.empty_graph(1)),
-  )
-  monkeypatch.setattr(
-    m, "load_solution",
-    lambda folder, model: ("opt_solution", "opt_replicas", "opt_detailed", None, None),
-  )
-  monkeypatch.setattr(
-    m, "encode_solution",
-    lambda Nn, Nf, solution, detailed, replicas, t: (None, None, None, np.array([[3]]), None),
-  )
+  decoded = stub_frame(monkeypatch, base_data, reference_r=[[3]])
   monkeypatch.setattr(m, "LSP", lambda: "LSP")
   monkeypatch.setattr(m, "LSP_fixedr", lambda: "LSP_fixedr")
   monkeypatch.setattr(m, "LSPr", lambda: seen.setdefault("spr", "LSPr"))
@@ -49,29 +40,11 @@ def test_frankwolfe_run_uses_fixed_replicas_and_does_not_mutate_config(tmp_path,
     return np.zeros_like(y), {"accepted": 0.0}
 
   monkeypatch.setattr(m, "solve_subproblem", _solve_subproblem)
-  monkeypatch.setattr(m, "get_current_load", lambda *args: {})
-  monkeypatch.setattr(m, "update_data", lambda data, update: data)
   monkeypatch.setattr(m, "frankwolfe_assignments", _assignments)
   monkeypatch.setattr(m, "fw_parameters", lambda data: {})
-  monkeypatch.setattr(
-    m, "combine_solutions",
-    lambda *args: {"sp": {
-      "x": np.zeros((1, 1)), "y": np.zeros((1, 1, 1)), "z": np.zeros((1, 1)),
-      "r": np.ones((1, 1)), "U": np.zeros((1, 1)),
-    }},
-  )
+  monkeypatch.setattr(m, "combine_solutions", lambda *args: {"sp": dict(ONE_NODE)})
   monkeypatch.setattr(m, "compute_centralized_objective", lambda *args: -1.0)
   monkeypatch.setattr(m, "check_feasibility", lambda *args: (True, "ok"))
-  decoded = []
-
-  def _decode(sp_data, solution, complete, arg):
-    decoded.append(solution)
-    return complete, None, 1.0
-
-  monkeypatch.setattr(m, "decode_solutions", _decode)
-  monkeypatch.setattr(m, "join_complete_solution", lambda complete: ({}, {}, {}))
-  monkeypatch.setattr(m, "save_checkpoint", lambda *args: None)
-  monkeypatch.setattr(m, "save_solution", lambda *args: None)
 
   config = {
     "base_solution_folder": str(tmp_path),

@@ -19,6 +19,7 @@ import os
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
+from functools import cached_property
 
 import pandas as pd
 
@@ -69,6 +70,12 @@ class RunContext:
   reference: tuple | None   # (solution, replicas, detailed_fwd) of opt_solution_folder
   complete: dict = field(default_factory=dict)    # output name -> complete solution
   objectives: list = field(default_factory=list)  # obj.csv series
+
+  @cached_property
+  def dense_latency(self):
+    """``latency`` as a dense array, built on first use (read it inside ``untimed``)."""
+    import numpy as np
+    return np.asarray(self.latency.todense())
 
   def step_data(self, data: dict, t: int) -> dict:
     """A copy of the step data, with the replicas of the fixed reference at ``t`` (r_bar)."""
