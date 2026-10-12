@@ -33,6 +33,7 @@ log = run_log.logger(__name__)
 class Output:
   checkpoint: bool = True
   plot_filename: str | None = None  # final plot of this output (sp.png), if any
+  check: bool = True                # centralized feasibility check when decoding (not RMP parts)
 
 
 LSP_OUTPUTS = {  # the local (LSP) and centralized-incumbent (LSPc) solutions of most runners
@@ -156,10 +157,11 @@ def run(config: dict, parallelism: int, *, log_on_file: bool, disable_plotting: 
       for name, s in result.solutions.items():  # outside the clock: decoding and checks
         ctx.complete[name] = decode_solution(s["x"], s["y"], s["z"], s["r"], s["xi"], s["rho"], s["U"],
                                              ctx.complete[name])
-        feasible, why = check_feasibility(s["x"], s["y"].sum(axis=1), s["z"], s["r"], s["U"],
-                                          result.data if result.data is not None else data)
-        if not feasible:
-          raise RuntimeError(why)
+        if outputs[name].check:
+          feasible, why = check_feasibility(s["x"], s["y"].sum(axis=1), s["z"], s["r"], s["U"],
+                                            result.data if result.data is not None else data)
+          if not feasible:
+            raise RuntimeError(why)
         if outputs[name].checkpoint and checkpoint_due(t, ctx.steps, ctx.checkpoint_interval):
           save_checkpoint(ctx.complete[name], os.path.join(ctx.folder, name), t)
       ctx.objectives.append(result.objective)

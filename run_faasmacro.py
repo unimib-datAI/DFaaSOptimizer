@@ -1,14 +1,8 @@
 from run_centralized_model import (
   compute_utilization, 
-  init_complete_solution, 
-  init_problem, 
   extract_solution, 
-  get_current_load, 
-  join_complete_solution,
-  save_solution,
-  save_checkpoint
+  join_complete_solution
 )
-from utils.common import checkpoint_due, run_steps
 from utils.centralized import (
   check_feasibility, 
   validate_centralized_solution, 
@@ -20,8 +14,7 @@ from utils.faasmacro import (
   relative_objective_gap
 )
 from utils.common import load_configuration
-from generators.generate_data import update_data
-from postprocessing import load_solution, plot_history
+from postprocessing import plot_history
 
 from models.local_sp import solve_agent_problem
 from models.rmp import RMPAbstractModel, LRMP
@@ -35,23 +28,21 @@ from models.sp import (
   LSP_fixedr_v0 
 )
 from heuristic_coordinator import GreedyCoordinator
-from utils import step_time
+from utils import run_frame, run_log, step_time
 
 import multiprocessing as mpp
 from contextlib import contextmanager
 from contextvars import ContextVar
-from datetime import datetime
 from collections import deque
 from copy import deepcopy
-from functools import wraps
+from functools import partial, wraps
 from typing import Tuple
-import pandas as pd
 import numpy as np
 import argparse
-import json
-import sys
 import os
 
+
+log = run_log.logger(__name__)
 
 # Globals for each parallel worker
 _sp_data = None
@@ -735,6 +726,18 @@ def update_prices(
   return pi, detailed_pi
 
 
+OUTPUTS = {
+  "LSP": run_frame.Output(checkpoint=True, plot_filename="sp.png"),
+  "LRMP": run_frame.Output(checkpoint=False, check=False),
+  "LSPc": run_frame.Output(checkpoint=True),
+  "LRMPc": run_frame.Output(checkpoint=False, check=False),
+}
+
+
+class _BelowLowerBound(Exception):
+  """The social welfare fell below the Lagrangian lower bound: the run stops without outputs."""
+
+
 @parallel_solver_run
 def run(
     config: dict, 
@@ -743,530 +746,305 @@ def run(
     disable_plotting: bool = False,
     v0: bool = False
   ):
-  base_solution_folder = config["base_solution_folder"]
-  seed = config["seed"]
-  limits = config["limits"]
-  trace_type = config["limits"]["load"].get("trace_type", "fixed_sum")
-  max_steps = config["max_steps"]
-  min_run_time = config.get("min_run_time", 0)
-  max_run_time = config.get("max_run_time", max_steps)
-  run_time_step = config.get("run_time_step", 1)
-  checkpoint_interval = config["checkpoint_interval"]
-  # -- solver name and options
-  solver_name = config["solver_name"]
-  solver_options = config.get("solver_options", {})
-  general_solver_options = solver_options.get("general", {})
-  coordinator_options = {k: v for k,v in general_solver_options.items()}
+  # across steps: prices to restart from (start_from_last_pi), the LRMP objective at the
+  # last iteration (rmp.png) and the run context for that plot
+  run_state = {"pi": None, "detailed_pi": None, "rmp_objectives": [], "ctx": None}
+  try:
+    folder = run_frame.run(
+      config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
+      method="FaaS-MACrO", outputs=OUTPUTS,
+      solve_step=partial(_solve_step, v0=v0, run_state=run_state),
+    )
+  except _BelowLowerBound:
+    return None
+  ctx = run_state["ctx"]
+  if not disable_plotting and ctx.Nf <= 10 and ctx.Nn <= 10:
+    rmp_solution, rmp_offloaded, _ = join_complete_solution(ctx.complete["LRMP"])
+    plot_history(
+      ctx.traces, config.get("min_run_time", 0), config.get("max_run_time", config["max_steps"]),
+      config.get("run_time_step", 1), rmp_solution, ctx.complete["LRMP"]["utilization"],
+      ctx.complete["LRMP"]["replicas"], rmp_offloaded, run_state["rmp_objectives"],
+      os.path.join(folder, "rmp.png"),
+    )
+  return folder
+
+
+def _solve_step(ctx, t: int, data: dict, *, v0: bool, run_state: dict) -> run_frame.StepResult:
+  Nn, Nf = ctx.Nn, ctx.Nf
+  run_state["ctx"] = ctx
+  solver_options = ctx.solver_options
+  coordinator_options = {k: v for k,v in ctx.general_options.items()}
   if "coordinator" in solver_options:
     for k, v in solver_options["coordinator"].items():
       coordinator_options[k] = v
-  time_limit = step_time.algorithm_time_limit(config)
   start_from_last_pi = solver_options.get("start_from_last_pi", False)
   use_detailed_pi = solver_options.get("use_detailed_pi", False)
-  # -- maximum number of iterations
-  max_iterations = config["max_iterations"]
-  plot_interval = config.get("plot_interval", max_iterations)
-  patience = config["patience"]
-  sw_patience = config.get("sw_patience", max_iterations)
-  verbose = config.get("verbose", 0)
-  tolerance = config.get("tolerance", 1e-3)
-  # generate solution folder
-  now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
-  solution_folder = f"{base_solution_folder}/{now}"
-  os.makedirs(solution_folder, exist_ok = True)
-  with open(os.path.join(solution_folder, "config.json"), "w") as ostream:
-    ostream.write(json.dumps(config, indent = 2))
-  # initialize log stream (if required)
-  log_stream = sys.stdout
-  if log_on_file:
-    log_stream = open(os.path.join(solution_folder, "out.log"), "w")
-  # generate base instance data and load traces
-  base_instance_data, input_requests_traces, agents, _ = init_problem(
-    limits, trace_type, max_steps, seed, solution_folder
-  )
-  Nn = base_instance_data[None]["Nn"][None]
-  Nf = base_instance_data[None]["Nf"][None]
-  # load globally-optimal solution (if provided)
-  opt_solution, opt_replicas, opt_detailed_fwd = None, None, None
-  if "opt_solution_folder" in config:
-    opt_solution, opt_replicas, opt_detailed_fwd, _, _ = load_solution(
-      config["opt_solution_folder"], "LoadManagementModel"
-    )
-  # loop over time
-  final_pi = None
-  final_detailed_pi = np.zeros((Nn,Nf))
-  sp_complete_solution = init_complete_solution()
-  rmp_complete_solution = init_complete_solution()
-  spc_complete_solution = init_complete_solution()
-  rmpc_complete_solution = init_complete_solution()
-  obj_dict = {
-    "LSP": {it: [] for it in range(max_iterations)}, 
-    "LSPr": {it: [] for it in range(max_iterations)}, 
-    "LSPr_final": [], 
-    "LRMP": {it: [] for it in range(max_iterations)}
-  }
-  tc_dict = {
-    "LSP": {it: [] for it in range(max_iterations)},
-    "LSPr": [],
-    "LRMP": {it: [] for it in range(max_iterations)}
-  }
-  runtime_rows: list[dict] = []
-  steps = run_steps(config)
-  for t in steps:
+  max_iterations = ctx.max_iterations
+  patience = ctx.patience
+  tolerance = ctx.config.get("tolerance", 1e-3)
+  started_at = step_time.now()
+  loadt = data[None]["incoming_load"]
+  social_welfare = np.inf
+  lower_bound = np.inf
+  fixed = ctx.reference is not None
+  # loop over SP/RMP
+  sp = None
+  if v0:
+    sp = LSP_fixedr_v0() if fixed else LSP_v0()
+  else:
+    sp = LSP_fixedr() if fixed else LSP()
+  spr = LSPr_v0() if v0 else LSPr()
+  rmp = LRMP()
+  sp_data = deepcopy(data)
+  rmp_data = deepcopy(data)
+  rmp_y = None
+  pi = None if (not start_from_last_pi or run_state["pi"] is None) else run_state["pi"]
+  detailed_pi = np.zeros(
+    (Nn,Nf)
+  ) if not start_from_last_pi or run_state["detailed_pi"] is None else run_state["detailed_pi"]
+  it = 0
+  stop_searching = False
+  psi = 2
+  pi_queue = deque(maxlen = patience)
+  dev_queue = deque(maxlen = patience)
+  sw_queue = deque(maxlen = patience)
+  odev_queue = deque(maxlen = patience)
+  current_sw_queue = deque(maxlen = patience)
+  best_solution_so_far = None
+  best_centralized_solution = None
+  best_cost_so_far = np.inf
+  best_centralized_cost = -np.inf
+  best_it_so_far = -1
+  best_centralized_it = -1
+  while not stop_searching:
     with step_time.untimed():
-      if verbose > 0:
-        print(f"t = {t}", file = log_stream, flush = True)
-    social_welfare = np.inf
-    lower_bound = np.inf
-    # get current load and generate data
-    loadt = get_current_load(input_requests_traces, agents, t)
-    data = update_data(base_instance_data, {"incoming_load": loadt})
-    # loop over SP/RMP
-    sp = None
-    if v0:
-      sp = LSP_v0() if opt_solution is None else LSP_fixedr_v0()
-    else:
-      sp = LSP() if opt_solution is None else LSP_fixedr()
-    spr = LSPr_v0() if v0 else LSPr()
-    rmp = LRMP()
-    sp_data = deepcopy(data)
-    rmp_data = deepcopy(data)
-    rmp_y = None
-    pi = None if (not start_from_last_pi or final_pi is None) else final_pi
-    detailed_pi = np.zeros(
-      (Nn,Nf)
-    ) if not start_from_last_pi else final_detailed_pi
-    it = 0
-    stop_searching = False
-    psi = 2
-    pi_queue = deque(maxlen = patience)
-    dev_queue = deque(maxlen = patience)
-    sw_queue = deque(maxlen = patience)
-    odev_queue = deque(maxlen = patience)
-    current_sw_queue = deque(maxlen = patience)
-    best_solution_so_far = None
-    best_centralized_solution = None
-    best_cost_so_far = np.inf
-    best_centralized_cost = -np.inf
-    best_it_so_far = -1
-    best_centralized_it = -1
-    clock = step_time.start_step()
-    ss = datetime.now()
-    while not stop_searching:
-      with step_time.untimed():
-        if verbose > 0:
-          print(f"    it = {it} (psi = {psi})", file = log_stream, flush = True)
-      # if it == 10:
-      #   print("here")
-      # extract optimal solution (if provided)
-      # oracle replicas from a reference solution: experiment input, not algorithm work
-      with step_time.untimed():
-        if opt_solution is not None:
-          opt_x, _, _, _, _ = encode_solution(
-            Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
-          )
-          opt_r_for_x = np.zeros((Nn,Nf))
-          sp_data[None]["r_bar"] = {}
-          for n in range(Nn):
-            for f in range(Nf):
-              opt_r_for_x[n,f] = sp_data[None][
-                "demand"
-              ][(n+1,f+1)] * opt_x[n,f] / sp_data[None]["max_utilization"][f+1]
-              if np.floor(opt_r_for_x[n,f]) > 0 and (
-                  (opt_r_for_x[n,f] / np.floor(opt_r_for_x[n,f]) - 1) > 1e-6
+      log.info("    it = %s (psi = %s)", it, psi)
+    # oracle replicas from a reference solution: experiment input, not algorithm work
+    with step_time.untimed():
+      if fixed:
+        opt_solution, opt_replicas, opt_detailed_fwd = ctx.reference
+        opt_x, _, _, _, _ = encode_solution(
+          Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
+        )
+        opt_r_for_x = np.zeros((Nn,Nf))
+        sp_data[None]["r_bar"] = {}
+        for n in range(Nn):
+          for f in range(Nf):
+            opt_r_for_x[n,f] = sp_data[None][
+              "demand"
+            ][(n+1,f+1)] * opt_x[n,f] / sp_data[None]["max_utilization"][f+1]
+            if np.floor(opt_r_for_x[n,f]) > 0 and (
+                (opt_r_for_x[n,f] / np.floor(opt_r_for_x[n,f]) - 1) > 1e-6
+              ):
+              sp_data[None]["r_bar"][(n+1,f+1)] = int(
+                np.ceil(opt_r_for_x[n,f])
+              )
+            else:
+              if int(np.floor(opt_r_for_x[n,f])) == 0 and (
+                  opt_r_for_x[n,f] > 1e-6
                 ):
                 sp_data[None]["r_bar"][(n+1,f+1)] = int(
                   np.ceil(opt_r_for_x[n,f])
                 )
               else:
-                if int(np.floor(opt_r_for_x[n,f])) == 0 and (
-                    opt_r_for_x[n,f] > 1e-6
-                  ):
-                  sp_data[None]["r_bar"][(n+1,f+1)] = int(
-                    np.ceil(opt_r_for_x[n,f])
-                  )
-                else:
-                  sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r_for_x[n,f])
-      s = datetime.now()
-      # solve sub-problem
-      (
-        sp_data, 
-        sp_x, 
-        sp_y, 
-        sp_z, 
-        sp_omega, 
-        sp_r, 
-        sp_rho, 
-        sp_U, 
-        obj, 
-        tc, 
-        sp_runtime
-      ) = solve_subproblem(
-        sp_data, 
-        agents, 
-        sp, 
-        solver_name, 
-        general_solver_options, 
-        parallelism,
-        pi = pi,
-        detailed_pi = detailed_pi if use_detailed_pi else None
-      )
-      e = datetime.now()
-      obj_dict["LSP"][it].append(obj["tot"])
-      tc_dict["LSP"][it].append(tc["tot"])
-      with step_time.untimed():
-        if verbose > 1:
-          print(
-            f"        sp: DONE ",
-            f"({tc['tot']}; obj = {obj['tot']}; runtime = {sp_runtime['tot']})", 
-            file = log_stream, 
-            flush = True
-          )
-      # update neighborhood given the nodes availability
-      if solver_options.get("update_neighborhood", False):
-        rmp_data[None]["neighborhood"] = update_neighborhood(
-          data[None]["neighborhood"], sp_rho, sp_omega
-        )
-      # solve master problem
-      (
-        rmp_x, 
-        rmp_y, 
-        rmp_z, 
-        rmp_r, 
-        rmp_xi, 
-        rmp_omega, 
-        rmp_rho, 
-        rmp_U, 
-        obj, 
-        tc, 
-        runtime
-      ) = solve_master_problem(
-        rmp_data, 
-        rmp, 
-        solver_name, 
-        coordinator_options, 
-        (sp_x, sp_y, sp_z, sp_omega, sp_r, sp_rho)
-      )
-      obj_dict["LRMP"][it].append(obj)
-      tc_dict["LRMP"][it].append(tc)
-      with step_time.untimed():
-        if verbose > 1:
-          print(
-            f"        rmp: DONE ({tc}; obj = {obj}; runtime = {runtime})", 
-            file = log_stream, 
-            flush = True
-          )
-      # compute deviation
-      s = datetime.now()
-      dev, Nfthr, detailed_dev = compute_deviation(
-        rmp_data, sp_x, sp_omega, rmp_r, rmp_omega
-      )
-      e = datetime.now()
-      dev_queue.append(dev)
-      with step_time.untimed():
-        if verbose > 1:
-          print(
-            f"        compute_deviation: DONE (dev = {dev}; "
-            f"Nf = {Nfthr}; omega = {sp_omega.sum(axis=0)}; ", 
-            f"ni = {rmp_omega.sum(axis=0)}; runtime = {(e-s).total_seconds()})", 
-            file = log_stream, 
-            flush = True
-          )
-      # compute lower bound
-      s = datetime.now()
-      lb = compute_lower_bound(
-        obj_dict["LSP"][it][-1], 
-        sp_data[None]["pi"], 
-        Nfthr, 
-        loadt, 
-        Nn, 
-        sp_omega
-      )
-      lower_bound = min(lower_bound, lb)
-      e = datetime.now()
-      with step_time.untimed():
-        if verbose > 1:
-          print(
-            f"        compute_lower_bound: DONE (current: {lb};"
-            f" bound: {lower_bound}; runtime = {(e-s).total_seconds()})", 
-            file = log_stream, 
-            flush = True
-          )
-      # solve "restricted problem"
-      spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
-        spr, 
-        sp_data, 
-        agents, 
-        solver_name, 
-        general_solver_options, 
-        rmp_y, 
-        rmp_omega,
-        parallelism
-      )
-      # # -- rejection cost
-      # rej_cost = 0
-      # for n in range(Nn):
-      #   for f in range(Nf):
-      #     diff = sp_omega[n,f] - rmp_omega[n,f]
-      #     if diff > 0:
-      #       rej_cost += diff * sp_data[None]["gamma"][(n+1,f+1)]
-      # spr_obj += rej_cost
-      # update social welfare
-      social_welfare = min(social_welfare, spr_obj)
-      current_sw_queue.append(social_welfare)
-      obj_dict["LSPr"][it].append(spr_obj)
-      with step_time.untimed():
-        if verbose > 1:
-          print(
-            f"        compute_social_welfare: DONE ({spr_tc}; current: {spr_obj}"
-            f"; sw: {social_welfare}; runtime = {spr_runtime})", 
-            file = log_stream, 
-            flush = True
-          )
-      # compute price deviation
-      odev = relative_objective_gap(spr_obj, obj_dict["LSP"][it][-1])
-      x_cost = 0
-      for n in range(sp_x.shape[0]):
-        x_cost_n = 0
-        for f in range(sp_x.shape[1]):
-          x_cost_n += (sp_x[n,f] * sp_data[None]["alpha"][(n+1,f+1)])
-        x_cost += x_cost_n
-      odev_queue.append(odev)
-      # merge solutions and compute the centralized objective value
-      spr_x, _, _, _, spr_r, spr_rho = spr_sol
-      with step_time.untimed():
-        csol = combine_solutions(
-          Nn, Nf, sp_data, loadt, 
-          spr_x, spr_r, spr_rho,
-          rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
-        )
-        cobj = compute_centralized_objective(
-          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-        )
-      # update best solution so far
-      if spr_obj < best_cost_so_far:
-        sw_queue.append(social_welfare)
-        best_cost_so_far = spr_obj
-        best_solution_so_far = csol
-        best_it_so_far = it
-        final_pi = deepcopy(pi)
-        final_detailed_pi = deepcopy(detailed_pi)
-        with step_time.untimed():
-          if verbose > 0:
-            print(
-              f"        best solution updated; obj = {cobj}",
-              file = log_stream,
-              flush = True
-            )
-      if cobj > best_centralized_cost:
-        best_centralized_cost = cobj
-        best_centralized_solution = csol
-        best_centralized_it = it
-        with step_time.untimed():
-          if verbose > 0:
-            print(
-              f"        best centralized solution updated; obj = {cobj}",
-              file = log_stream,
-              flush = True
-            )
-      total_runtime = step_time.current_modelled()
-      # check that the deviation is >= 0 (otherwise, no iterations needed)
-      if not (dev < 0).all():
-        if social_welfare < lower_bound and (
-            lower_bound - social_welfare
-          ) >= 1e-6:
-          return
-        # update prices
-        pi, detailed_pi = update_prices(
-          dev, 
-          detailed_dev, 
-          psi, 
-          social_welfare - lower_bound, 
-          sp_data[None]["pi"],
-          detailed_pi
-        )
-        pi_queue.append(pi)
-        with step_time.untimed():
-          if verbose > 1:
-            print(
-              "        update_prices: DONE "
-              f"({pi if not use_detailed_pi else detailed_pi.flatten()})", 
-              file = log_stream, 
-              flush = True
-            )
-        # check stopping criterion
-        s = datetime.now()
-        stop_searching, why_stop_searching, psi = check_stopping_criteria(
-          it,
-          max_iterations,
-          sp_omega,
-          rmp_omega,
-          pi_queue,
-          dev_queue,
-          sw_queue,
-          current_sw_queue,
-          odev_queue,
-          psi,
-          tolerance,
-          total_runtime,
-          time_limit
-        )
-        e = datetime.now()
-        with step_time.untimed():
-          if verbose > 1:
-            print(
-              f"        check_stopping_criteria: DONE "
-              f"(runtime = {(e - s).total_seconds()}; "
-              f"total runtime = {total_runtime}; "
-              f"wallclock: {(datetime.now() - ss).total_seconds()}) "
-              f"--> stop? {stop_searching} ({why_stop_searching})", 
-              file = log_stream, 
-              flush = True
-            )
-      else:
-        stop_searching = True
-        why_stop_searching = "dev < 0"
-        print(
-          f"        check_stopping_criteria: DONE "
-          f"(total runtime = {total_runtime}; "
-          f"wallclock: {(datetime.now() - ss).total_seconds()}) "
-          f"--> stop? {stop_searching} ({why_stop_searching})", 
-          file = log_stream, 
-          flush = True
-        )
-      # move to the next iteration OR update the complete solution
-      if not stop_searching:
-        it += 1
-      else:
-        runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
-        # save SP/RMP solutions
-        sp_complete_solution, rmp_complete_solution, objf = decode_solutions(
-          sp_data, 
-          best_solution_so_far, 
-          sp_complete_solution, 
-          rmp_complete_solution
-        )
-        spc_complete_solution, rmpc_complete_solution, _ = decode_solutions(
-          sp_data, 
-          best_centralized_solution, 
-          spc_complete_solution, 
-          rmpc_complete_solution
-        )
-        obj_dict["LSPr_final"].append(objf)
-        tc_dict["LSPr"].append(
-          f"{why_stop_searching} "
-          f"(it: {it}; obj. deviation: {odev}; best it: {best_it_so_far}; "
-          f"best centralized it: {best_centralized_it}; "
-          f"total runtime: {total_runtime})"
-        )
-        # save checkpoint
-        if checkpoint_due(t, steps, checkpoint_interval):
-          save_checkpoint(
-            sp_complete_solution, os.path.join(solution_folder, "LSP"), t
-          )
-          save_checkpoint(
-            spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
-          )
-    ee = datetime.now()
+                sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r_for_x[n,f])
+    # solve sub-problem
+    (
+      sp_data, 
+      sp_x, 
+      sp_y, 
+      sp_z, 
+      sp_omega, 
+      sp_r, 
+      sp_rho, 
+      sp_U, 
+      obj, 
+      tc, 
+      sp_runtime
+    ) = solve_subproblem(
+      sp_data, 
+      ctx.agents, 
+      sp, 
+      ctx.solver_name, 
+      ctx.general_options, 
+      ctx.parallelism,
+      pi = pi,
+      detailed_pi = detailed_pi if use_detailed_pi else None
+    )
+    sp_obj = obj["tot"]
     with step_time.untimed():
-      if verbose > 0:
-        print(
-          f"    TOTAL RUNTIME [s] = {total_runtime} "
-          f"(wallclock: {(ee-ss).total_seconds()})",
-          file = log_stream,
-          flush = True
-        )
-  # join
-  sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
-    sp_complete_solution
-  )
-  rmp_solution, rmp_offloaded, rmp_detailed_fwd_solution = join_complete_solution(
-    rmp_complete_solution
-  )
-  spc_solution, spc_offloaded, spc_detailed_fwd_solution = join_complete_solution(
-    spc_complete_solution
-  )
-  rmpc_solution, rmpc_offloaded, rmpc_detailed_fwd_solution = join_complete_solution(
-    rmpc_complete_solution
-  )
-  if not disable_plotting and Nf <= 10 and Nn <= 10:
-    plot_history(
-      input_requests_traces, 
-      min_run_time,
-      max_run_time,
-      run_time_step,
-      sp_solution, 
-      sp_complete_solution["utilization"], 
-      sp_complete_solution["replicas"], 
-      sp_offloaded,
-      # obj_dict["LSP"][max_iterations-1],
-      obj_dict["LSPr_final"],
-      os.path.join(solution_folder, "sp.png")
-    )
-    plot_history(
-      input_requests_traces, 
-      min_run_time,
-      max_run_time,
-      run_time_step,
-      rmp_solution, 
-      rmp_complete_solution["utilization"], 
-      rmp_complete_solution["replicas"], 
-      rmp_offloaded,
-      obj_dict["LRMP"][max_iterations-1],
-      os.path.join(solution_folder, "rmp.png")
-    )
-  save_solution(
-    sp_solution,
-    sp_offloaded,
-    sp_complete_solution,
-    sp_detailed_fwd_solution,
-    "LSP",
-    solution_folder
-  )
-  save_solution(
-    rmp_solution,
-    rmp_offloaded,
-    rmp_complete_solution,
-    rmp_detailed_fwd_solution,
-    "LRMP",
-    solution_folder
-  )
-  save_solution(
-    spc_solution,
-    spc_offloaded,
-    spc_complete_solution,
-    spc_detailed_fwd_solution,
-    "LSPc",
-    solution_folder
-  )
-  save_solution(
-    rmpc_solution,
-    rmpc_offloaded,
-    rmpc_complete_solution,
-    rmpc_detailed_fwd_solution,
-    "LRMPc",
-    solution_folder
-  )
-  # save objective function values
-  pd.DataFrame(obj_dict["LSPr_final"], columns = ["FaaS-MACrO"]).to_csv(
-    os.path.join(solution_folder, "obj.csv"), index = False
-  )
-  # save models termination condition
-  pd.DataFrame(tc_dict["LSPr"]).to_csv(
-    os.path.join(solution_folder, "termination_condition.csv")
-  )
-  step_time.write_runtime(solution_folder, runtime_rows)
-  with step_time.untimed():
-    if verbose > 0:
-      print(
-        f"All solutions saved in: {solution_folder}", 
-        file = log_stream, 
-        flush = True
+      log.debug("        sp: DONE  (%s; obj = %s; runtime = %s)", tc["tot"], obj["tot"], sp_runtime["tot"])
+    # update neighborhood given the nodes availability
+    if solver_options.get("update_neighborhood", False):
+      rmp_data[None]["neighborhood"] = update_neighborhood(
+        data[None]["neighborhood"], sp_rho, sp_omega
       )
-  # close log stream if needed
-  if log_on_file:
-    log_stream.close()
-  return solution_folder
+    # solve master problem
+    (
+      rmp_x, 
+      rmp_y, 
+      rmp_z, 
+      rmp_r, 
+      rmp_xi, 
+      rmp_omega, 
+      rmp_rho, 
+      rmp_U, 
+      obj, 
+      tc, 
+      runtime
+    ) = solve_master_problem(
+      rmp_data, 
+      rmp, 
+      ctx.solver_name, 
+      coordinator_options, 
+      (sp_x, sp_y, sp_z, sp_omega, sp_r, sp_rho)
+    )
+    if it == max_iterations - 1:
+      run_state["rmp_objectives"].append(obj)
+    with step_time.untimed():
+      log.debug("        rmp: DONE (%s; obj = %s; runtime = %s)", tc, obj, runtime)
+    # compute deviation
+    s = step_time.now()
+    dev, Nfthr, detailed_dev = compute_deviation(
+      rmp_data, sp_x, sp_omega, rmp_r, rmp_omega
+    )
+    e = step_time.now()
+    dev_queue.append(dev)
+    with step_time.untimed():
+      log.debug(
+        "        compute_deviation: DONE (dev = %s; Nf = %s; omega = %s;  ni = %s; runtime = %s)",
+        dev, Nfthr, sp_omega.sum(axis=0), rmp_omega.sum(axis=0), e - s,
+      )
+    # compute lower bound
+    s = step_time.now()
+    lb = compute_lower_bound(
+      sp_obj, 
+      sp_data[None]["pi"], 
+      Nfthr, 
+      loadt, 
+      Nn, 
+      sp_omega
+    )
+    lower_bound = min(lower_bound, lb)
+    e = step_time.now()
+    with step_time.untimed():
+      log.debug("        compute_lower_bound: DONE (current: %s; bound: %s; runtime = %s)",
+                lb, lower_bound, e - s)
+    # solve "restricted problem"
+    spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
+      spr, 
+      sp_data, 
+      ctx.agents, 
+      ctx.solver_name, 
+      ctx.general_options, 
+      rmp_y, 
+      rmp_omega,
+      ctx.parallelism
+    )
+    # update social welfare
+    social_welfare = min(social_welfare, spr_obj)
+    current_sw_queue.append(social_welfare)
+    with step_time.untimed():
+      log.debug("        compute_social_welfare: DONE (%s; current: %s; sw: %s; runtime = %s)",
+                spr_tc, spr_obj, social_welfare, spr_runtime)
+    # compute price deviation
+    odev = relative_objective_gap(spr_obj, sp_obj)
+    odev_queue.append(odev)
+    # merge solutions and compute the centralized objective value
+    spr_x, _, _, _, spr_r, spr_rho = spr_sol
+    with step_time.untimed():
+      csol = combine_solutions(
+        Nn, Nf, sp_data, loadt, 
+        spr_x, spr_r, spr_rho,
+        rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho
+      )
+      cobj = compute_centralized_objective(
+        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+      )
+    # update best solution so far
+    if spr_obj < best_cost_so_far:
+      sw_queue.append(social_welfare)
+      best_cost_so_far = spr_obj
+      best_solution_so_far = csol
+      best_it_so_far = it
+      run_state["pi"] = deepcopy(pi)
+      run_state["detailed_pi"] = deepcopy(detailed_pi)
+      with step_time.untimed():
+        log.info("        best solution updated; obj = %s", cobj)
+    if cobj > best_centralized_cost:
+      best_centralized_cost = cobj
+      best_centralized_solution = csol
+      best_centralized_it = it
+      with step_time.untimed():
+        log.info("        best centralized solution updated; obj = %s", cobj)
+    total_runtime = step_time.current_modelled()
+    # check that the deviation is >= 0 (otherwise, no iterations needed)
+    if not (dev < 0).all():
+      if social_welfare < lower_bound and (
+          lower_bound - social_welfare
+        ) >= 1e-6:
+        raise _BelowLowerBound
+      # update prices
+      pi, detailed_pi = update_prices(
+        dev, 
+        detailed_dev, 
+        psi, 
+        social_welfare - lower_bound, 
+        sp_data[None]["pi"],
+        detailed_pi
+      )
+      pi_queue.append(pi)
+      with step_time.untimed():
+        log.debug("        update_prices: DONE (%s)", pi if not use_detailed_pi else detailed_pi.flatten())
+      # check stopping criterion
+      s = step_time.now()
+      stop_searching, why_stop_searching, psi = check_stopping_criteria(
+        it,
+        max_iterations,
+        sp_omega,
+        rmp_omega,
+        pi_queue,
+        dev_queue,
+        sw_queue,
+        current_sw_queue,
+        odev_queue,
+        psi,
+        tolerance,
+        total_runtime,
+        ctx.time_limit
+      )
+      e = step_time.now()
+      with step_time.untimed():
+        log.debug(
+          "        check_stopping_criteria: DONE (runtime = %s; total runtime = %s; wallclock: %s) --> stop? %s (%s)",
+          e - s, total_runtime, step_time.now() - started_at, stop_searching, why_stop_searching,
+        )
+    else:
+      stop_searching = True
+      why_stop_searching = "dev < 0"
+      with step_time.untimed():
+        log.info(
+          "        check_stopping_criteria: DONE (total runtime = %s; wallclock: %s) --> stop? %s (%s)",
+          total_runtime, step_time.now() - started_at, stop_searching, why_stop_searching,
+        )
+    # move to the next iteration
+    if not stop_searching:
+      it += 1
+  with step_time.untimed():
+    best = best_solution_so_far["sp"]
+    objective = compute_centralized_objective(sp_data, best["x"], best["y"], best["z"])
+  return run_frame.StepResult(
+    solutions={"LSP": best, "LRMP": best_solution_so_far["rmp"],
+               "LSPc": best_centralized_solution["sp"], "LRMPc": best_centralized_solution["rmp"]},
+    objective=objective,
+    termination=(
+      f"{why_stop_searching} "
+      f"(it: {it}; obj. deviation: {odev}; best it: {best_it_so_far}; "
+      f"best centralized it: {best_centralized_it}; "
+      f"total runtime: {total_runtime})"
+    ),
+    data=sp_data,
+  )
 
 
 if __name__ == "__main__":

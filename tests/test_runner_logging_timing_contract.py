@@ -44,6 +44,8 @@ CASES = [
   ("one-shot-pg", "decentralized_auction", "One-shot-PG", "solve_subproblem"),
   ("one-shot2-pg", "decentralized_auction", "One-shot-PG", "solve_subproblem"),
   ("one-shot2-b-pg", "decentralized_auction", "One-shot-PG", "solve_subproblem"),
+  ("faas-macro", "run_faasmacro", "FaaS-MACrO", "solve_subproblem"),
+  ("faas-macro-v0", "run_faasmacro", "FaaS-MACrO", "solve_subproblem"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
@@ -93,3 +95,16 @@ def test_runner_uses_the_frame_and_the_logger(module):
              and [a.arg for a in n.args.args[:2]] == ["config", "parallelism"]]
   assert entries and all(n.end_lineno - n.lineno + 1 <= 80 for n in entries)
   assert any("run_frame.run(" in ast.unparse(n) for n in entries)
+
+
+def test_macro_draws_both_histories(tmp_path):
+  import pyomo.environ as pyo
+  import run_faasmacro
+  from test_review_distributed_regressions import _materialized_config, _two_node_data
+  if not pyo.SolverFactory("glpk").available(exception_flag=False):
+    pytest.skip("GLPK required")
+  config = _materialized_config(tmp_path, _two_node_data(), steps=2)
+  config.update(patience=2, solver_options={"general": {}})
+  folder = Path(run_faasmacro.run(config, 0, log_on_file=True, disable_plotting=False))
+  assert (folder / "sp.png").exists() and (folder / "rmp.png").exists()
+  assert {"LRMP_solution.csv", "LRMPc_solution.csv"} <= {p.name for p in folder.iterdir()}
