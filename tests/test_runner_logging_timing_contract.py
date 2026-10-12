@@ -26,6 +26,7 @@ BASELINE = Path(os.environ.get("RUNNER_BASELINE", "/tmp/runner-logging-timing/be
 CASES = [
   ("faas-diffuse", "decentralized_diffusion", "FaaS-MADiG", "solve_subproblem"),
   ("faas-powd", "decentralized_powerd", "FaaS-MAPoD", "sample_assignments"),
+  ("faas-dual", "decentralized_dual", "FaaS-MALD", "solve_subproblem"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
