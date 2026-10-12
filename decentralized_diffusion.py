@@ -18,6 +18,7 @@ from utils.common import load_configuration
 from models.sp import LSP, LSP_fixedr, LSPr, LSPr_fixedr
 
 from collections import deque
+from functools import partial
 from copy import deepcopy
 from typing import Tuple
 import pandas as pd
@@ -266,9 +267,11 @@ def run(
     log_on_file: bool = False,
     disable_plotting: bool = False,
   ) -> str:
+  options = _diffusion_options(config["solver_options"])
   return run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="FaaS-MADiG", solve_step=_solve_step, outputs=OUTPUTS,
+    method="FaaS-MADiG", outputs=OUTPUTS,
+    solve_step=partial(assignment_step, options=options, assign=define_assignments),
   )
 
 
@@ -280,9 +283,9 @@ def _diffusion_options(solver_options: dict) -> dict:
   return options
 
 
-def _solve_step(ctx, t: int, data: dict) -> run_frame.StepResult:
-  with step_time.untimed():
-    diffusion_options = _diffusion_options(ctx.solver_options)
+def assignment_step(ctx, t: int, data: dict, *, options: dict, assign) -> run_frame.StepResult:
+  """One step of diffusion-style coordination; ``assign`` defines the
+  buyers' assignments (define_assignments, or power-of-d sampling)."""
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
   loadt = data[None]["incoming_load"]
   fixed = ctx.reference is not None
@@ -311,9 +314,9 @@ def _solve_step(ctx, t: int, data: dict) -> run_frame.StepResult:
     )
     blackboard = np.maximum(0.0, capacity - sp_x)
     coordination_rho = np.zeros_like(sp_rho) if fixed else sp_rho
-    bids, memory_bids, n_auctions = define_assignments(
+    bids, memory_bids, n_auctions = assign(
       omega, blackboard, sp_data, ctx.neighborhood, coordination_rho,
-      diffusion_options, ctx.latency, fairness,
+      options, ctx.latency, fairness,
       force_memory_bids=(
         (coordination_rho > 0).any()
         and len(n_accepted_queue) >= n_accepted_queue.maxlen
@@ -328,7 +331,7 @@ def _solve_step(ctx, t: int, data: dict) -> run_frame.StepResult:
         bids, residual_capacity, sp_data, ell, sp_r, coordination_rho,
         tentatively_start_replicas=(len(memory_bids) == 0),
         last_y=y,
-        diffusion_options=diffusion_options,
+        diffusion_options=options,
         latency=ctx.latency,
         fairness=fairness,
       )
