@@ -1,44 +1,26 @@
-from run_centralized_model import (
-  get_current_load,
-  init_complete_solution,
-  init_problem,
-  join_complete_solution,
-  plot_history,
-  save_checkpoint,
-  save_solution,
-  update_data,
-)
-from postprocessing import load_solution
 from run_faasmacro import (
   parallel_solver_run,
-  combine_solutions,
-  decode_solutions,
   solve_subproblem,
 )
 from run_faasmadea import (
   compute_residual_capacity,
-  neigh_dict_to_matrix,
   start_additional_replicas,
 )
-from utils.common import checkpoint_due, run_steps
-from utils.centralized import check_feasibility, encode_solution
-from utils import step_time
+from decentralized_diffusion import OUTPUTS
+from utils import run_frame, step_time
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.model import PYO_VAR_TYPE
 from models.sp import LSP, LSP_fixedr, LSP_pg, LSP_pg_fixedr
 from models.local_sp import dp_enabled, try_solve_local
 
-from datetime import datetime
 from copy import deepcopy
+from functools import partial
 from typing import Callable, Tuple
 import pandas as pd
 import numpy as np
 import pyomo.environ as pyo
 import argparse
-import json
-import sys
-import os
 
 
 def compute_z(x: np.array, y: np.array, sp_data: dict) -> np.array:
@@ -389,199 +371,90 @@ def _run(
     log_on_file: bool = False,
     disable_plotting: bool = False,
   ) -> str:
-  base_solution_folder = config["base_solution_folder"]
-  seed = config["seed"]
-  limits = config["limits"]
-  trace_type = config["limits"]["load"].get("trace_type", "fixed_sum")
-  verbose = config.get("verbose", 0)
-  solver_name = config["solver_name"]
-  solver_options = config["solver_options"]
-  general_solver_options = solver_options.get("general", {})
-  pg_options = dict(solver_options.get(options_key, {}))
-  epsilon = pg_options.get("epsilon", 1e-6)
-  rng = np.random.default_rng(seed)
-  time_limit = general_solver_options.get("TimeLimit", np.inf)
-  tolerance = config.get("tolerance", 1e-6)
-  max_iterations = config["max_iterations"]
-  max_steps = config["max_steps"]
-  min_run_time = config.get("min_run_time", 0)
-  max_run_time = config.get("max_run_time", max_steps)
-  run_time_step = config.get("run_time_step", 1)
-  checkpoint_interval = config["checkpoint_interval"]
-  now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
-  solution_folder = f"{base_solution_folder}/{now}"
-  os.makedirs(solution_folder, exist_ok=True)
-  with open(os.path.join(solution_folder, "config.json"), "w") as ostream:
-    ostream.write(json.dumps(config, indent=2))
-  log_stream = sys.stdout
-  if log_on_file:
-    log_stream = open(os.path.join(solution_folder, "out.log"), "w")
-  base_instance_data, input_requests_traces, agents, graph = init_problem(
-    limits, trace_type, max_steps, seed, solution_folder
+  options = dict(config["solver_options"].get(options_key, {}))
+  return run_frame.run(
+    config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
+    method=method_name, outputs=OUTPUTS,
+    solve_step=partial(_solve_step, epsilon=options.get("epsilon", 1e-6), order=order,
+                       rng=np.random.default_rng(config["seed"])),
   )
-  Nn = base_instance_data[None]["Nn"][None]
-  Nf = base_instance_data[None]["Nf"][None]
-  opt_solution, opt_replicas, opt_detailed_fwd = None, None, None
-  if "opt_solution_folder" in config:
-    opt_solution, opt_replicas, opt_detailed_fwd, _, _ = load_solution(
-      config["opt_solution_folder"], "LoadManagementModel"
-    )
-  neighborhood = neigh_dict_to_matrix(
-    base_instance_data[None]["neighborhood"], Nn
+
+
+def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng) -> run_frame.StepResult:
+  """One step: sequential sweeps run on the step clock (wall time minus observers);
+  the local initialization is a parallel phase."""
+  Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
+  time_limit = ctx.general_options.get("TimeLimit", np.inf)
+  loadt = data[None]["incoming_load"]
+  fixed = ctx.reference is not None
+  sp_data = ctx.step_data(data, t)
+  sp = LSP_fixedr() if fixed else LSP()
+  pg_model = LSP_pg_fixedr() if fixed else LSP_pg()
+  (
+    sp_data, sp_x, _, _, _, sp_r, sp_rho, _, _, _, sp_runtime
+  ) = solve_subproblem(
+    sp_data, ctx.agents, sp, ctx.solver_name, ctx.general_options, ctx.parallelism
   )
-  steps = run_steps(config)
-  sp_complete_solution = init_complete_solution()
-  spc_complete_solution = init_complete_solution()
-  obj_dict = {"phi_final": []}
-  tc_dict = {"pg": []}
-  runtime_rows = []
-  for t in steps:
-    if verbose > 0:
-      print(f"t = {t}", file=log_stream, flush=True)
-    loadt = get_current_load(input_requests_traces, agents, t)
-    data = update_data(base_instance_data, {"incoming_load": loadt})
-    # sequential sweeps: wall time minus observers; the initialization is a parallel phase
-    clock = step_time.start_step()
-    sp_data = deepcopy(data)
-    if opt_solution is not None:
-      _, _, _, opt_r, _ = encode_solution(
-        Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
-      )
-      sp_data[None]["r_bar"] = {}
-      for n in range(Nn):
-        for f in range(Nf):
-          sp_data[None]["r_bar"][(n + 1, f + 1)] = int(opt_r[n, f])
-    sp = LSP() if opt_solution is None else LSP_fixedr()
-    pg_model = LSP_pg() if opt_solution is None else LSP_pg_fixedr()
-    (
-      sp_data, sp_x, _, _, _, sp_r, sp_rho, _, _, _, sp_runtime
-    ) = solve_subproblem(
-      sp_data, agents, sp, solver_name, general_solver_options, parallelism
-    )
-    x = np.array(sp_x, dtype=float)
-    r = np.array(sp_r, dtype=float)
-    rho = np.array(
-      sp_rho if opt_solution is None else np.zeros_like(sp_rho), dtype=float
-    )
-    y = np.zeros((Nn, Nn, Nf))
+  x = np.array(sp_x, dtype=float)
+  r = np.array(sp_r, dtype=float)
+  rho = np.array(np.zeros_like(sp_rho) if fixed else sp_rho, dtype=float)
+  y = np.zeros((Nn, Nn, Nf))
 
-    def propose_fn(node, omega_ub_row):
-      return propose_node_move(
-        node, omega_ub_row, y, sp_data, pg_model,
-        solver_name, general_solver_options, parallelism,
-      )
+  def propose_fn(node, omega_ub_row):
+    return propose_node_move(
+      node, omega_ub_row, y, sp_data, pg_model,
+      ctx.solver_name, ctx.general_options, ctx.parallelism,
+    )
 
-    it = 0
-    stop_searching = False
-    with step_time.untimed():  # the potential only validates monotonicity
-      phi_prev = compute_centralized_objective(
+  it = 0
+  stop_searching = False
+  with step_time.untimed():  # the potential only validates monotonicity
+    phi_prev = compute_centralized_objective(
+      sp_data, x, y, compute_z(x, y, sp_data)
+    )
+  while not stop_searching:
+    if not fixed:
+      rho = compute_rho(r, sp_data)
+    n_accepted, delta_phi, memory_bids, _ = (
+      potential_game_sweep(
+        x, y, r, sp_data, ctx.neighborhood, rho, epsilon, tolerance,
+        order, rng, propose_fn,
+      )
+    )
+    additional_replicas = np.zeros((Nn, Nf))
+    if len(memory_bids) > 0 and not fixed:
+      # accepted moves in the sweep re-decide r and consume memory slack:
+      # recompute rho before the market or it would allocate stale slack
+      rho = compute_rho(r, sp_data)
+      if (rho > 0).any():
+        additional_replicas, rho = start_additional_replicas(
+          memory_bids, r, sp_data, rho
+        )
+        r += additional_replicas
+    with step_time.untimed():
+      phi = compute_centralized_objective(
         sp_data, x, y, compute_z(x, y, sp_data)
       )
-    while not stop_searching:
-      if opt_solution is None:
-        rho = compute_rho(r, sp_data)
-      n_accepted, delta_phi, memory_bids, _ = (
-        potential_game_sweep(
-          x, y, r, sp_data, neighborhood, rho, epsilon, tolerance,
-          order, rng, propose_fn,
-        )
-      )
-      additional_replicas = np.zeros((Nn, Nf))
-      if len(memory_bids) > 0 and opt_solution is None:
-        # accepted moves in the sweep re-decide r and consume memory slack:
-        # recompute rho before the market or it would allocate stale slack
-        rho = compute_rho(r, sp_data)
-        if (rho > 0).any():
-          additional_replicas, rho = start_additional_replicas(
-            memory_bids, r, sp_data, rho
-          )
-          r += additional_replicas
-      with step_time.untimed():
-        phi = compute_centralized_objective(
-          sp_data, x, y, compute_z(x, y, sp_data)
-        )
-        if not (phi >= phi_prev - 1e-9):
-          raise RuntimeError(f"potential decreased: {phi_prev} -> {phi}")
-        phi_prev = phi
-      total_runtime = step_time.current_modelled()
-      stop_searching, why_stop_searching = check_pg_stopping(
-        it, max_iterations, n_accepted,
-        int(additional_replicas.sum()), total_runtime, time_limit,
-      )
-      if not stop_searching:
-        it += 1
-    with step_time.untimed():  # validation and output
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, x, r, rho,
-        None, y, None, None, None, None
-      )
-      feas = check_feasibility(
-        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-        csol["sp"]["r"], csol["sp"]["U"], sp_data
-      )
-      if not (feas[0]):
-        raise RuntimeError(feas[1])
-      sp_complete_solution, _, objf = decode_solutions(
-        sp_data, csol, sp_complete_solution, None
-      )
-      spc_complete_solution, _, _ = decode_solutions(
-        sp_data, csol, spc_complete_solution, None
-      )
-      obj_dict["phi_final"].append(objf)
-      tc_dict["pg"].append(
-        f"{why_stop_searching} (it: {it}; obj. deviation: {None}; best it: {it}; total runtime: {total_runtime})"
-      )
-      if checkpoint_due(t, steps, checkpoint_interval):
-        save_checkpoint(
-          sp_complete_solution, os.path.join(solution_folder, "LSP"), t
-        )
-        save_checkpoint(
-          spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
-        )
-    row = step_time.end_step(clock)
-    runtime_rows.append(dict(step=t, **row))
-    if verbose > 0:
-      print(
-        f"    TOTAL RUNTIME [s] = {row['algorithm_s']} "
-        f"(wallclock: {row['wall_s']})",
-        file=log_stream, flush=True
-      )
-  sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
-    sp_complete_solution
-  )
-  spc_solution, spc_offloaded, spc_detailed_fwd_solution = (
-    join_complete_solution(spc_complete_solution)
-  )
-  if not disable_plotting and Nf <= 10 and Nn <= 10:
-    plot_history(
-      input_requests_traces, min_run_time, max_run_time, run_time_step,
-      sp_solution, sp_complete_solution["utilization"],
-      sp_complete_solution["replicas"], sp_offloaded,
-      obj_dict["phi_final"], os.path.join(solution_folder, "sp.png")
+      if not (phi >= phi_prev - 1e-9):
+        raise RuntimeError(f"potential decreased: {phi_prev} -> {phi}")
+      phi_prev = phi
+    total_runtime = step_time.current_modelled()
+    stop_searching, why_stop_searching = check_pg_stopping(
+      it, ctx.max_iterations, n_accepted,
+      int(additional_replicas.sum()), total_runtime, time_limit,
     )
-  save_solution(
-    sp_solution, sp_offloaded, sp_complete_solution,
-    sp_detailed_fwd_solution, "LSP", solution_folder
+    if not stop_searching:
+      it += 1
+  csol, objective = run_frame.snapshot(
+    sp_data, Nn, Nf, sp_data, loadt, x, r, rho,
+    None, y, None, None, None, None
   )
-  save_solution(
-    spc_solution, spc_offloaded, spc_complete_solution,
-    spc_detailed_fwd_solution, "LSPc", solution_folder
+  return run_frame.StepResult(
+    solutions={"LSP": csol["sp"], "LSPc": csol["sp"]},
+    objective=objective,
+    termination=f"{why_stop_searching} (it: {it}; obj. deviation: {None}; best it: {it}; total runtime: {total_runtime})",
+    data=sp_data,
   )
-  pd.DataFrame(obj_dict["phi_final"], columns=[method_name]).to_csv(
-    os.path.join(solution_folder, "obj.csv"), index=False
-  )
-  pd.DataFrame(tc_dict["pg"]).to_csv(
-    os.path.join(solution_folder, "termination_condition.csv")
-  )
-  step_time.write_runtime(solution_folder, runtime_rows)
-  if verbose > 0:
-    print(
-      f"All solutions saved in: {solution_folder}",
-      file=log_stream, flush=True
-    )
-  if log_on_file:
-    log_stream.close()
-  return solution_folder
 
 
 def run_pg_s(config, parallelism, log_on_file=False, disable_plotting=False):
