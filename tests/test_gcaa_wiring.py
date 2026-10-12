@@ -8,6 +8,7 @@ import pytest
 
 import decentralized_gcaa
 import run
+from frame_stubs import ONE_NODE, stub_frame
 
 
 def test_methods_choice_accepts_faas_gcaa(monkeypatch):
@@ -64,12 +65,9 @@ def test_gcaa_run_stops_when_no_bids_available(tmp_path, monkeypatch):
       "neighborhood": {(1, 1): 0},
     }
   }
-  monkeypatch.setattr(
-    decentralized_gcaa, "init_problem",
-    lambda *args, **kwargs: (base_data, {}, [], nx.empty_graph(1)),
-  )
-  monkeypatch.setattr(decentralized_gcaa, "get_current_load", lambda *args: {})
-  monkeypatch.setattr(decentralized_gcaa, "update_data", lambda data, update: data)
+  import run_faasmacro
+  import utils.faasmacro
+  decoded = stub_frame(monkeypatch, base_data)
   monkeypatch.setattr(decentralized_gcaa, "LSP", lambda: "LSP")
   monkeypatch.setattr(decentralized_gcaa, "LSPr", lambda: "LSPr")
 
@@ -101,30 +99,10 @@ def test_gcaa_run_stops_when_no_bids_available(tmp_path, monkeypatch):
       1,
     ),
   )
-  expected_solution = {"sp": {
-    "x": np.zeros((1, 1)), "y": np.zeros((1, 1, 1)),
-    "z": np.zeros((1, 1)), "r": np.ones((1, 1)), "U": np.zeros((1, 1)),
-  }}
-  monkeypatch.setattr(
-    decentralized_gcaa, "combine_solutions", lambda *args: expected_solution,
-  )
-  monkeypatch.setattr(
-    decentralized_gcaa, "compute_centralized_objective", lambda *args: -np.inf
-  )
-  monkeypatch.setattr(decentralized_gcaa, "check_feasibility", lambda *args: (True, "ok"))
-
-  decoded = []
-
-  def _decode(sp_data, solution, complete, arg):
-    decoded.append(solution)
-    return complete, None, 1.0
-
-  monkeypatch.setattr(decentralized_gcaa, "decode_solutions", _decode)
-  monkeypatch.setattr(
-    decentralized_gcaa, "join_complete_solution", lambda complete: ({}, {}, {})
-  )
-  monkeypatch.setattr(decentralized_gcaa, "save_checkpoint", lambda *args: None)
-  monkeypatch.setattr(decentralized_gcaa, "save_solution", lambda *args: None)
+  expected_solution = {"sp": dict(ONE_NODE)}
+  monkeypatch.setattr(run_faasmacro, "combine_solutions", lambda *args: expected_solution)
+  for owner in (decentralized_gcaa, utils.faasmacro):   # no welfare: the first incumbent is kept
+    monkeypatch.setattr(owner, "compute_centralized_objective", lambda *args: -np.inf)
 
   config = {
     "base_solution_folder": str(tmp_path),
@@ -149,8 +127,5 @@ def test_gcaa_run_stops_when_no_bids_available(tmp_path, monkeypatch):
 
   decentralized_gcaa.run(config, parallelism=0, disable_plotting=True)
 
-  assert len(decoded) == 2
-  assert all(solution is not None for solution in decoded)
-  for solution in decoded:
-    for name, expected in expected_solution["sp"].items():
-      assert np.array_equal(solution["sp"][name], expected)
+  assert len(decoded) == 2   # LSP and LSPc, both the only (first) iteration's solution
+  assert all(np.array_equal(x, expected_solution["sp"]["x"]) for x in decoded)

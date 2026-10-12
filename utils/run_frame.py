@@ -5,8 +5,8 @@ A runner supplies the decision of one step, ``solve_step(ctx, t, data) -> StepRe
   return run_frame.run(config, parallelism, log_on_file=..., disable_plotting=...,
                        method="FaaS-MADiG", solve_step=_solve_step, outputs=OUTPUTS)
 
-The frame creates the run folder and config.json, opens the run log, loads the problem and the
-optional fixed reference, then for each step of ``run_steps(config)``: current load and data,
+The frame creates the run folder and config.json, opens the run log, loads the problem (the
+optional fixed reference on first use), then for each step of ``run_steps(config)``: current load and data,
 ``step_time.start_step()``, ``solve_step``, ``end_step``, decoding of the named solutions,
 checkpoints; at the end it writes the solutions, obj.csv, termination_condition.csv, runtime.csv
 and the plots, and returns the run folder. The public runner keeps the worker pool
@@ -67,9 +67,19 @@ class RunContext:
   Nf: int
   neighborhood: object
   latency: object           # sparse network_latency adjacency of the graph
-  reference: tuple | None   # (solution, replicas, detailed_fwd) of opt_solution_folder
   complete: dict = field(default_factory=dict)    # output name -> complete solution
   objectives: list = field(default_factory=list)  # obj.csv series
+
+  @cached_property
+  def reference(self) -> tuple | None:
+    """(solution, replicas, detailed_fwd) of ``opt_solution_folder``, loaded on first use."""
+    if "opt_solution_folder" not in self.config:
+      return None
+    from postprocessing import load_solution
+    with step_time.untimed():
+      solution, replicas, detailed, _, _ = load_solution(
+        self.config["opt_solution_folder"], "LoadManagementModel")
+    return solution, replicas, detailed
 
   @cached_property
   def dense_latency(self):
@@ -104,11 +114,6 @@ def open_context(config: dict, parallelism: int, *, log_on_file: bool):
       limits, limits["load"].get("trace_type", "fixed_sum"), config["max_steps"], config["seed"], folder,
     )
     Nn, Nf = base_data[None]["Nn"][None], base_data[None]["Nf"][None]
-    reference = None
-    if "opt_solution_folder" in config:
-      from postprocessing import load_solution
-      solution, replicas, detailed, _, _ = load_solution(config["opt_solution_folder"], "LoadManagementModel")
-      reference = (solution, replicas, detailed)
     solver_options = config.get("solver_options", {})
     yield RunContext(
       config=config, parallelism=parallelism, folder=folder, log=log,
@@ -119,7 +124,7 @@ def open_context(config: dict, parallelism: int, *, log_on_file: bool):
       checkpoint_interval=config["checkpoint_interval"], steps=run_steps(config),
       base_data=base_data, traces=traces, agents=agents, graph=graph, Nn=Nn, Nf=Nf,
       neighborhood=neigh_dict_to_matrix(base_data[None]["neighborhood"], Nn),
-      latency=adjacency_matrix(graph, weight="network_latency"), reference=reference,
+      latency=adjacency_matrix(graph, weight="network_latency"),
     )
 
 

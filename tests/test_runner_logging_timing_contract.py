@@ -28,6 +28,7 @@ CASES = [
   ("faas-powd", "decentralized_powerd", "FaaS-MAPoD", "sample_assignments"),
   ("faas-dual", "decentralized_dual", "FaaS-MALD", "solve_subproblem"),
   ("FaaS-MAFW", "decentralized_frankwolfe", "FaaS-MAFW", "solve_subproblem"),
+  ("faas-gcaa", "decentralized_gcaa", "FaaS-MAGCAA", "solve_subproblem"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
