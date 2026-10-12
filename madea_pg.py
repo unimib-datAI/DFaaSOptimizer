@@ -32,6 +32,16 @@ def refinement_options(config):
   return options
 
 
+def pg_reserve(config: dict, Nn: int, time_limit: float) -> float:
+  """Step time kept for the refinement: its budget, at most half of the step limit."""
+  options = refinement_options(config)
+  if options["max_sweeps"] <= 0:
+    return 0.0
+  requested = (options["time_limit_per_node"] * Nn
+               if "time_limit_per_node" in options else options["time_limit"])
+  return min(requested, time_limit / 2)
+
+
 class _InvalidLocalProposal(Exception):
   """The proposing node rejected its solver output using its own constraints."""
 

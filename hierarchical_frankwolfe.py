@@ -105,23 +105,17 @@ def run(
   return folder
 
 
-def _pg_reserve(config: dict, Nn: int, time_limit: float) -> float:
-  from madea_pg import refinement_options
-  pg_options = refinement_options(config)
-  if pg_options["max_sweeps"] <= 0:
-    return 0.0
-  requested = (pg_options["time_limit_per_node"] * Nn
-               if "time_limit_per_node" in pg_options else pg_options["time_limit"])
-  return min(requested, time_limit / 2)
-
-
 def _solve_step(ctx, t: int, data: dict, *, hierarchy: bool, refinement, options: dict,
                 auction_options: dict, rng, stats: list) -> run_frame.StepResult:
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
   loadt = data[None]["incoming_load"]
   with step_time.untimed():
     latency = ctx.dense_latency
-    pg_reserve = _pg_reserve(ctx.config, Nn, ctx.time_limit) if refinement is not None else 0.0
+    if refinement is not None:
+      from madea_pg import pg_reserve as reserve
+      pg_reserve = reserve(ctx.config, Nn, ctx.time_limit)
+    else:
+      pg_reserve = 0.0
   coordination_limit = ctx.time_limit - pg_reserve
   sp_data = deepcopy(data)
   (

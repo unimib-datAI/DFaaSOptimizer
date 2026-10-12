@@ -51,6 +51,9 @@ CASES = [
   ("MAFW-b-PG", "hierarchical_frankwolfe", "MAFW-PG", "solve_subproblem"),
   ("hierarchical-MAFW-PG", "hierarchical_frankwolfe", "Hierarchical-MAFW-PG", "solve_subproblem"),
   ("FaaS-MAFW-b", "decentralized_frankwolfe", "FaaS-MAFW", "solve_subproblem"),
+  ("hierarchical", "hierarchical_auction.runner", "HierarchicalAuction", "solve_subproblem"),
+  ("hierarchical-one-shot", "hierarchical_auction.runner", "HierarchicalAuction", "solve_subproblem"),
+  ("hierarchical-one-shot-pg", "hierarchical_auction.runner", "HierarchicalOneShotPG", "solve_subproblem"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
@@ -91,7 +94,7 @@ def test_runner_failure_leaves_no_clock_or_log(tmp_path, monkeypatch, name, modu
 
 @pytest.mark.parametrize("module", MODULES)
 def test_runner_uses_the_frame_and_the_logger(module):
-  source = (ROOT / f"{module}.py").read_text()
+  source = (ROOT / f"{module.replace('.', '/')}.py").read_text()
   tree = ast.parse(source)
   prints = [n.lineno for n in ast.walk(tree)
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "print"]
@@ -113,3 +116,12 @@ def test_macro_draws_both_histories(tmp_path):
   folder = Path(run_faasmacro.run(config, 0, log_on_file=True, disable_plotting=False))
   assert (folder / "sp.png").exists() and (folder / "rmp.png").exists()
   assert {"LRMP_solution.csv", "LRMPc_solution.csv"} <= {p.name for p in folder.iterdir()}
+
+
+def test_hierarchical_plots_at_any_size(tmp_path):
+  instance = capture_baseline.instances()[0]          # 30 nodes: above the default plot limit
+  config = capture_baseline.capture_config(instance, tmp_path, "hierarchical")
+  config.update(max_steps=1, max_run_time=1, verbose=0)
+  folder = Path(capture_baseline.baseline_runners()["hierarchical"](config, 0, log_on_file=True,
+                                                                     disable_plotting=False))
+  assert (folder / "sp.png").exists()

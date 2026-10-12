@@ -34,6 +34,7 @@ class Output:
   checkpoint: bool = True
   plot_filename: str | None = None  # final plot of this output (sp.png), if any
   check: bool = True                # centralized feasibility check when decoding (not RMP parts)
+  plot_max_size: int | None = 10    # plot only when Nn and Nf are at most this (None: any size)
 
 
 LSP_OUTPUTS = {  # the local (LSP) and centralized-incumbent (LSPc) solutions of most runners
@@ -177,7 +178,8 @@ def _write_outputs(ctx, outputs, method, terminations, rows, disable_plotting) -
   config = ctx.config
   for name, output in outputs.items():
     solution, offloaded, detailed = join_complete_solution(ctx.complete[name])
-    if output.plot_filename and not disable_plotting and ctx.Nf <= 10 and ctx.Nn <= 10:
+    small = output.plot_max_size is None or max(ctx.Nf, ctx.Nn) <= output.plot_max_size
+    if output.plot_filename and not disable_plotting and small:
       plot_history(
         ctx.traces, config.get("min_run_time", 0), config.get("max_run_time", config["max_steps"]),
         config.get("run_time_step", 1), solution, ctx.complete[name]["utilization"],
