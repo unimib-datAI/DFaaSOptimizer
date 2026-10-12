@@ -134,9 +134,8 @@ class HierarchicalAuctionEngine:
       level_structures = next_structures
       current_level += 1
 
-    assert token_manager.check_global_feasibility(), (
-      "Invariant 3 violated: committed tokens exceed initial tokens for some (k,f)"
-    )
+    if not (token_manager.check_global_feasibility()):
+      raise RuntimeError("Invariant 3 violated: committed tokens exceed initial tokens for some (k,f)")
     return LevelResult(
       y=current_y,
       omega=current_omega,

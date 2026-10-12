@@ -67,7 +67,8 @@ def routing_lp(
   res = linprog(c, A_ub=np.array(A_ub), b_ub=np.array(b_ub),
                 A_eq=np.array(A_eq), b_eq=np.array(b_eq), bounds=bounds,
                 method="highs")
-  assert res.success, res.message
+  if not (res.success):
+    raise RuntimeError(res.message)
   sol = res.x
   x = sol[:nx].reshape(Nn, Nf)
   z = sol[nx:2 * nx].reshape(Nn, Nf)

@@ -48,6 +48,7 @@ from run_faasmacro import (
   decode_solutions,
   solve_subproblem,
 )
+from utils.common import checkpoint_due, run_steps
 from utils.common import load_configuration
 from utils import step_time
 
@@ -173,14 +174,14 @@ def run(
   )
   latency = _extract_latency(graph)
 
-  ub = (max_run_time + run_time_step) if max_run_time == min_run_time else max_run_time
+  steps = run_steps(config)
   spc_complete_solution = init_complete_solution()
   obj_dict: dict[str, list[Any]] = {"LSPr_final": []}
   tc_dict: dict[str, list[Any]] = {"LSPr": []}
   runtime_rows: list[dict] = []
   refinement_history = []
 
-  for t in range(min_run_time, ub, run_time_step):
+  for t in steps:
     clock = step_time.start_step()
     started = time.monotonic()
     with step_time.untimed():
@@ -368,7 +369,7 @@ def run(
           f"best centralized it: {best_centralized_it}; "
           f"total runtime: {total_runtime})"
         )
-        if t % checkpoint_interval == 0 or t == max_steps - 1:
+        if checkpoint_due(t, steps, checkpoint_interval):
           save_checkpoint(
             spc_complete_solution,
             os.path.join(solution_folder, "LSPc"), t,

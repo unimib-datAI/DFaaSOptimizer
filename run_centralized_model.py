@@ -1,4 +1,5 @@
 from fwd_analysis import main as run_fwd_analysis
+from utils.common import checkpoint_due, run_steps
 from utils.common import (
   delete_tuples, 
   float_to_int, 
@@ -424,10 +425,8 @@ def run(
       termination_conditions = []
       runtimes = []
       r = None
-      ub = (
-        max_run_time + run_time_step
-      ) if max_run_time == min_run_time else max_run_time
-      for t in range(min_run_time, ub, run_time_step):
+      steps = run_steps(config)
+      for t in steps:
         if verbose > 0:
           print(f"  t = {t}", file = log_stream, flush = True)
         # get current load
@@ -445,12 +444,12 @@ def run(
         termination_conditions.append(tc)
         runtimes.append(runtime)
         # save checkpoint
-        if t % checkpoint_interval == 0 or t == max_steps - 1:
+        if checkpoint_due(t, steps, checkpoint_interval):
           save_checkpoint(
             complete_solution, os.path.join(solution_folder, M.name), t
           )
         # plot (if needed)
-        if 0 < t < ub - 1 and t % plot_interval == 0:
+        if 0 < t < steps.stop - 1 and t % plot_interval == 0:
           solution, offloaded, detailed_fwd_solution = join_complete_solution(
             complete_solution
           )

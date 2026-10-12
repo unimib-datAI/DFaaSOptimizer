@@ -25,6 +25,7 @@ from run_faasmadea import (
   define_bids,
   neigh_dict_to_matrix,
 )
+from utils.common import checkpoint_due, run_steps
 from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
@@ -150,9 +151,7 @@ def run(
     base_instance_data[None]["neighborhood"], Nn
   )
   latency = adjacency_matrix(graph, weight = "network_latency")
-  ub = (
-    max_run_time + run_time_step
-  ) if max_run_time == min_run_time else max_run_time
+  steps = run_steps(config)
   sp_complete_solution = init_complete_solution()
   spc_complete_solution = init_complete_solution()
   obj_dict = {"LSPr_final": []}
@@ -165,7 +164,7 @@ def run(
   # has no replica-bidding, a buyer with no convenient seller just gets
   # the null assignment (utility 0) for this round
   no_replica_sellers = np.zeros((Nn,))
-  for t in range(min_run_time, ub, run_time_step):
+  for t in steps:
     with step_time.untimed():
       if verbose > 0:
         print(f"t = {t}", file = log_stream, flush = True)
@@ -253,7 +252,8 @@ def run(
           csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
           csol["sp"]["r"], csol["sp"]["U"], sp_data
         )
-        assert feas[0], feas[1]
+        if not (feas[0]):
+          raise RuntimeError(feas[1])
         if spr_obj < best_cost_so_far or it == 0:
           best_cost_so_far = spr_obj
           best_solution_so_far = deepcopy(csol)
@@ -284,7 +284,7 @@ def run(
             f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
             f"total runtime: {total_runtime})"
           )
-          if t % checkpoint_interval == 0 or t == max_steps - 1:
+          if checkpoint_due(t, steps, checkpoint_interval):
             save_checkpoint(
               sp_complete_solution, os.path.join(solution_folder, "LSP"), t
             )

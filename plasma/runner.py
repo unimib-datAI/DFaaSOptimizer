@@ -14,6 +14,7 @@ from run_centralized_model import (
   join_complete_solution, save_checkpoint, save_solution,
 )
 from generators.generate_data import update_data
+from utils.common import checkpoint_due, run_steps
 from utils.centralized import check_feasibility, get_current_load
 from utils.faasmacro import compute_centralized_objective
 from run_faasmacro import parallel_solver_run
@@ -103,10 +104,8 @@ def run(
   runtime_rows = []
   msg_rows = []
   trade_rows = []
-  ub = (
-    max_run_time + run_time_step
-  ) if max_run_time == min_run_time else max_run_time
-  for t in range(min_run_time, ub, run_time_step):
+  steps = run_steps(config)
+  for t in steps:
     with step_time.untimed():
       if verbose > 0:
         print(f"t = {t}", file=log_stream, flush=True)
@@ -134,7 +133,8 @@ def run(
       )
     rho = ram_cap - (res.r * ram_req[None, :]).sum(axis=1)
     feasible, why = check_feasibility(res.x, omega, res.z, res.r, U, data)
-    assert feasible, why
+    if not (feasible):
+      raise RuntimeError(why)
     cs = decode_solution(res.x, res.y, res.z, res.r, res.xi, rho, U, cs)
     obj_list.append(
       compute_centralized_objective(data, res.x, res.y, res.z)
@@ -145,7 +145,7 @@ def run(
       "msgs_per_node_s": (engine.msg_count - msgs_before) / (Nn * seconds),
       "hb_per_node_s": (engine.hb_count - hb_before) / (Nn * seconds),
     })
-    if t % checkpoint_interval == 0 or t == max_steps - 1:
+    if checkpoint_due(t, steps, checkpoint_interval):
       save_checkpoint(cs, os.path.join(solution_folder, "LSPc"), t)
   solution, offloaded, detailed_fwd = join_complete_solution(cs)
   save_solution(solution, offloaded, cs, detailed_fwd, "LSPc", solution_folder)

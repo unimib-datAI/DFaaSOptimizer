@@ -197,6 +197,23 @@ def parse_arguments() -> argparse.Namespace:
   return args
 
 
+PREVIOUS_INSTANCE_SOURCES = (
+  "centralized", "selfish-distributed", "faas-macro", "faas-macro-v0", "faas-madea", "faas-madea-1s",
+)
+
+
+def find_previous_instance(old_instance_paths: dict, exp_value, seed):
+  """Folder of the instance of (exp_value, seed) in a previous experiments.json, None if not listed."""
+  experiments = old_instance_paths["experiments_list"]
+  if [exp_value, seed] not in experiments:
+    return None
+  idx = experiments.index([exp_value, seed])
+  for method in PREVIOUS_INSTANCE_SOURCES:
+    if idx < len(old_instance_paths.get(method, [])):
+      return old_instance_paths[method][idx]
+  raise ValueError(f"{[exp_value, seed]} is listed but no method of {PREVIOUS_INSTANCE_SOURCES} has its folder")
+
+
 def generate_experiments_list(exp_values, seed, n_experiments):
   rng = np.random.default_rng(seed)
   # list of exp values
@@ -1232,43 +1249,14 @@ def run(
       # -- look for old instance path (if required)
       ref_method_folder = None
       if "experiments_list" in old_instance_paths:
-        try:
-          old_exp_idx = old_instance_paths["experiments_list"].index(
-            [exp_value, seed]
-          )
-          old_exp_path = None
-          if "centralized" in old_instance_paths:
-            old_exp_path = old_instance_paths["centralized"][
-              old_exp_idx
-            ]
-          elif "selfish-distributed" in old_instance_paths:
-            old_exp_path = old_instance_paths["selfish-distributed"][
-              old_exp_idx
-            ]
-          elif "faas-macro" in old_instance_paths:
-            old_exp_path = old_instance_paths["faas-macro"][
-              old_exp_idx
-            ]
-          elif "faas-macro-v0" in old_instance_paths:
-            old_exp_path = old_instance_paths["faas-macro-v0"][
-              old_exp_idx
-            ]
-          elif "faas-madea" in old_instance_paths:
-            old_exp_path = old_instance_paths["faas-madea"][
-              old_exp_idx
-            ]
-          elif "faas-madea-1s" in old_instance_paths:
-            old_exp_path = old_instance_paths["faas-madea-1s"][
-              old_exp_idx
-            ]
+        old_exp_path = find_previous_instance(old_instance_paths, exp_value, seed)
+        if old_exp_path is None:
+          print(f"WARNING: {[exp_value, seed]} not in {from_instances}/experiments.json: "
+                "a new instance is generated", flush=True)
+        else:
           config["limits"]["path"] = old_exp_path
-          if (
-              config["limits"]["load"]["trace_type"] == "load_existing" or
-              config["limits"]["load"]["trace_type"] == "load_filtered"
-            ):
+          if config["limits"]["load"]["trace_type"] in ("load_existing", "load_filtered"):
             config["limits"]["load"]["path"] = old_exp_path
-        except Exception:
-          pass
       # -- solve centralized model
       if run_c or generate_only:
         c_folder = run_centralized(

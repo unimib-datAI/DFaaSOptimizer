@@ -229,3 +229,21 @@ def test_run_updates_existing_method_slot_when_resuming(tmp_path: Path, monkeypa
 
   out = json.loads((base_folder / "experiments.json").read_text())
   assert out["faas-macro"] == ["macro_new"]
+
+
+def test_find_previous_instance_unlisted_experiment_is_none():
+  paths = {"experiments_list": [[2, 1]], "centralized": ["c2"]}
+  assert run.find_previous_instance(paths, 4, 1) is None
+
+
+def test_find_previous_instance_takes_the_first_method_that_has_it():
+  # an empty centralized list (resumed campaign) falls back to the next method
+  paths = {"experiments_list": [[2, 1], [4, 1]], "centralized": [],
+           "faas-macro": ["m2", "m4"]}
+  assert run.find_previous_instance(paths, 4, 1) == "m4"
+
+
+def test_find_previous_instance_listed_without_a_folder_is_an_error():
+  paths = {"experiments_list": [[2, 1]], "centralized": []}
+  with pytest.raises(ValueError, match=r"\[2, 1\]"):
+    run.find_previous_instance(paths, 2, 1)

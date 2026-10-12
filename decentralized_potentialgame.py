@@ -20,6 +20,7 @@ from run_faasmadea import (
   neigh_dict_to_matrix,
   start_additional_replicas,
 )
+from utils.common import checkpoint_due, run_steps
 from utils.centralized import check_feasibility, encode_solution
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
@@ -198,7 +199,8 @@ def compute_rho(r: np.array, sp_data: dict) -> np.array:
     )
     for j in range(Nn)
   ], dtype=float)
-  assert (rho > -1e-6).all(), f"memory budget violated: rho={rho}"
+  if not ((rho > -1e-6).all()):
+    raise RuntimeError(f"memory budget violated: rho={rho}")
   return np.maximum(rho, 0.0)
 
 
@@ -426,15 +428,13 @@ def _run(
   neighborhood = neigh_dict_to_matrix(
     base_instance_data[None]["neighborhood"], Nn
   )
-  ub = (
-    max_run_time + run_time_step
-  ) if max_run_time == min_run_time else max_run_time
+  steps = run_steps(config)
   sp_complete_solution = init_complete_solution()
   spc_complete_solution = init_complete_solution()
   obj_dict = {"phi_final": []}
   tc_dict = {"pg": []}
   runtime_list = []
-  for t in range(min_run_time, ub, run_time_step):
+  for t in steps:
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
     loadt = get_current_load(input_requests_traces, agents, t)
@@ -506,9 +506,8 @@ def _run(
       phi = compute_centralized_objective(
         sp_data, x, y, compute_z(x, y, sp_data)
       )
-      assert phi >= phi_prev - 1e-9, (
-        f"potential decreased: {phi_prev} -> {phi}"
-      )
+      if not (phi >= phi_prev - 1e-9):
+        raise RuntimeError(f"potential decreased: {phi_prev} -> {phi}")
       phi_prev = phi
       stop_searching, why_stop_searching = check_pg_stopping(
         it, max_iterations, n_accepted,
@@ -524,7 +523,8 @@ def _run(
       csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
       csol["sp"]["r"], csol["sp"]["U"], sp_data
     )
-    assert feas[0], feas[1]
+    if not (feas[0]):
+      raise RuntimeError(feas[1])
     sp_complete_solution, _, objf = decode_solutions(
       sp_data, csol, sp_complete_solution, None
     )
@@ -535,7 +535,7 @@ def _run(
     tc_dict["pg"].append(
       f"{why_stop_searching} (it: {it}; obj. deviation: {None}; best it: {it}; total runtime: {total_runtime})"
     )
-    if t % checkpoint_interval == 0 or t == max_steps - 1:
+    if checkpoint_due(t, steps, checkpoint_interval):
       save_checkpoint(
         sp_complete_solution, os.path.join(solution_folder, "LSP"), t
       )

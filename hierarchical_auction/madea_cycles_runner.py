@@ -45,6 +45,7 @@ from run_faasmadea import (
   compute_residual_capacity,
   neigh_dict_to_matrix,
 )
+from utils.common import checkpoint_due, run_steps
 from utils.common import load_configuration
 from utils import step_time
 
@@ -119,14 +120,14 @@ def _run(
   hierarchy_time_limit = time_limit - pg_reserve
   neighborhood = neigh_dict_to_matrix(base_data[None]["neighborhood"], Nn)
   latency = adjacency_matrix(graph, weight="network_latency").toarray()
-  ub = max_run_time + run_time_step if max_run_time == min_run_time else max_run_time
+  steps = run_steps(config)
 
   complete_solution = init_complete_solution()
   objectives = []
   termination_conditions = []
   runtime_rows = []
 
-  for t in range(min_run_time, ub, run_time_step):
+  for t in steps:
     with step_time.untimed():
       if verbose > 0:
         print(f"t = {t}", file=log_stream, flush=True)
@@ -287,7 +288,7 @@ def _run(
       f"best centralized it: {state.best_centralized_it}; "
       f"total runtime: {state.total_runtime})"
     )
-    if t % checkpoint_interval == 0 or t == max_steps - 1:
+    if checkpoint_due(t, steps, checkpoint_interval):
       save_checkpoint(
         complete_solution, os.path.join(solution_folder, "LSPc"), t,
       )

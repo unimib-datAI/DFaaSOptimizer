@@ -53,7 +53,6 @@ class IterativeHierarchicalAuctionEngine(HierarchicalAuctionEngine):
         if not result.accepted_allocations:
           break  # This level is complete; the outer loop may advance.
 
-    assert token_manager.check_global_feasibility(), (
-      "Invariant 3 violated: committed tokens exceed initial tokens for some (k,f)"
-    )
+    if not (token_manager.check_global_feasibility()):
+      raise RuntimeError("Invariant 3 violated: committed tokens exceed initial tokens for some (k,f)")
     return LevelResult(current_y, current_omega, all_accepted)

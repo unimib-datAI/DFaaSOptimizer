@@ -8,6 +8,7 @@ from run_centralized_model import (
   save_solution,
   save_checkpoint
 )
+from utils.common import checkpoint_due, run_steps
 from utils.centralized import (
   check_feasibility, 
   validate_centralized_solution, 
@@ -444,7 +445,8 @@ def decode_solutions(
     sp_x, sp_y, sp_z, sp_r, sp_xi, sp_rho, sp_U, sp_complete_solution
   )
   feas = check_feasibility(sp_x,sp_y.sum(axis=1),sp_z,sp_r,sp_U,sp_data)
-  assert feas[0],feas[1]
+  if not (feas[0]):
+    raise RuntimeError(feas[1])
   # -- RMP
   if "rmp" in solution and rmp_complete_solution is not None:
     rmp_x = solution["rmp"]["x"]
@@ -810,10 +812,8 @@ def run(
     "LRMP": {it: [] for it in range(max_iterations)}
   }
   runtime_rows: list[dict] = []
-  ub = (
-    max_run_time + run_time_step
-  ) if max_run_time == min_run_time else max_run_time
-  for t in range(min_run_time, ub, run_time_step):
+  steps = run_steps(config)
+  for t in steps:
     with step_time.untimed():
       if verbose > 0:
         print(f"t = {t}", file = log_stream, flush = True)
@@ -1161,7 +1161,7 @@ def run(
           f"total runtime: {total_runtime})"
         )
         # save checkpoint
-        if t % checkpoint_interval == 0 or t == max_steps - 1:
+        if checkpoint_due(t, steps, checkpoint_interval):
           save_checkpoint(
             sp_complete_solution, os.path.join(solution_folder, "LSP"), t
           )

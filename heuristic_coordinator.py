@@ -192,7 +192,8 @@ class GreedyCoordinator(HeuristicCoordinator):
     e = datetime.now()
     # check feasibility
     feasible, message = self._check_feasibility(instance, y, z, r)
-    assert feasible, message
+    if not (feasible):
+      raise RuntimeError(message)
     # build solution dictionary
     solution = {
       "y": y.flatten(),

@@ -42,6 +42,7 @@ from run_faasmadea import (
   compute_residual_capacity,
   neigh_dict_to_matrix,
 )
+from utils.common import checkpoint_due, run_steps
 from utils.centralized import check_feasibility
 from utils.faasmacro import compute_centralized_objective
 from models.sp import LSP, LSPr
@@ -146,12 +147,12 @@ def run(
       pg_reserve = min(requested, time_limit / 2)
   coordination_limit = time_limit - pg_reserve
 
-  ub = (max_run_time + run_time_step) if max_run_time == min_run_time else max_run_time
+  steps = run_steps(config)
   spc_complete_solution = init_complete_solution()
   obj_dict, tc_dict = {"LSPr_final": []}, {"LSPr": []}
   stats_rows, runtime_rows, refinement_history = [], [], []
 
-  for t in range(min_run_time, ub, run_time_step):
+  for t in steps:
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
     clock = step_time.start_step()
@@ -182,7 +183,8 @@ def run(
           csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
           csol["sp"]["r"], csol["sp"]["U"], sp_data
         )
-        assert feas[0], feas[1]
+        if not (feas[0]):
+          raise RuntimeError(feas[1])
         return csol, compute_centralized_objective(
           sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
         )
@@ -266,7 +268,7 @@ def run(
       if verbose > 0:
         print(f"t = {t}: {why}, rounds {it + 1}, welfare {final_objective}",
               file=log_stream, flush=True)
-    if t % checkpoint_interval == 0 or t == max_steps - 1:
+    if checkpoint_due(t, steps, checkpoint_interval):
       save_checkpoint(spc_complete_solution, os.path.join(solution_folder, "LSPc"), t)
 
   spc_solution, spc_offloaded, spc_detailed = join_complete_solution(spc_complete_solution)

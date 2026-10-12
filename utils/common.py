@@ -175,3 +175,17 @@ def restore_types(serialized_dict: dict):
     else:
       _dict[new_key] = value
   return _dict
+
+
+def run_steps(config: dict) -> range:
+  """Simulated steps: min_run_time to max_run_time (excluded) by run_time_step; equal bounds run that step."""
+  min_run_time = config.get("min_run_time", 0)
+  max_run_time = config.get("max_run_time", config["max_steps"])
+  run_time_step = config.get("run_time_step", 1)
+  stop = max_run_time + run_time_step if max_run_time == min_run_time else max_run_time
+  return range(min_run_time, stop, run_time_step)
+
+
+def checkpoint_due(t: int, steps: range, interval: int) -> bool:
+  """Every `interval` steps and at the last simulated step."""
+  return t % interval == 0 or t == steps[-1]

@@ -25,6 +25,7 @@ from run_faasmadea import (
   relative_objective_gap,
   start_additional_replicas
 )
+from utils.common import checkpoint_due, run_steps
 from utils.common import load_configuration
 from models.sp import LSP, LSPr_x
 
@@ -124,16 +125,14 @@ def run(
   )
   latency = adjacency_matrix(graph, weight = "network_latency")
   # loop over time
-  ub = (
-    max_run_time + run_time_step
-  ) if max_run_time == min_run_time else max_run_time
+  steps = run_steps(config)
   sp_complete_solution = init_complete_solution()
   spc_complete_solution = init_complete_solution()
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
   refinement_history = []
   runtime_rows = []
-  for t in range(min_run_time, ub, run_time_step):
+  for t in steps:
     with step_time.untimed():
       if verbose > 0:
         print(f"t = {t}", file = log_stream, flush = True)
@@ -413,7 +412,7 @@ def run(
             f"total runtime: {total_runtime})"
           )
           # save checkpoint
-          if t % checkpoint_interval == 0 or t == max_steps - 1:
+          if checkpoint_due(t, steps, checkpoint_interval):
             save_checkpoint(
               sp_complete_solution, os.path.join(solution_folder, "LSP"), t
             )
