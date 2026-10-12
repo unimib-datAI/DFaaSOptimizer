@@ -186,3 +186,46 @@ def test_plasma_gap_vs_milp_on_small_graph(tmp_path):
     late_p, late_o = plasma_obj.iloc[-2:].mean(), np.mean(oracle[-2:])
     gaps.append((late_o - late_p) / abs(late_o))
   assert np.mean(gaps) <= 0.6
+
+
+@pytest.mark.parametrize("welfare", [False, True])
+def test_plasma_frame_preserves_engine_across_steps(tmp_path, monkeypatch, welfare):
+  from plasma.engine import PlasmaEngine
+  from plasma.runner import run as run_plasma_runner
+  from utils.common import load_requests_traces
+  config = _config(tmp_path, max_steps=2)
+  if welfare:
+    config["solver_options"]["plasma_welfare"] = dict(
+      W=2.0, rounds_per_step=5, epsilon=1e-6, hb_latency_rounds=1, hb_loss=0., staleness_rounds=3)
+  else:
+    config["solver_options"]["plasma"]["W"] = 2.0
+  from plasma.welfare import WelfareEngine
+  engines, calls = [], []
+  init = PlasmaEngine.__init__
+
+  def counting_init(self, *args, **kwargs):
+    engines.append(self)
+    init(self, *args, **kwargs)
+
+  def recording(run_rounds):
+    def recording_run_rounds(self, rounds, arrivals):
+      calls.append((id(self), self.msg_count, arrivals.copy()))
+      return run_rounds(self, rounds, arrivals)
+    return recording_run_rounds
+
+  monkeypatch.setattr(PlasmaEngine, "__init__", counting_init)
+  engine_class = WelfareEngine if welfare else PlasmaEngine
+  monkeypatch.setattr(engine_class, "run_rounds", recording(engine_class.run_rounds))
+  folder = Path(run_plasma_runner(config, parallelism=0, welfare=welfare))
+  assert len(engines) == 1 and len(calls) == 2                     # one engine for the whole run
+  assert calls[0][0] == calls[1][0] and calls[1][1] > calls[0][1] > -1   # its state continues
+  traces, *_ = load_requests_traces(str(folder))
+  for t, (_, _, arrivals) in enumerate(calls):
+    expected = np.array([[int(round(traces[f][n][t] * 2.0)) for f in sorted(traces)]
+                         for n in sorted(traces[0])])
+    np.testing.assert_array_equal(arrivals, expected)              # W scales the arrivals
+  assert not np.array_equal(calls[0][2], calls[1][2])                # two different loads
+  messages = pd.read_csv(folder / "plasma_messages.csv")
+  assert messages["t"].tolist() == [0, 1] and (messages["msgs_per_node_s"] > 0).all()
+  if welfare:
+    assert pd.read_csv(folder / "plasma_welfare.csv")["time"].tolist() == [0, 1]

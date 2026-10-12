@@ -59,6 +59,8 @@ CASES = [
   ("hierarchical-madea-pg", "hierarchical_auction.madea_cycles_runner", "HierarchicalMADeALevelCyclesPG", "solve_subproblem"),
   ("hierarchical-madea-level-cycles-pg", "hierarchical_auction.madea_cycles_runner", "HierarchicalMADeALevelCyclesPG", "solve_subproblem"),
   ("hierarchical-madea-legacy", "hierarchical_auction.madea_runner", "HierarchicalMADeA", "solve_subproblem"),
+  ("PLASMA", "plasma.runner", "Plasma", "compute_centralized_objective"),
+  ("PLASMA-Welfare", "plasma.runner", "Plasma-Welfare", "compute_centralized_objective"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
