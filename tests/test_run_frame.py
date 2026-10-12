@@ -228,3 +228,23 @@ def test_plot_size_limit(tmp_path, limit, drawn):
   outputs = {"LSP": run_frame.Output(plot_filename="sp.png", plot_max_size=limit), "LSPc": run_frame.Output()}
   folder = _run(_config(tmp_path), FakeStep(), outputs, disable_plotting=False)   # Nn = 2, Nf = 1
   assert (folder / "sp.png").exists() == drawn
+
+
+def test_centralized_results_keep_their_serialization(tmp_path):
+  class Centralized(FakeStep):
+    def __call__(self, ctx, t, data):
+      result = super().__call__(ctx, t, data)
+      result.solutions = {"Model": result.solutions["LSP"]}
+      result.termination = "optimal"
+      result.runtime = dict(algorithm_s=0.25, workers=1)       # the solver call
+      return result
+
+  outputs = {"Model": run_frame.Output(checkpoint=True, plot_filename="Model.png", check=False,
+                                       periodic_plot=True)}
+  folder = _run(_config(tmp_path, steps=4, plot_interval=1), Centralized(), outputs,
+                disable_plotting=False, method="Model")
+  assert (folder / "termination_condition.csv").read_text() == "Model\n" + "optimal\n" * 4
+  runtime = pd.read_csv(folder / "runtime.csv")
+  assert runtime["algorithm_s"].tolist() == [0.25] * 4 and runtime["workers"].tolist() == [1] * 4
+  assert (folder / "Model.png").exists()
+  assert sorted(p.name for p in (folder / "Model").iterdir() if p.name.endswith("_plot")) == ["1_plot", "2_plot"]

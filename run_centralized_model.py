@@ -1,20 +1,21 @@
 from fwd_analysis import main as run_fwd_analysis
-from utils.common import checkpoint_due, run_steps
 from utils.common import (
   delete_tuples, 
   float_to_int, 
   load_configuration,
   NpEncoder
 )
-from utils import step_time
-from utils.centralized import get_current_load, decode_solution
-from generators.generate_data import generate_data, update_data
+from functools import partial
+
+from utils import run_frame, run_log, step_time
+from utils.centralized import get_current_load  # noqa: F401 (re-exported)
+from generators.generate_data import generate_data, update_data  # noqa: F401 (update_data re-exported)
 from generators.generate_load import generate_load_traces
 from remote_experiments.instances import (
   PAYLOAD_FILES,
   load_materialized_instance,
 )
-from postprocessing import plot_history
+from postprocessing import plot_history  # noqa: F401 (re-exported)
 from models.model import (
   BaseLoadManagementModel, 
   LoadManagementModel, 
@@ -26,20 +27,20 @@ from models.selfish import SelfishLoadManagementModel
 from networkx import draw_networkx, kamada_kawai_layout, Graph, is_planar
 from matplotlib import colors as mcolors
 import matplotlib.pyplot as plt
-from datetime import datetime
 import pyomo.environ as pyo
-from pprint import pprint
 from typing import Tuple
 import pandas as pd
 import numpy as np
 import argparse
 import json
 import shutil
-import sys
 import os
 
 
 VAR_TYPE = int if PYO_VAR_TYPE == pyo.NonNegativeIntegers else float
+
+
+log = run_log.logger(__name__)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -378,6 +379,13 @@ def save_solution(
   )
 
 
+def _model(config: dict):
+  variant = config.get("model_variant", "default")
+  if variant == "tight":
+    return TightLoadManagementModel()
+  return SelfishLoadManagementModel() if variant == "selfish" else LoadManagementModel()
+
+
 def run(
     config: dict, 
     log_on_file: bool = False, 
@@ -385,152 +393,36 @@ def run(
     generate_only: bool = False,
     filter_traces: bool = False
   ):
-  base_solution_folder = config["base_solution_folder"]
-  seed = config["seed"]
-  limits = config["limits"]
-  trace_type = config["limits"]["load"].get("trace_type", "fixed_sum")
-  max_steps = config["max_steps"]
-  min_run_time = config.get("min_run_time", 0)
-  max_run_time = config.get("max_run_time", max_steps)
-  run_time_step = config.get("run_time_step", 1)
-  checkpoint_interval = config["checkpoint_interval"]
-  plot_interval = config.get("plot_interval", max_steps)
+  model = _model(config)
+  if generate_only and not filter_traces:  # instance files only
+    with run_frame.open_context(config, 0, log_on_file=log_on_file) as ctx:
+      return ctx.folder
   solver_name = config["solver_name"]
-  solver_options = config.get("solver_options", {}).get("general", {})
-  verbose = config.get("verbose", 0)
-  # generate solution folder
-  now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
-  solution_folder = f"{base_solution_folder}/{now}"
-  os.makedirs(solution_folder, exist_ok = True)
-  with open(os.path.join(solution_folder, "config.json"), "w") as ostream:
-    ostream.write(json.dumps(config, indent = 2))
-  # initialize log stream (if required)
-  log_stream = sys.stdout
-  if log_on_file:
-    log_stream = open(os.path.join(solution_folder, "out.log"), "w")
-  # initialize models
-  model_variant = config.get("model_variant", "default")
-  models = [
-    TightLoadManagementModel() if model_variant == "tight"
-    else (
-      SelfishLoadManagementModel() if model_variant == "selfish" else 
-      LoadManagementModel()
-    )
-  ]
-  # generate base instance data and load traces
-  base_instance_data, input_requests_traces, agents, _ = init_problem(
-    limits, trace_type, max_steps, seed, solution_folder
+  options = config.get("solver_options", {}).get("general", {})
+  output = run_frame.Output(checkpoint=True, plot_filename=f"{model.name}.png", check=False,
+                            periodic_plot=True)
+  folder = run_frame.run(
+    config, 0, log_on_file=log_on_file, disable_plotting=disable_plotting,
+    method=model.name, outputs={model.name: output},
+    solve_step=partial(_solve_step, model=model, solver_name=solver_name, options=options),
   )
-  Nn = base_instance_data[None]["Nn"][None]
-  Nf = base_instance_data[None]["Nf"][None]
-  # run models
-  if not generate_only or filter_traces:
-    obj_dict = {}
-    tc_dict = {}
-    runtime_rows = []
-    for M in models:
-      if verbose > 0:
-        print(f"### solving model {M.name}", file = log_stream, flush = True)
-      complete_solution = init_complete_solution()
-      obj_values = []
-      termination_conditions = []
-      r = None
-      steps = run_steps(config)
-      for t in steps:
-        if verbose > 0:
-          print(f"  t = {t}", file = log_stream, flush = True)
-        # get current load
-        incoming_load = get_current_load(input_requests_traces, agents, t)
-        # update data
-        data = update_data(base_instance_data, {"incoming_load": incoming_load})
-        # solve
-        started = step_time.now()
-        x, y, z, r, xi, omega, rho, U, obj, runtime, tc = solve_instance(
-          M, data, solver_name, solver_options
-        )
-        runtime_rows.append(dict(
-          step = t, algorithm_s = runtime, wall_s = step_time.now() - started,
-          parallel_phases = 0, workers = solver_threads(solver_name, solver_options)
-        ))
-        complete_solution = decode_solution(
-          x, y, z, r, xi, rho, U, complete_solution
-        )
-        obj_values.append(obj)
-        termination_conditions.append(tc)
-        # save checkpoint
-        if checkpoint_due(t, steps, checkpoint_interval):
-          save_checkpoint(
-            complete_solution, os.path.join(solution_folder, M.name), t
-          )
-        # plot (if needed)
-        if 0 < t < steps.stop - 1 and t % plot_interval == 0:
-          solution, offloaded, detailed_fwd_solution = join_complete_solution(
-            complete_solution
-          )
-          if not disable_plotting and Nf <= 10 and Nn <= 10:
-            plot_folder = os.path.join(solution_folder, M.name, f"{t}_plot")
-            os.makedirs(plot_folder)
-            plot_history(
-              input_requests_traces, 
-              min_run_time, 
-              t, 
-              run_time_step, 
-              solution, 
-              complete_solution["utilization"], 
-              complete_solution["replicas"], 
-              offloaded,
-              obj_values,
-              os.path.join(plot_folder, f"{M.name}.png")
-            )
-      obj_dict[M.name] = obj_values
-      tc_dict[M.name] = termination_conditions
-      # join
-      solution, offloaded, detailed_fwd_solution = join_complete_solution(
-        complete_solution
-      )
-      # plot and save solution
-      if not disable_plotting and Nf <= 10 and Nn <= 10:
-        plot_history(
-          input_requests_traces, 
-          min_run_time, 
-          max_run_time, 
-          run_time_step, 
-          solution, 
-          complete_solution["utilization"], 
-          complete_solution["replicas"], 
-          offloaded,
-          obj_values,
-          os.path.join(solution_folder, f"{M.name}.png")
-        )
-      save_solution(
-        solution,
-        offloaded,
-        complete_solution,
-        detailed_fwd_solution,
-        M.name,
-        solution_folder
-      )
-    # save objective function values and models runtime
-    pd.DataFrame(obj_dict).to_csv(
-      os.path.join(solution_folder, "obj.csv"), index = False
-    )
-    pd.DataFrame(tc_dict).to_csv(
-      os.path.join(solution_folder, "termination_condition.csv"), index = False
-    )
-    step_time.write_runtime(solution_folder, runtime_rows)
-    if verbose > 0:
-      print(
-        f"All solutions saved in: {solution_folder}", 
-        file = log_stream, 
-        flush = True
-      )
-    # close log stream if needed
-    if log_on_file:
-      log_stream.close()
-    # filter traces based on solution (if required)
-    if filter_traces:
-      run_fwd_analysis(solution_folder, M.name)
-  return solution_folder
+  if filter_traces:  # filter traces based on the solution
+    run_fwd_analysis(folder, model.name)
+  return folder
+
+
+def _solve_step(ctx, t: int, data: dict, *, model, solver_name: str, options: dict) -> run_frame.StepResult:
+  if t == ctx.steps[0]:
+    with step_time.untimed():
+      log.info("### solving model %s", model.name)
+  x, y, z, r, xi, omega, rho, U, obj, runtime, tc = solve_instance(
+    model, data, solver_name, options
+  )
+  return run_frame.StepResult(
+    solutions={model.name: dict(x=x, y=y, z=z, r=r, xi=xi, rho=rho, U=U)},
+    objective=obj, termination=tc,
+    runtime=dict(algorithm_s=runtime, workers=solver_threads(solver_name, options)),
+  )
 
 
 if __name__ == "__main__":

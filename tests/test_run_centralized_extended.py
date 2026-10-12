@@ -339,3 +339,100 @@ def test_centralized_runtime_rows_use_the_solver_call(tmp_path, monkeypatch):
   assert runtime["parallel_phases"].tolist() == [0, 0] and runtime["workers"].tolist() == [1, 1]
   assert list(pd.read_csv(os.path.join(folder, "obj.csv")).columns) == ["LoadManagementModel"]
   assert list(pd.read_csv(os.path.join(folder, "termination_condition.csv")).columns) == ["LoadManagementModel"]
+
+
+def _central_config(tmp_path, steps=2, **extra):
+  from test_review_distributed_regressions import _materialized_config, _two_node_data
+  config = _materialized_config(tmp_path, _two_node_data(), steps=steps)
+  config.update(extra)
+  return config
+
+
+def _need_glpk():
+  import pyomo.environ as pyo
+  if not pyo.SolverFactory("glpk").available(exception_flag=False):
+    pytest.skip("GLPK required")
+
+
+@pytest.mark.parametrize("variant, name", [
+  ("default", "LoadManagementModel"), ("tight", "TightLoadManagementModel"),
+  ("selfish", "SelfishLoadManagementModel"),
+])
+def test_centralized_variants_keep_their_output_formats(tmp_path, variant, name):
+  _need_glpk()
+  folder = run_centralized_model.run(_central_config(tmp_path, model_variant=variant), disable_plotting=True)
+  assert list(pd.read_csv(os.path.join(folder, "obj.csv")).columns) == [name]
+  termination = open(os.path.join(folder, "termination_condition.csv")).read().splitlines()
+  assert termination[0] == name and len(termination) == 3        # model header, no index
+  assert os.path.exists(os.path.join(folder, f"{name}_solution.csv"))
+  assert sorted(os.listdir(os.path.join(folder, name))) == ["0", "1"]
+
+
+def test_generate_only_solves_nothing(tmp_path, monkeypatch):
+  def unexpected(*args, **kwargs):
+    raise AssertionError("generate_only must not solve")
+  monkeypatch.setattr(run_centralized_model, "solve_instance", unexpected)
+  folder = run_centralized_model.run(_central_config(tmp_path), log_on_file=True, generate_only=True)
+  files = set(os.listdir(folder))
+  assert {"config.json", "out.log", "base_instance_data.json"} <= files and "obj.csv" not in files
+
+
+def test_generate_only_with_filter_traces_still_solves(tmp_path, monkeypatch):
+  _need_glpk()
+  calls = []
+  monkeypatch.setattr(run_centralized_model, "run_fwd_analysis", lambda folder, model: calls.append(model))
+  folder = run_centralized_model.run(_central_config(tmp_path), generate_only=True, filter_traces=True,
+                                     disable_plotting=True)
+  assert calls == ["LoadManagementModel"] and os.path.exists(os.path.join(folder, "obj.csv"))
+
+
+def test_centralized_failure_cleans_log_and_clock(tmp_path, monkeypatch):
+  import logging
+  from utils import step_time
+  root = logging.getLogger("dfaas")
+  handlers = list(root.handlers)
+
+  def failing(*args, **kwargs):
+    raise RuntimeError("solver failure")
+
+  monkeypatch.setattr(run_centralized_model, "solve_instance", failing)
+  with pytest.raises(RuntimeError, match="solver failure"):
+    run_centralized_model.run(_central_config(tmp_path), log_on_file=True)
+  assert not step_time.active() and root.handlers == handlers
+
+
+def test_centralized_periodic_and_final_plots(tmp_path):
+  _need_glpk()
+  folder = run_centralized_model.run(_central_config(tmp_path, steps=4, plot_interval=1),
+                                     disable_plotting=False)
+  name = "LoadManagementModel"
+  assert os.path.exists(os.path.join(folder, f"{name}.png"))
+  for t in (1, 2):                                                 # 0 < t < last step
+    assert os.path.exists(os.path.join(folder, name, f"{t}_plot", f"{name}.png"))
+  assert not os.path.exists(os.path.join(folder, name, "0_plot"))
+  assert not os.path.exists(os.path.join(folder, name, "3_plot"))
+
+
+def test_centralized_without_a_solution_still_records_the_step(tmp_path, monkeypatch):
+  from run_centralized_model import init_empty_solution
+
+  def no_solution(M, data, solver_name, options):
+    x, y, z, r, xi, omega, rho, obj, U = init_empty_solution(2, 1)
+    return x, y, z, r, xi, omega, rho, U, obj, 0.5, "infeasible"
+
+  monkeypatch.setattr(run_centralized_model, "solve_instance", no_solution)
+  folder = run_centralized_model.run(_central_config(tmp_path), disable_plotting=True)
+  assert open(os.path.join(folder, "termination_condition.csv")).read().splitlines()[1:] == ["infeasible"] * 2
+  assert pd.read_csv(os.path.join(folder, "runtime.csv"))["algorithm_s"].tolist() == [0.5, 0.5]
+
+
+def test_centralized_runner_uses_the_frame_and_the_logger():
+  import ast
+  from pathlib import Path
+  source = Path(run_centralized_model.__file__).read_text()
+  tree = ast.parse(source)
+  prints = [n.lineno for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "print"]
+  assert not prints and "log_stream" not in source
+  run = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "run")
+  assert run.end_lineno - run.lineno + 1 <= 80 and "run_frame." in ast.unparse(run)

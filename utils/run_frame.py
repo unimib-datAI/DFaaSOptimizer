@@ -35,6 +35,7 @@ class Output:
   plot_filename: str | None = None  # final plot of this output (sp.png), if any
   check: bool = True                # centralized feasibility check when decoding (not RMP parts)
   plot_max_size: int | None = 10    # plot only when Nn and Nf are at most this (None: any size)
+  periodic_plot: bool = False       # also <name>/<t>_plot/<name>.png every plot_interval steps
 
 
 LSP_OUTPUTS = {  # the local (LSP) and centralized-incumbent (LSPc) solutions of most runners
@@ -49,6 +50,7 @@ class StepResult:
   objective: float          # the obj.csv value of the step
   termination: str
   runtime: dict | None = None  # centralized only: algorithm_s/workers of the solver call
+  # (a centralized result: termination_condition.csv has the model header and no index)
   data: dict | None = None     # the data the solutions refer to (default: the step data)
 
 
@@ -142,7 +144,7 @@ def run(config: dict, parallelism: int, *, log_on_file: bool, disable_plotting: 
   from utils.centralized import check_feasibility, decode_solution
   with open_context(config, parallelism, log_on_file=log_on_file) as ctx:
     ctx.complete = {name: init_complete_solution() for name in outputs}
-    terminations, rows = [], []
+    terminations, rows, centralized = [], [], False
     for t in ctx.steps:
       log.info("t = %d", t)
       data = update_data(ctx.base_data, {"incoming_load": get_current_load(ctx.traces, ctx.agents, t)})
@@ -154,7 +156,9 @@ def run(config: dict, parallelism: int, *, log_on_file: bool, disable_plotting: 
         raise
       row = step_time.end_step(clock)
       row.update(result.runtime or {})
+      centralized = centralized or result.runtime is not None
       rows.append(dict(step=t, **row))
+      ctx.objectives.append(result.objective)
       for name, s in result.solutions.items():  # outside the clock: decoding and checks
         ctx.complete[name] = decode_solution(s["x"], s["y"], s["z"], s["r"], s["xi"], s["rho"], s["U"],
                                              ctx.complete[name])
@@ -165,21 +169,43 @@ def run(config: dict, parallelism: int, *, log_on_file: bool, disable_plotting: 
             raise RuntimeError(why)
         if outputs[name].checkpoint and checkpoint_due(t, ctx.steps, ctx.checkpoint_interval):
           save_checkpoint(ctx.complete[name], os.path.join(ctx.folder, name), t)
-      ctx.objectives.append(result.objective)
+        if outputs[name].periodic_plot:
+          _periodic_plot(ctx, name, outputs[name], t, disable_plotting)
       terminations.append(result.termination)
       log.info("    TOTAL RUNTIME [s] = %s (wallclock: %s)", row["algorithm_s"], row["wall_s"])
-    _write_outputs(ctx, outputs, method, terminations, rows, disable_plotting)
+    _write_outputs(ctx, outputs, method, terminations, rows, disable_plotting, centralized)
     log.info("All solutions saved in: %s", ctx.folder)
     return ctx.folder
 
 
-def _write_outputs(ctx, outputs, method, terminations, rows, disable_plotting) -> None:
+def _plottable(ctx, output: Output, disable_plotting: bool) -> bool:
+  small = output.plot_max_size is None or max(ctx.Nf, ctx.Nn) <= output.plot_max_size
+  return not disable_plotting and small
+
+
+def _periodic_plot(ctx, name: str, output: Output, t: int, disable_plotting: bool) -> None:
+  """Intermediate history of a centralized model, outside the clock."""
+  from run_centralized_model import join_complete_solution, plot_history
+  config = ctx.config
+  interval = config.get("plot_interval", config["max_steps"])
+  if not (0 < t < ctx.steps.stop - 1 and t % interval == 0) or not _plottable(ctx, output, disable_plotting):
+    return
+  solution, offloaded, _ = join_complete_solution(ctx.complete[name])
+  folder = os.path.join(ctx.folder, name, f"{t}_plot")
+  os.makedirs(folder)
+  plot_history(
+    ctx.traces, config.get("min_run_time", 0), t, config.get("run_time_step", 1), solution,
+    ctx.complete[name]["utilization"], ctx.complete[name]["replicas"], offloaded, ctx.objectives,
+    os.path.join(folder, f"{name}.png"),
+  )
+
+
+def _write_outputs(ctx, outputs, method, terminations, rows, disable_plotting, centralized) -> None:
   from run_centralized_model import join_complete_solution, plot_history, save_solution
   config = ctx.config
   for name, output in outputs.items():
     solution, offloaded, detailed = join_complete_solution(ctx.complete[name])
-    small = output.plot_max_size is None or max(ctx.Nf, ctx.Nn) <= output.plot_max_size
-    if output.plot_filename and not disable_plotting and small:
+    if output.plot_filename and _plottable(ctx, output, disable_plotting):
       plot_history(
         ctx.traces, config.get("min_run_time", 0), config.get("max_run_time", config["max_steps"]),
         config.get("run_time_step", 1), solution, ctx.complete[name]["utilization"],
@@ -188,7 +214,10 @@ def _write_outputs(ctx, outputs, method, terminations, rows, disable_plotting) -
       )
     save_solution(solution, offloaded, ctx.complete[name], detailed, name, ctx.folder)
   pd.DataFrame(ctx.objectives, columns=[method]).to_csv(os.path.join(ctx.folder, "obj.csv"), index=False)
-  pd.DataFrame(terminations).to_csv(os.path.join(ctx.folder, "termination_condition.csv"))
+  if centralized:  # the model's own column, as the centralized results always had
+    pd.DataFrame({method: terminations}).to_csv(os.path.join(ctx.folder, "termination_condition.csv"), index=False)
+  else:
+    pd.DataFrame(terminations).to_csv(os.path.join(ctx.folder, "termination_condition.csv"))
   step_time.write_runtime(ctx.folder, rows)
 
 
