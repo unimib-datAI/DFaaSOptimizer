@@ -45,3 +45,23 @@ def test_read_run_runtime_uses_algorithm_time_of_the_new_format(tmp_path):
   (run / "runtime.csv").write_text(
     "step,algorithm_s,wall_s,parallel_phases,workers\n0,1.0,9.0,3,4\n1,3.0,9.0,3,4\n")
   assert read_run_runtime(run) == pytest.approx(2.0)
+
+
+@pytest.mark.parametrize("text, expected", [
+  ("step,algorithm_s,wall_s,parallel_phases,workers\n0,1.0,9.0,0,1\n1,3.0,9.0,0,1\n", 2.0),  # not step
+  ("tot\n1.0\n3.0\n", 2.0),
+  ("LoadManagementModel\n1.0\n3.0\n", 2.0),
+  ("TightLoadManagementModel\n1.0\n3.0\n", 2.0),
+  ("SelfishLoadManagementModel\n1.0\n3.0\n", 2.0),
+  ("", None),
+])
+def test_read_run_runtime_every_format(tmp_path, text, expected):
+  run = tmp_path / "run"
+  run.mkdir()
+  (run / "runtime.csv").write_text(text)
+  assert read_run_runtime(run) == (pytest.approx(expected) if expected is not None else None)
+
+
+def test_read_run_runtime_missing_file(tmp_path):
+  (tmp_path / "run").mkdir()
+  assert read_run_runtime(tmp_path / "run") is None

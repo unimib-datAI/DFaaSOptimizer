@@ -377,3 +377,28 @@ def test_custom_baseline_does_not_require_optional_rejections_csv(tmp_path):
   assert objective["FaaS-MACrO"].tolist() == [90, 90]
   assert runtime["LoadManagementModel"].tolist() == [2, 2]
   assert (tmp_path / "box-vs-FaaS-MACrO.png").is_file()
+
+
+def _five_column_runtime(folder, runtime):
+  pd.DataFrame({"step": [0, 1], "algorithm_s": [runtime, runtime], "wall_s": [9.0, 9.0],
+                "parallel_phases": [0, 0], "workers": [1, 1]}).to_csv(Path(folder) / "runtime.csv", index=False)
+  return folder
+
+
+@pytest.mark.parametrize("historical", [
+  "LoadManagementModel", "TightLoadManagementModel", "SelfishLoadManagementModel",
+])
+def test_mixed_runtime_formats_in_one_campaign(tmp_path, historical):
+  old_central = _write_run(tmp_path / "c1", "LoadManagementModel", historical, 2)
+  pd.DataFrame({historical: [2, 2]}).to_csv(Path(old_central) / "runtime.csv", index=False)
+  new_central = _five_column_runtime(_write_run(tmp_path / "c2", "LoadManagementModel",
+                                                "LoadManagementModel", 7), 2)
+  old_macro = _write_run(tmp_path / "m1", "LSP", "FaaS-MACrO", 1)      # historical 'tot'
+  new_macro = _five_column_runtime(_write_run(tmp_path / "m2", "LSP", "FaaS-MACrO", 7), 1)
+  run.results_postprocessing({
+    "experiments_list": [[2, 1], [2, 2]], "centralized": [old_central, new_central],
+    "faas-macro": [new_macro, old_macro],
+  }, str(tmp_path), "Nn", ["centralized", "faas-macro"], "faas-macro")
+  runtime = pd.read_csv(tmp_path / "postprocessing" / "runtime.csv")
+  assert runtime["LoadManagementModel"].tolist() == [2, 2, 2, 2]   # algorithm_s, never step
+  assert runtime["FaaS-MACrO"].tolist() == [1, 1, 1, 1]

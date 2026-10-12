@@ -80,12 +80,12 @@ CENTRALIZED_MODEL_KEYS = (
 
 
 def runtime_series(frame, method_name):
-  """Per-step runtime of one method: modelled algorithm time for harmonized
-  methods (utils/step_time.py), 'tot' for older files, the model column for
-  the centralized reference."""
-  if method_name == "LoadManagementModel":
-    return frame[method_name]
-  return frame["algorithm_s"] if "algorithm_s" in frame else frame["tot"]
+  """Per-step runtime of one method: modelled algorithm time of every runner
+  writing utils/step_time.COLUMNS (centralized included); historical files:
+  the centralized model column or 'tot'."""
+  if "algorithm_s" in frame:
+    return frame["algorithm_s"]
+  return frame[method_name] if method_name in frame else frame["tot"]
 
 def resolve_centralized_model_key(folder: str, default: str) -> str:
   for key in CENTRALIZED_MODEL_KEYS:

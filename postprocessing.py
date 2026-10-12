@@ -541,6 +541,30 @@ def process_results(
   return plot_folder
 
 
+def load_runtime(solution_folder: str) -> pd.DataFrame:
+  """Per-step runtime of one run: column "runtime" (algorithm_s of the five-column
+  files, else the historical single column), "method" (the obj.csv label) and,
+  when the termination file names it, "termination_condition" and "color"."""
+  runtime = pd.read_csv(os.path.join(solution_folder, "runtime.csv"))
+  colname = runtime.columns[0]
+  obj_path = os.path.join(solution_folder, "obj.csv")
+  label = pd.read_csv(obj_path, nrows = 0).columns[0] if os.path.exists(obj_path) else colname
+  values = runtime["algorithm_s"] if "algorithm_s" in runtime else runtime[colname]
+  runtime = pd.DataFrame({"runtime": values, "method": label})
+  # -- termination condition
+  tc_path = os.path.join(solution_folder, "termination_condition.csv")
+  if os.path.exists(tc_path):
+    tc = pd.read_csv(tc_path)
+    if label in tc:
+      runtime["color"] = [
+        mcolors.TABLEAU_COLORS["tab:green"] if c == "optimal" 
+          else mcolors.TABLEAU_COLORS["tab:red"] 
+            for c in tc[label]
+      ]
+      runtime["termination_condition"] = tc[label]
+  return runtime
+
+
 def runtime_obj_boxplot(
     df: pd.DataFrame, colname: str, plot_folder: str, title: str
   ):
@@ -607,26 +631,7 @@ if __name__ == "__main__":
       plot_folder = process_results(solution_folder, models, plot_all_history)
       # models runtime and termination condition
       if os.path.exists(os.path.join(solution_folder, "runtime.csv")):
-        runtime = pd.read_csv(
-          os.path.join(solution_folder, "runtime.csv")
-        )
-        colname = runtime.columns[0]
-        runtime.rename(columns = {colname: "runtime"}, inplace = True)
-        runtime["method"] = colname
-        # -- termination condition
-        if os.path.exists(
-            os.path.join(solution_folder, "termination_condition.csv")
-          ):
-          tc = pd.read_csv(
-            os.path.join(solution_folder, "termination_condition.csv")
-          )
-          if colname in tc:
-            runtime["color"] = [
-              mcolors.TABLEAU_COLORS["tab:green"] if c == "optimal" 
-                else mcolors.TABLEAU_COLORS["tab:red"] 
-                  for c in tc[colname]
-            ]
-            runtime["termination_condition"] = tc[colname]
+        runtime = load_runtime(solution_folder)
         # -- plot runtime
         runtime["time"] = runtime.index
         runtime.plot.scatter(

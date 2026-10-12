@@ -2,7 +2,9 @@ import json
 from pathlib import Path
 
 import numpy as np
+import matplotlib.colors as mcolors
 import pandas as pd
+import pytest
 
 
 def test_hierarchical_auction_public_imports():
@@ -451,3 +453,25 @@ def test_what_if_analyze_final_results_writes_deviation_outputs(tmp_path):
   assert (tmp_path / "best_solution_obj_dev.png").exists()
   out = pd.read_csv(tmp_path / "best_solution_obj.csv")
   assert "obj_dev" in out.columns
+
+
+@pytest.mark.parametrize("runtime_text", [
+  "step,algorithm_s,wall_s,parallel_phases,workers\n0,1.5,9.0,0,1\n1,2.5,9.0,0,1\n",
+  "LoadManagementModel\n1.5\n2.5\n",
+])
+def test_postprocessing_runtime_of_a_centralized_run(tmp_path, runtime_text):
+  (tmp_path / "runtime.csv").write_text(runtime_text)
+  (tmp_path / "obj.csv").write_text("LoadManagementModel\n100.0\n90.0\n")
+  (tmp_path / "termination_condition.csv").write_text("LoadManagementModel\noptimal\nmaxTimeLimit\n")
+  runtime = postprocessing.load_runtime(str(tmp_path))
+  assert runtime["runtime"].tolist() == [1.5, 2.5]
+  assert runtime["method"].tolist() == ["LoadManagementModel"] * 2      # not "step"
+  assert runtime["termination_condition"].tolist() == ["optimal", "maxTimeLimit"]
+  assert runtime["color"].tolist() == [mcolors.TABLEAU_COLORS["tab:green"], mcolors.TABLEAU_COLORS["tab:red"]]
+
+
+def test_postprocessing_runtime_of_a_historical_decentralized_run(tmp_path):
+  (tmp_path / "runtime.csv").write_text("tot\n0.5\n")
+  (tmp_path / "obj.csv").write_text("FaaS-MAPG\n100.0\n")
+  runtime = postprocessing.load_runtime(str(tmp_path))
+  assert runtime["runtime"].tolist() == [0.5] and runtime["method"].tolist() == ["FaaS-MAPG"]
