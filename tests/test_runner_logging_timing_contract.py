@@ -29,6 +29,9 @@ CASES = [
   ("faas-dual", "decentralized_dual", "FaaS-MALD", "solve_subproblem"),
   ("FaaS-MAFW", "decentralized_frankwolfe", "FaaS-MAFW", "solve_subproblem"),
   ("faas-gcaa", "decentralized_gcaa", "FaaS-MAGCAA", "solve_subproblem"),
+  ("faas-br-s", "decentralized_bestresponse", "FaaS-MABR-S", "solve_subproblem"),
+  ("faas-br-r", "decentralized_bestresponse", "FaaS-MABR-R", "solve_subproblem"),
+  ("faas-br-o", "decentralized_bestresponse", "FaaS-MABR-O", "solve_subproblem"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
@@ -74,6 +77,6 @@ def test_runner_uses_the_frame_and_the_logger(module):
   prints = [n.lineno for n in ast.walk(tree)
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "print"]
   assert not prints and "log_stream" not in source, prints
-  run = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "run")
-  assert run.end_lineno - run.lineno + 1 <= 80
-  assert "run_frame.run(" in ast.unparse(run)
+  entries = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name.startswith(("run", "_run"))]
+  assert entries and all(n.end_lineno - n.lineno + 1 <= 80 for n in entries)
+  assert any("run_frame.run(" in ast.unparse(n) for n in entries)
