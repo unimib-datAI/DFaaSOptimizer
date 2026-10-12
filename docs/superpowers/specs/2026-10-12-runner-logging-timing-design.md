@@ -12,9 +12,10 @@ Date: 2026-10-12. Status: proposed after the code review of `feat/frank-wolfe-re
 - One runner skeleton: the set-up, the step loop and the output writing that 14-18 runners repeat
   live in one module; a runner supplies the decision of one step.
 
-Success: the welfare of every method on the regression instances is unchanged, every output file
-except timings is byte-identical, the duplication measured by `symilar -d 10` on the core modules
-drops from 8.3% (2026 lines), and no `run()` of a migrated runner exceeds 80 lines.
+Success: on deterministic regression runs, welfare and solution files are unchanged; other
+artifacts match under the explicit timing normalization below. Budget-limited runs satisfy the
+separate clock and stopping tests below. The duplication measured by `symilar -d 10` on the core
+modules drops from 8.3% (2026 lines), and no `run()` of a migrated runner exceeds 80 lines.
 
 ## Facts from the review
 
@@ -47,16 +48,23 @@ New module `utils/run_log.py`:
   otherwise stdout; level `verbose` 0 → WARNING, 1 → INFO, ≥ 2 → DEBUG; format `%(message)s`
   (the text of `out.log` stays what the parsers expect). The handler is closed on exit, also on
   an exception.
-- The handler's `emit` runs inside `step_time.untimed()`: logging is observer code by
-  construction, so the `with step_time.untimed(): if verbose > n:` wrappers go away.
+- The handler's `emit` runs inside `step_time.untimed()`, but this alone does not exclude
+  argument evaluation or logger bookkeeping. Keep `step_time.untimed()` around the complete
+  logging call sites, including level guards and argument preparation, when a step is active.
+  Replace the prints inside those blocks; do not remove the blocks wholesale.
 - Arguments are formatted lazily (`log.debug("it = %d", it)`, ruff rule `G004` on the core
-  modules), so a disabled level costs nothing in the modelled time; a message whose arguments
-  need computation is guarded by `if log.isEnabledFor(logging.DEBUG):`.
+  modules). Guard expensive arguments, such as `state.y.tolist()`, with
+  `if log.isEnabledFor(logging.DEBUG):` inside the untimed block. Lazy formatting avoids
+  formatting disabled messages; it does not make a logger call or argument evaluation free.
+- Before introducing the handler, make `step_time.untimed()` safe to nest: overlapping observer
+  intervals count only once, including inside parallel phases and tasks and on exceptions.
+  A handler called from an untimed observer must not subtract its duration a second time.
 - Pool workers do not log; they return data (true today).
 - `run.py` and the experiment scripts use the same module for their messages; `tqdm` progress bars
   stay (they are not logs).
-- The test on verbose blocks is replaced by one asserting that the core runners contain no
-  `print(` and no `log_stream`.
+- Replace the print-specific test with checks that the core runners contain no `print(` and no
+  `log_stream`, and retain coverage of complete logging call sites being untimed. Behavioral
+  tests must cover argument preparation and nested observers, not just handler emission.
 
 ## Time
 
@@ -65,15 +73,26 @@ New module `utils/run_log.py`:
   except the timestamp that names the run folder (one helper).
 - The dead `s`/`e`/`rt` measurements are deleted; the per-phase durations shown at DEBUG come
   from `step_time` (wall time of the phase).
-- Excluded methods (FaaS-MAPG-S/-R, better-response, the PG hybrids, `madea_pg`) run on the step
-  clock too: a whole step is sequential, so `algorithm_s` is its wall time minus observer code; their
-  time budgets (`madea_pg` deadline, `TimeLimit` passed to the refinement) read
-  `step_time.current_modelled()`.
+- Excluded methods run on the step clock too. Sequential node sweeps in FaaS-MAPG-S/-R,
+  better-response and `madea_pg` count their wall time minus observer code; any explicitly
+  parallel initialization retains its existing phase accounting.
+- PG hybrids retain the parallel phases of their base method and add the sequential refinement
+  time. Exclusion from `methods.HARMONIZED` does not make a whole step sequential. For example,
+  `hierarchical_frankwolfe.run(..., refine_welfare=True)` keeps the parallel local solves before
+  refinement; do not replace their modelled duration with the sum of node task durations.
+- The total step budget reads `step_time.current_modelled()`. Refinement receives the remaining
+  modelled step budget and measures its own elapsed time relative to refinement entry, capped
+  by its configured PG budget. Preserve coordination reserves and per-solver `TimeLimit` rules.
+  Direct calls to `madea_pg.refine_solution` must still enforce their budget without an active
+  step clock (use `step_time.now()` for that standalone sequential interval).
 - The centralized model writes `runtime.csv` with the same columns (`algorithm_s` = solver time
   of the step, `parallel_phases` 0, `workers` = solver threads).
-- One format for every `runtime.csv`: the five columns of `step_time.COLUMNS`; the readers
-  (`run.py`, `postprocessing.py`, `compare_results.py`, `benchmark_summary.py`,
-  `remote_experiments/results_reader.py`) drop their fallbacks.
+- One format for every newly written runner `runtime.csv`: the five columns of
+  `step_time.COLUMNS`. Readers (`run.py`, `postprocessing.py`, `compare_results.py`,
+  `benchmark_summary.py`, `remote_experiments/results_reader.py`) prefer `algorithm_s` and
+  continue accepting historical `tot` and centralized model-name columns. Preserve separate
+  aggregate postprocessing formats and objective-reading behavior in shared reader helpers.
+  Existing result directories need no conversion; mixed old/new campaigns remain readable.
 
 ## Runner skeleton
 
@@ -97,27 +116,56 @@ New module `utils/run_frame.py`:
 - MADEA2 rules: the MADEA cycle and the one-shot runner take a `rules` argument (bid definition,
   bid evaluation, replica start; default MADEA's); MADEA2 passes its rules; no `setattr`, and the
   parts MADEA2 copied are shared.
-- Each runner keeps its public `run(config, parallelism, log_on_file=False, disable_plotting=False)`
-  (the registry and `run.py` do not change) and becomes the skeleton call plus its `solve_step`.
+- Each decentralized runner keeps its public
+  `run(config, parallelism, log_on_file=False, disable_plotting=False)` and becomes the skeleton
+  call plus its `solve_step`. Registry entries and caller interfaces stay unchanged; `run.py`
+  receives only the logging and runtime-reader changes described above.
 - Migration one runner at a time, each with the output comparison below.
 
 ## Verification
 
-- Before the refactor, capture for every method in `methods.HARMONIZED` and the excluded runners
-  the outputs on the regression instances (`experiments/harmonization/capture_baseline.py`):
-  `obj.csv`, `termination_condition.csv` and the solution files. After each migrated runner, the
-  same files must be byte-identical (timings excluded) and the existing harmonization tests
-  (welfare regression, runtime contract, worker independence, time budget) must pass.
-- `out.log` of MACrO and MADEA at verbose 2 is parsed by `logs_postprocessing` before and after
-  with the same result (timings excluded).
-- New unit tests: log level mapping, `out.log` written and closed on an exception, handler time
-  removed from the modelled time; the AST tests on clocks and prints; the skeleton with a fake
-  `solve_step` (folder, files, checkpoints, runtime rows).
+- Before changing runners, extend `experiments/harmonization/capture_baseline.py`: it currently
+  captures only welfare for `methods.HARMONIZED` and discards temporary run directories. Keep
+  its existing welfare baseline interface, and add artifact capture for all harmonized methods,
+  explicit callable mappings for excluded runners, and the centralized runner. Persist the
+  artifacts before temporary directories are removed, with method, instance and configuration
+  recorded. The centralized baseline needs an available real solver, not `missing_solver`;
+  missing solver coverage must be reported explicitly.
+- Use fixed seeds and iteration/sweep limits with nonbinding time budgets for deterministic
+  before/after runs. Compare `obj.csv` and solution/checkpoint CSVs byte-for-byte, and compare
+  the artifact inventory so method-specific diagnostic files cannot silently disappear.
+- Normalize timing values in `termination_condition.csv` before comparison: replace only the
+  numeric duration in `total runtime: ...` and elapsed/limit values in time-limit reasons with
+  fixed markers. Preserve the reason, iteration counts, objective deviations and all other
+  fields. Define timing-column exclusions per diagnostic file (e.g. `seconds` in
+  `refinement.csv`); do not drop entire rows or arbitrary numeric fields. Compare `out.log`
+  through the MACrO/MADEA parsers at verbose 2, excluding parsed timing fields and run-folder
+  paths. Keep raw artifacts; normalization applies only to the comparison.
+- Prove the comparison itself: two unchanged deterministic runs must compare equal despite
+  different timings; a changed objective, solution, iteration count or stop reason must fail.
+  Budget-limited runs are tested separately with a fake clock for stop reasons, refinement
+  reserves and remaining `TimeLimit`; do not demand byte-identical decisions from real-time
+  cutoffs. Existing welfare, runtime-contract, worker-independence and time-budget tests pass.
+- New logging tests: level mapping; `out.log` written and handler detached/closed on an
+  exception; expensive argument preparation skipped at disabled levels and excluded at enabled
+  levels; emission and nested observers excluded exactly once, both sequentially and inside
+  parallel tasks, including exceptions. With a fake clock, adding observer delay must change
+  only `wall_s`, leaving modelled time, budget decisions and solutions unchanged.
+- New hybrid timing test: two node tasks of 2 s and 3 s in one parallel phase followed by a 4 s
+  sequential refinement contribute 7 s of algorithm time, not 9 s, before any measured overhead.
+  Check the remaining refinement budget and retain standalone refinement budget coverage.
+- Reader regressions cover new five-column files, historical `tot` and centralized model-name
+  files, and a campaign mixing these formats. Existing objective and aggregate readers keep
+  their contracts.
+- Retain AST checks on clocks and prints; test the skeleton with a fake `solve_step` for folders,
+  output files, checkpoints and runtime rows.
 
 ## Out of scope
 
-`run.py`'s `results_postprocessing` and `run` (636 and 541 lines), `compare_results.py`, the RL
-environments, `logs_postprocessing.py` (except keeping its inputs), and new behaviour of any method.
+Structural refactoring of `run.py`'s `results_postprocessing` and `run` (636 and 541 lines) and
+`compare_results.py` is out of scope; the logging and compatible runtime-reader changes above
+are in scope. The RL environments, `logs_postprocessing.py` (except keeping its inputs), and
+new algorithm behavior are out of scope.
 
 ## To confirm
 
