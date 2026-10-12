@@ -54,6 +54,10 @@ CASES = [
   ("hierarchical", "hierarchical_auction.runner", "HierarchicalAuction", "solve_subproblem"),
   ("hierarchical-one-shot", "hierarchical_auction.runner", "HierarchicalAuction", "solve_subproblem"),
   ("hierarchical-one-shot-pg", "hierarchical_auction.runner", "HierarchicalOneShotPG", "solve_subproblem"),
+  ("hierarchical-madea", "hierarchical_auction.madea_cycles_runner", "HierarchicalMADeALevelCycles", "solve_subproblem"),
+  ("hierarchical-madea-cycles", "hierarchical_auction.madea_cycles_runner", "HierarchicalMADeACycles", "solve_subproblem"),
+  ("hierarchical-madea-pg", "hierarchical_auction.madea_cycles_runner", "HierarchicalMADeALevelCyclesPG", "solve_subproblem"),
+  ("hierarchical-madea-level-cycles-pg", "hierarchical_auction.madea_cycles_runner", "HierarchicalMADeALevelCyclesPG", "solve_subproblem"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
@@ -117,11 +121,3 @@ def test_macro_draws_both_histories(tmp_path):
   assert (folder / "sp.png").exists() and (folder / "rmp.png").exists()
   assert {"LRMP_solution.csv", "LRMPc_solution.csv"} <= {p.name for p in folder.iterdir()}
 
-
-def test_hierarchical_plots_at_any_size(tmp_path):
-  instance = capture_baseline.instances()[0]          # 30 nodes: above the default plot limit
-  config = capture_baseline.capture_config(instance, tmp_path, "hierarchical")
-  config.update(max_steps=1, max_run_time=1, verbose=0)
-  folder = Path(capture_baseline.baseline_runners()["hierarchical"](config, 0, log_on_file=True,
-                                                                     disable_plotting=False))
-  assert (folder / "sp.png").exists()

@@ -406,8 +406,9 @@ def test_rerouting_without_served_load_or_welfare_gain_stops(tmp_path, monkeypat
     "beta": {(i, j, 1): 1.0 for i in nodes for j in nodes},
   }}
   graph = nx.complete_graph(3)
-  monkeypatch.setattr(madea_runner, "init_problem", lambda *a: (data, {}, [0, 1, 2], graph))
-  monkeypatch.setattr(madea_runner, "get_current_load", lambda *a: data[None]["incoming_load"])
+  import run_centralized_model  # the frame's problem loading
+  monkeypatch.setattr(run_centralized_model, "init_problem", lambda *a: (data, {}, [0, 1, 2], graph))
+  monkeypatch.setattr(run_centralized_model, "get_current_load", lambda *a: data[None]["incoming_load"])
   monkeypatch.setattr(madea_runner, "solve_subproblem", lambda *a: (
     data, np.zeros((3, 1)), None, None, np.array([[2.], [0.], [0.]]),
     np.ones((3, 1)), np.zeros(3), None,
