@@ -8,7 +8,7 @@ from utils import run_frame, step_time
 import numpy as np
 import pandas as pd
 
-from decentralized_diffusion import OUTPUTS, evaluate_assignments
+from decentralized_diffusion import evaluate_assignments
 from models.sp import LSP, LSP_fixedr, LSPr, LSPr_fixedr
 from run_faasmacro import (
   parallel_solver_run,
@@ -302,7 +302,7 @@ def run(
   certificate = []  # coordination_certificate.csv rows of the whole run
   folder = run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="FaaS-MALD", outputs=OUTPUTS,
+    method="FaaS-MALD", outputs=run_frame.LSP_OUTPUTS,
     solve_step=partial(_solve_step, options=_dual_options(config["solver_options"]),
                        certificate=certificate),
   )

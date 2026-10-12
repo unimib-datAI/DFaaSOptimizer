@@ -9,7 +9,6 @@ from run_faasmadea import (
   compute_residual_capacity,
   start_additional_replicas,
 )
-from decentralized_diffusion import OUTPUTS
 from utils import run_frame, step_time
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
@@ -232,7 +231,7 @@ def _run(
   options.setdefault("fairness_weight", 0.0)
   return run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method=method_name, outputs=OUTPUTS,
+    method=method_name, outputs=run_frame.LSP_OUTPUTS,
     solve_step=partial(_solve_step, options=options, order=order, response=response,
                        rng=np.random.default_rng(config["seed"])),
   )

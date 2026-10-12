@@ -35,6 +35,12 @@ class Output:
   plot_filename: str | None = None  # final plot of this output (sp.png), if any
 
 
+LSP_OUTPUTS = {  # the local (LSP) and centralized-incumbent (LSPc) solutions of most runners
+  "LSP": Output(checkpoint=True, plot_filename="sp.png"),
+  "LSPc": Output(checkpoint=True),
+}
+
+
 @dataclass
 class StepResult:
   solutions: dict           # output name -> dict of x, y, z, r, xi, rho, U arrays

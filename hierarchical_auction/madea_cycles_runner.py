@@ -133,7 +133,7 @@ def _run(
         print(f"t = {t}", file=log_stream, flush=True)
     clock = step_time.start_step()
     started_at = time.monotonic()
-    cycle_started_at = datetime.now()
+    cycle_started_at = step_time.now()
     loadt = get_current_load(traces, agents, t)
     sp_data = deepcopy(base_data)
     sp_data[None]["incoming_load"] = loadt
@@ -185,7 +185,7 @@ def _run(
         state, sp_x=sp_x, sp_omega=sp_omega, sp_data=sp_data, data=sp_data,
         agents=agents, loadt=loadt, neighborhood=neighborhood, latency=latency,
         config=config, auction_options=auction_options,
-        parallelism=parallelism, log_stream=log_stream,
+        parallelism=parallelism,
         started_at=cycle_started_at, auction_time_limit=hierarchy_time_limit,
       )
       # Use the actual reason, including its existing priority over other tests.

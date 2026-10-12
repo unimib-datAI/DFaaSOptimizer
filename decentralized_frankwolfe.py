@@ -53,7 +53,6 @@ import numpy as np
 import argparse
 import os
 from utils import run_frame, step_time
-from decentralized_diffusion import OUTPUTS
 
 
 _NEG_INF = -1e18
@@ -524,7 +523,7 @@ def run(
   stats = []  # frankwolfe_stats.csv rows of the whole run
   folder = run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="FaaS-MAFW", outputs=OUTPUTS,
+    method="FaaS-MAFW", outputs=run_frame.LSP_OUTPUTS,
     solve_step=partial(_solve_step, options=frankwolfe_options(config["solver_options"]),
                        rng=np.random.default_rng(config["seed"]), stats=stats),
   )

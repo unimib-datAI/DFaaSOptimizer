@@ -1,6 +1,4 @@
 """Regressions for auction memory, stopping, empty snapshots and flat loads."""
-from datetime import datetime
-from io import StringIO
 from pathlib import Path
 from collections import deque
 
@@ -36,7 +34,7 @@ def test_new_replicas_get_an_auction_before_stopping():
     sp_x=x, sp_omega=omega, sp_data=data, data=data, agents=[0, 1],
     loadt=data[None]["incoming_load"], neighborhood=np.array([[0, 1], [1, 0]]),
     latency=np.zeros((2, 2)), config=config, auction_options=build_auction_options(config),
-    parallelism=0, log_stream=StringIO(), started_at=datetime.now(),
+    parallelism=0, started_at=0.0,
   )
   madea.run_madea_cycle(state, **kwargs)
   assert state.y[0, 1, 0] == 1.

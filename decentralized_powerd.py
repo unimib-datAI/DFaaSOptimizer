@@ -4,7 +4,7 @@ from run_faasmacro import (
 from run_faasmadea import (
   VAR_TYPE,
 )
-from decentralized_diffusion import OUTPUTS, assignment_step
+from decentralized_diffusion import assignment_step
 from utils.centralized import (
   ping_pong_forbidden_hosts
 )
@@ -176,7 +176,7 @@ def run(
   rng = np.random.default_rng(config["seed"])  # one generator for the whole run
   return run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="FaaS-MAPoD", outputs=OUTPUTS,
+    method="FaaS-MAPoD", outputs=run_frame.LSP_OUTPUTS,
     solve_step=partial(assignment_step, options=options,
                        assign=partial(sample_assignments, rng=rng)),
   )

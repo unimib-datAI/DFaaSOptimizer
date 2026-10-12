@@ -19,7 +19,6 @@ from models.sp import LSP, LSPr
 from copy import deepcopy
 from functools import partial
 import argparse
-from decentralized_diffusion import OUTPUTS
 from utils import run_frame, run_log, step_time
 
 log = run_log.logger(__name__)
@@ -103,7 +102,7 @@ def run(
     raise ValueError("solver_options.gcaa.unit_bids must be true")
   return run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="FaaS-MAGCAA", outputs=OUTPUTS,
+    method="FaaS-MAGCAA", outputs=run_frame.LSP_OUTPUTS,
     solve_step=partial(_solve_step, options=gcaa_options),
   )
 

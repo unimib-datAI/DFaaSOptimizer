@@ -1,8 +1,6 @@
 """The hierarchy runs only at completed MADEA cycle boundaries."""
 
 from copy import deepcopy
-from datetime import datetime
-from io import StringIO
 
 import numpy as np
 import pandas as pd
@@ -67,7 +65,7 @@ def test_resumed_cycle_attempts_memory_fallback_without_losing_incumbent(
     agents=[0, 1, 2], loadt=data[None]["incoming_load"],
     neighborhood=np.ones((3, 3)) - np.eye(3), latency=np.zeros((3, 3)),
     config=config, auction_options=build_auction_options(config), parallelism=0,
-    log_stream=StringIO(), started_at=datetime.now(),
+    started_at=0.0,
   )
   madea.run_madea_cycle(state, **kwargs)
   assert state.sp_r[2, 0] == 1, "Memory fallback must run before convergence"

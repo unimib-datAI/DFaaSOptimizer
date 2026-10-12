@@ -256,10 +256,6 @@ def parse_arguments() -> argparse.Namespace:
   return parser.parse_known_args()[0]
 
 
-OUTPUTS = {"LSP": run_frame.Output(checkpoint=True, plot_filename="sp.png"),
-           "LSPc": run_frame.Output(checkpoint=True)}
-
-
 @parallel_solver_run
 def run(
     config: dict,
@@ -270,7 +266,7 @@ def run(
   options = _diffusion_options(config["solver_options"])
   return run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="FaaS-MADiG", outputs=OUTPUTS,
+    method="FaaS-MADiG", outputs=run_frame.LSP_OUTPUTS,
     solve_step=partial(assignment_step, options=options, assign=define_assignments),
   )
 

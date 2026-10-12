@@ -1,47 +1,33 @@
 from dataclasses import dataclass
-import time
+from functools import partial
+import logging
 
-from postprocessing import load_solution
-from run_centralized_model import (
-  get_current_load, 
-  init_complete_solution,
-  init_problem, 
-  join_complete_solution,
-  plot_history,
-  save_checkpoint,
-  save_solution,
-  update_data
-)
 from run_faasmacro import (
   parallel_solver_run,
   combine_solutions, 
   compute_social_welfare,
-  decode_solutions,
   solve_subproblem
 )
-from utils.common import checkpoint_due, run_steps
-from utils.centralized import check_feasibility, encode_solution
+from utils.centralized import check_feasibility
 from utils.faasmacro import (
   compute_centralized_objective, 
   relative_objective_gap
 )
 from utils.common import load_configuration
-from models.sp import LSP, LSPr, LSP_fixedr, LSPr_x
+from models.sp import LSP, LSP_fixedr, LSPr_x
 from models.model import PYO_VAR_TYPE
 
-from networkx import adjacency_matrix
 from collections import deque
-from datetime import datetime
 import pyomo.environ as pyo
 from copy import deepcopy
 from typing import Tuple
 import pandas as pd
 import numpy as np
 import argparse
-import json
-import sys
 import os
-from utils import step_time
+from utils import run_frame, run_log, step_time
+
+log = run_log.logger(__name__)
 
 
 VAR_TYPE = int if PYO_VAR_TYPE == pyo.NonNegativeIntegers else float
@@ -628,8 +614,7 @@ def madea_rules(rules: dict | None = None) -> dict:
 def run_madea_cycle(
     state: MadeaState, *, sp_x, sp_omega, sp_data, data, agents, loadt,
     neighborhood, latency, config, auction_options, parallelism,
-    log_stream, started_at, wall_started_at=None, auction_time_limit=None,
-    rules: dict | None = None,
+    started_at, auction_time_limit=None, rules: dict | None = None,
   ) -> MadeaState:
   """Run the production MADEA loop to its actual stopping criterion.
 
@@ -637,6 +622,7 @@ def run_madea_cycle(
   state and start another cycle, with fresh local convergence history.
   PG callers may cap elapsed auction time without changing local solver options.
   ``rules`` (define_bids, evaluate_bids, start_additional_replicas): MADEA's by default.
+  ``started_at``: step_time.now() at the start of the step (the logged wallclock).
   """
   rules = madea_rules(rules)
   Nn, Nf = sp_x.shape
@@ -650,7 +636,6 @@ def run_madea_cycle(
   patience = config.get("patience", 1)
   verbose = config.get("verbose", 0)
   spr = LSPr_x()
-  ss = started_at
   u0 = np.ones((Nn, Nf)) * 0.8
   y, omega, p, fairness = state.y, state.omega, state.p, state.fairness
   sp_r, sp_rho = state.sp_r, state.sp_rho
@@ -672,26 +657,22 @@ def run_madea_cycle(
   cached_welfare = None
   while not stop_searching:
     with step_time.untimed():
-      if verbose > 0:
-        print(f"    it = {it}", file = log_stream, flush = True)
+      log.info("    it = %s", it)
     # compute residual computational capacity
-    s = datetime.now()
+    s = step_time.now()
     total_capacity, residual_capacity, ell = compute_residual_capacity(
       sp_x, y, sp_r, sp_data
     )
     blackboard = np.maximum(0.0, total_capacity - sp_x)
-    e = datetime.now()
+    e = step_time.now()
     with step_time.untimed():
-      if verbose > 1:
-        print(
-          f"        compute_residual_capacity: DONE ",
-          f"({total_capacity.tolist()}; blackboard = {blackboard.tolist()}; "
-          f"ell = {ell.tolist()}; runtime = {(e - s).total_seconds()})",
-          file = log_stream,
-          flush = True
+      if log.isEnabledFor(logging.DEBUG):
+        log.debug(
+          "        compute_residual_capacity: DONE  (%s; blackboard = %s; ell = %s; runtime = %s)",
+          total_capacity.tolist(), blackboard.tolist(), ell.tolist(), e - s,
         )
     # buyers define their bids
-    s = datetime.now()
+    s = step_time.now()
     bids, memory_bids, n_auctions = rules["define_bids"](
       omega,
       blackboard,
@@ -708,23 +689,19 @@ def run_madea_cycle(
             all(x == n_accepted_queue[0] for x in n_accepted_queue)
       )
     )
-    e = datetime.now()
-    rt = (e - s).total_seconds()
+    rt = step_time.now() - s
     with step_time.untimed():
-      if verbose > 1:
-        print(
-          f"        define_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
-          f"n_auctions = {n_auctions}; tot runtime = {rt})",
-          file = log_stream,
-          flush = True
-        )
-        if verbose > 2:
-          print(bids, file = log_stream, flush = True)
+      log.debug(
+        "        define_bids: DONE; runtime = %s; n_auctions = %s; tot runtime = %s)",
+        rt / max(n_auctions, 1), n_auctions, rt,
+      )
+      if verbose > 2:  # high-volume bid dump
+        log.debug("%s", bids)
     # sellers accept/reject bids
     rmp_omega = np.zeros((Nn,Nf))
     additional_replicas = np.zeros((Nn,Nf))
     if len(bids) > 0:
-      s = datetime.now()
+      s = step_time.now()
       auction_y, p, additional_replicas, n_auctions = rules["evaluate_bids"](
         bids,
         blackboard,
@@ -742,16 +719,12 @@ def run_madea_cycle(
         may_replace_existing_assignments = True,
         residual_capacity = residual_capacity
       )
-      e = datetime.now()
-      rt = (e - s).total_seconds()
+      rt = step_time.now() - s
       with step_time.untimed():
-        if verbose > 1:
-          print(
-           f"        evaluate_bids: DONE; runtime = {rt/max(n_auctions, 1)}; "
-           f"n_auctions = {n_auctions}; tot runtime = {rt})",
-           file = log_stream,
-           flush = True
-          )
+        log.debug(
+          "        evaluate_bids: DONE; runtime = %s; n_auctions = %s; tot runtime = %s)",
+          rt / max(n_auctions, 1), n_auctions, rt,
+        )
       # update effective load, number of replicas and fairness matrix
       y += auction_y
       rmp_omega = compute_offloaded_demand(y)
@@ -785,13 +758,10 @@ def run_madea_cycle(
           y.copy(), deepcopy(spr_sol), spr_obj, spr_tc,
         ) if set(str(spr_tc).split("-")) == {"optimal"} else None
       with step_time.untimed():
-        if verbose > 1:
-          print(
-            f"        solve 'restricted problem': DONE ({spr_tc}; "
-            f"obj: {spr_obj}; runtime = {spr_runtime})",
-            file = log_stream,
-            flush = True
-          )
+        log.debug(
+          "        solve 'restricted problem': DONE (%s; obj: %s; runtime = %s)",
+          spr_tc, spr_obj, spr_runtime,
+        )
       # -- update solution
       _, _, _, _, sp_r, sp_rho = spr_sol
       for i in range(Nn):
@@ -800,31 +770,25 @@ def run_madea_cycle(
           if abs(omega[i,f]) < tolerance:
             omega[i,f] = 0.0
       with step_time.untimed():
-        if verbose > 1:
-          print(
-            f"        solution updated: DONE (auct_y = {auction_y.tolist()}; "
-            f"omega = {omega.tolist()}; x = {sp_x.tolist()}; "
-            f"r = {sp_r.tolist()}; rho = {sp_rho.tolist()}; ",
-            f"y = {y.tolist()})",
-            file = log_stream,
-            flush = True
+        if log.isEnabledFor(logging.DEBUG):
+          log.debug(
+            "        solution updated: DONE (auct_y = %s; omega = %s; x = %s; r = %s; rho = %s;  y = %s)",
+            auction_y.tolist(), omega.tolist(), sp_x.tolist(), sp_r.tolist(), sp_rho.tolist(),
+            y.tolist(),
           )
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
       # tentatively start additional replicas
-      s = datetime.now()
+      s = step_time.now()
       additional_replicas, sp_rho = rules["start_additional_replicas"](
         memory_bids, sp_r, sp_data, sp_rho
       )
       sp_r += additional_replicas
-      e = datetime.now()
+      e = step_time.now()
       with step_time.untimed():
-        if verbose > 1:
-          print(
-            f"        additional replicas started: DONE "
-            f"(a = {additional_replicas.tolist()}; "
-            f"rho = {sp_rho.tolist()}; runtime = {(e - s).total_seconds()})",
-            file = log_stream,
-            flush = True
+        if log.isEnabledFor(logging.DEBUG):
+          log.debug(
+            "        additional replicas started: DONE (a = %s; rho = %s; runtime = %s)",
+            additional_replicas.tolist(), sp_rho.tolist(), e - s,
           )
     with step_time.untimed():
       # merge solutions and compute the centralized objective value
@@ -836,18 +800,12 @@ def run_madea_cycle(
       cobj = compute_centralized_objective(
         sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
       )
-      s = datetime.now()
+      s = step_time.now()
       feas = check_feasibility(
         csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
         csol["sp"]["r"], csol["sp"]["U"], sp_data
       )
-      e = datetime.now()
-      print(
-        f"        check_feasibility: DONE ({feas[0]}; {feas[1]}; "
-        f"runtime = {(e-s).total_seconds()})",
-        file = log_stream,
-        flush = True
-      )
+      log.info("        check_feasibility: DONE (%s; %s; runtime = %s)", feas[0], feas[1], step_time.now() - s)
       if not (feas[0]):
         raise RuntimeError(feas[1])
       # update best solution so far
@@ -855,32 +813,20 @@ def run_madea_cycle(
         best_cost_so_far = spr_obj
         best_solution_so_far = deepcopy(csol)
         best_it_so_far = it
-        with step_time.untimed():
-          if verbose > 0:
-            print(
-              f"        best solution updated; obj = {spr_obj}",
-              file = log_stream,
-              flush = True
-            )
+        log.info("        best solution updated; obj = %s", spr_obj)
       prev_cobj = cycle_best_centralized_cost
       cycle_best_centralized_cost = max(cycle_best_centralized_cost, cobj)
       if cobj > best_centralized_cost:
         best_centralized_cost = cobj
         best_centralized_solution = deepcopy(csol)
         best_centralized_it = state.iterations + it
-        with step_time.untimed():
-          if verbose > 0:
-            print(
-              f"        best centralized solution updated; obj = {cobj}",
-              file = log_stream,
-              flush = True
-            )
+        log.info("        best centralized solution updated; obj = %s", cobj)
       odev_queue.append(
         relative_objective_gap(prev_cobj, cycle_best_centralized_cost)
       )
     # check termination criteria
     total_runtime = step_time.current_modelled()
-    s = datetime.now()
+    s = step_time.now()
     stop_searching, why_stop_searching = check_stopping_criteria(
       it,
       max_iterations,
@@ -895,18 +841,12 @@ def run_madea_cycle(
       total_runtime,
       time_limit
     )
-    e = datetime.now()
+    e = step_time.now()
     with step_time.untimed():
-      if verbose > 1:
-        print(
-          f"        check_stopping_criteria: DONE "
-          f"(runtime = {(e - s).total_seconds()}; "
-          f"total runtime = {total_runtime}; "
-          f"wallclock: {(datetime.now() - ss).total_seconds()}) "
-          f"--> stop? {stop_searching} ({why_stop_searching})",
-          file = log_stream,
-          flush = True
-        )
+      log.debug(
+        "        check_stopping_criteria: DONE (runtime = %s; total runtime = %s; wallclock: %s) --> stop? %s (%s)",
+        e - s, total_runtime, step_time.now() - started_at, stop_searching, why_stop_searching,
+      )
     if not stop_searching:
       it += 1
 
@@ -934,218 +874,67 @@ def run(
     disable_plotting: bool = False,
     *, refine_welfare: bool = False, rules: dict | None = None,
   ):
-  refinement_history = []
-  base_solution_folder = config["base_solution_folder"]
-  seed = config["seed"]
-  limits = config["limits"]
-  trace_type = config["limits"]["load"].get("trace_type", "fixed_sum")
-  verbose = config.get("verbose", 0)
-  # -- solver name and options
-  solver_name = config["solver_name"]
-  solver_options = config["solver_options"]
-  general_solver_options = solver_options.get("general", {})
-  auction_options = solver_options["auction"]
-  time_limit = step_time.algorithm_time_limit(config)
-  tolerance = config.get("tolerance", 1e-6)
-  # -- maximum number of iterations and time limits
-  max_iterations = config["max_iterations"]
-  max_steps = config["max_steps"]
-  min_run_time = config.get("min_run_time", 0)
-  max_run_time = config.get("max_run_time", max_steps)
-  run_time_step = config.get("run_time_step", 1)
-  checkpoint_interval = config["checkpoint_interval"]
-  plot_interval = config.get("plot_interval", max_iterations)
-  patience = config["patience"]
-  # generate solution folder
-  now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
-  solution_folder = f"{base_solution_folder}/{now}"
-  os.makedirs(solution_folder, exist_ok = True)
-  with open(os.path.join(solution_folder, "config.json"), "w") as ostream:
-    ostream.write(json.dumps(config, indent = 2))
-  # initialize log stream (if required)
-  log_stream = sys.stdout
-  if log_on_file:
-    log_stream = open(os.path.join(solution_folder, "out.log"), "w")
-  # generate base instance data and load traces
-  base_instance_data, input_requests_traces, agents, graph = init_problem(
-    limits, trace_type, max_steps, seed, solution_folder
+  refinement = []  # refinement.csv rows of the whole run (PG)
+  folder = run_frame.run(
+    config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
+    method="FaaS-MADeA-PG" if refine_welfare else "FaaS-MADeA", outputs=run_frame.LSP_OUTPUTS,
+    solve_step=partial(_solve_step, rules=rules,
+                       refinement=refinement if refine_welfare else None),
   )
-  Nn = base_instance_data[None]["Nn"][None]
-  Nf = base_instance_data[None]["Nf"][None]
-  # load globally-optimal solution (if provided)
-  opt_solution, opt_replicas, opt_detailed_fwd = None, None, None
-  if "opt_solution_folder" in config:
-    opt_solution, opt_replicas, opt_detailed_fwd, _, _ = load_solution(
-      config["opt_solution_folder"], "LoadManagementModel"
-    )
-  # -- save neighborhood matrix
-  neighborhood = neigh_dict_to_matrix(
-    base_instance_data[None]["neighborhood"], Nn
-  )
-  latency = adjacency_matrix(graph, weight = "network_latency")
-  # loop over time
-  steps = run_steps(config)
-  sp_complete_solution = init_complete_solution()
-  spc_complete_solution = init_complete_solution()
-  obj_dict = {"LSPr_final": []}
-  tc_dict = {"LSPr": []}
-  runtime_rows = []
-  for t in steps:
-    with step_time.untimed():
-      if verbose > 0:
-        print(f"t = {t}", file = log_stream, flush = True)
-    # get current load and generate data
-    loadt = get_current_load(input_requests_traces, agents, t)
-    data = update_data(base_instance_data, {"incoming_load": loadt})
-    # local planning
-    clock = step_time.start_step()
-    ss = datetime.now()
-    # -- extract optimal solution (if provided)
-    sp_data = deepcopy(data)
-    if opt_solution is not None:
-      _, _, _, opt_r, _ = encode_solution(
-        Nn, Nf, opt_solution, opt_detailed_fwd, opt_replicas, t
-      )
-      sp_data[None]["r_bar"] = {}
-      for n in range(Nn):
-        for f in range(Nf):
-          sp_data[None]["r_bar"][(n+1,f+1)] = int(opt_r[n,f])
-    # -- solve subproblem
-    sp = LSP() if opt_solution is None else LSP_fixedr()
-    s = datetime.now()
-    (
-      sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
-    ) = solve_subproblem(
-      sp_data, 
-      agents, 
-      sp, 
-      solver_name, 
-      general_solver_options, 
-      parallelism
-    )
-    e = datetime.now()
-    with step_time.untimed():
-      if verbose > 1:
-        print(
-          f"    sp: DONE ({tc['tot']}; obj = {obj['tot']}; "
-          f"x = {sp_x.tolist()}; runtime = {sp_runtime['tot']})", 
-          file = log_stream, 
-          flush = True
-        )
-    state = MadeaState(
-      y=np.zeros((Nn, Nn, Nf)), omega=deepcopy(sp_omega),
-      p=np.zeros((Nn, Nf)), fairness=np.zeros((Nn, Nf)),
-      sp_r=sp_r, sp_rho=sp_rho, total_runtime=step_time.current_modelled(),
-    )
-    state = run_madea_cycle(
-      state, sp_x=sp_x, sp_omega=sp_omega, sp_data=sp_data, data=data,
-      agents=agents, loadt=loadt, neighborhood=neighborhood, latency=latency,
-      config=config, auction_options=auction_options, parallelism=parallelism,
-      log_stream=log_stream, started_at=ss, rules=rules,
-    )
-    total_runtime = state.total_runtime
-    with step_time.untimed():
-      sp_complete_solution, _, objf = decode_solutions(
-        sp_data, state.best_solution_so_far, sp_complete_solution, None,
-      )
-    if refine_welfare:
-      from madea_pg import refine_solution
-      state.best_centralized_solution, refinement = refine_solution(
-        sp_data, state.best_centralized_solution, config, time_limit - step_time.current_modelled(),
-      )
-      refinement_history.append({"time": t, **refinement})
-    with step_time.untimed():
-      spc_complete_solution, _, objc = decode_solutions(
-        sp_data, state.best_centralized_solution, spc_complete_solution, None,
-      )
-      obj_dict["LSPr_final"].append(objc)
-      tc_dict["LSPr"].append(
-        f"{state.reason} "
-        f"(it: {state.it}; obj. deviation: {state.objective_deviation}; "
-        f"best it: {state.best_it_so_far}; "
-        f"best centralized it: {state.best_centralized_it}; "
-        f"total runtime: {total_runtime})"
-      )
-      if checkpoint_due(t, steps, checkpoint_interval):
-        save_checkpoint(
-          sp_complete_solution, os.path.join(solution_folder, "LSP"), t
-        )
-        save_checkpoint(
-          spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
-        )
-    total_runtime = step_time.current_modelled()
-    runtime_rows.append(dict(step=t, **step_time.end_step(clock)))
-    ee = datetime.now()
-    with step_time.untimed():
-      if verbose > 0:
-        print(
-          f"    TOTAL RUNTIME [s] = {total_runtime} "
-          f"(wallclock: {(ee-ss).total_seconds()})",
-          file = log_stream, 
-          flush = True
-        )
-  # join
-  sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
-    sp_complete_solution
-  )
-  spc_solution, spc_offloaded, spc_detailed_fwd_solution = join_complete_solution(
-    spc_complete_solution
-  )
-  if not disable_plotting and Nf <= 10 and Nn <= 10:
-    plot_history(
-      input_requests_traces, 
-      min_run_time,
-      max_run_time,
-      run_time_step,
-      sp_solution, 
-      sp_complete_solution["utilization"], 
-      sp_complete_solution["replicas"], 
-      sp_offloaded,
-      # obj_dict["LSP"][max_iterations-1],
-      obj_dict["LSPr_final"],
-      os.path.join(solution_folder, "sp.png")
-    )
-  save_solution(
-    sp_solution,
-    sp_offloaded,
-    sp_complete_solution,
-    sp_detailed_fwd_solution,
-    "LSP",
-    solution_folder
-  )
-  save_solution(
-    spc_solution,
-    spc_offloaded,
-    spc_complete_solution,
-    spc_detailed_fwd_solution,
-    "LSPc",
-    solution_folder
-  )
-  # save objective function values
-  result_name = "FaaS-MADeA-PG" if refine_welfare else "FaaS-MADeA"
   if refine_welfare:
-    pd.DataFrame(refinement_history).to_csv(os.path.join(solution_folder, "refinement.csv"), index=False)
-  pd.DataFrame(obj_dict["LSPr_final"], columns = [result_name]).to_csv(
-    os.path.join(solution_folder, "obj.csv"), index = False
+    pd.DataFrame(refinement).to_csv(os.path.join(folder, "refinement.csv"), index=False)
+  return folder
+
+
+def _solve_step(ctx, t: int, data: dict, *, rules, refinement) -> run_frame.StepResult:
+  """Local planning, one MADEA cycle and, with ``refinement`` (PG), the bounded
+  potential-game refinement of the centralized incumbent."""
+  Nn, Nf = ctx.Nn, ctx.Nf
+  started_at = step_time.now()
+  fixed = ctx.reference is not None
+  sp_data = ctx.step_data(data, t)
+  sp = LSP_fixedr() if fixed else LSP()
+  (
+    sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
+  ) = solve_subproblem(
+    sp_data, ctx.agents, sp, ctx.solver_name, ctx.general_options, ctx.parallelism
   )
-  # save models termination condition
-  pd.DataFrame(tc_dict["LSPr"]).to_csv(
-    os.path.join(solution_folder, "termination_condition.csv")
-  )
-  # save runtime (avoids fragile log parsing in results_postprocessing)
-  step_time.write_runtime(solution_folder, runtime_rows)
   with step_time.untimed():
-    if verbose > 0:
-      print(
-        f"All solutions saved in: {solution_folder}", 
-        file = log_stream, 
-        flush = True
-      )
-  # close log stream if needed
-  if log_on_file:
-    log_stream.close()
-  return solution_folder
-      
+    if log.isEnabledFor(logging.DEBUG):
+      log.debug("    sp: DONE (%s; obj = %s; x = %s; runtime = %s)",
+                tc["tot"], obj["tot"], sp_x.tolist(), sp_runtime["tot"])
+  state = MadeaState(
+    y=np.zeros((Nn, Nn, Nf)), omega=deepcopy(sp_omega),
+    p=np.zeros((Nn, Nf)), fairness=np.zeros((Nn, Nf)),
+    sp_r=sp_r, sp_rho=sp_rho, total_runtime=step_time.current_modelled(),
+  )
+  state = run_madea_cycle(
+    state, sp_x=sp_x, sp_omega=sp_omega, sp_data=sp_data, data=data,
+    agents=ctx.agents, loadt=data[None]["incoming_load"], neighborhood=ctx.neighborhood,
+    latency=ctx.latency, config=ctx.config, auction_options=ctx.solver_options["auction"],
+    parallelism=ctx.parallelism, started_at=started_at, rules=rules,
+  )
+  if refinement is not None:
+    from madea_pg import refine_solution
+    state.best_centralized_solution, stats = refine_solution(
+      sp_data, state.best_centralized_solution, ctx.config, ctx.time_limit - step_time.current_modelled(),
+    )
+    refinement.append({"time": t, **stats})
+  with step_time.untimed():
+    central = state.best_centralized_solution["sp"]
+    objective = compute_centralized_objective(sp_data, central["x"], central["y"], central["z"])
+  return run_frame.StepResult(
+    solutions={"LSP": state.best_solution_so_far["sp"], "LSPc": central},
+    objective=objective,
+    termination=(
+      f"{state.reason} "
+      f"(it: {state.it}; obj. deviation: {state.objective_deviation}; "
+      f"best it: {state.best_it_so_far}; "
+      f"best centralized it: {state.best_centralized_it}; "
+      f"total runtime: {state.total_runtime})"
+    ),
+    data=sp_data,
+  )
 
 
 if __name__ == "__main__":
