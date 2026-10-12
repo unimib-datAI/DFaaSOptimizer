@@ -22,6 +22,9 @@ from run_centralized_model import get_current_load, update_data
 from utils.centralized import encode_solution, validate_centralized_solution
 from utils.faasmacro import compute_centralized_objective
 from run_faasmacro import _available_cpu_count
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 
 def run(output, seconds, repeats):
@@ -88,16 +91,17 @@ def run(output, seconds, repeats):
           signal.setitimer(signal.ITIMER_REAL, 0)
         rows.append(row)
         pd.DataFrame(rows).to_csv(output / 'results.csv', index=False)
-        print(json.dumps(row), flush=True)
+        log.info("%s", json.dumps(row))
   assert all(hashlib.sha256((ROOT / p).read_bytes()).hexdigest() == h
              for p, h in protocol['source_hashes'].items())
-  print(f'COMPLETE {len(rows)} runs', flush=True)
+  log.info('COMPLETE %s runs', len(rows))
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--output', default='solutions/plasma-parallel-planar-2026-10-01')
-  parser.add_argument('--seconds', type=float, default=300.)
-  parser.add_argument('--repeats', type=int, default=2)
-  args = parser.parse_args()
-  run(ROOT / args.output, args.seconds, args.repeats)
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--output', default='solutions/plasma-parallel-planar-2026-10-01')
+    parser.add_argument('--seconds', type=float, default=300.)
+    parser.add_argument('--repeats', type=int, default=2)
+    args = parser.parse_args()
+    run(ROOT / args.output, args.seconds, args.repeats)

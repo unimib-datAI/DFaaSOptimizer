@@ -31,4 +31,8 @@ axes[2].grid(alpha=.2)
 axes[2].legend()
 fig.savefig(root / 'summary.png', dpi=180)
 fig.savefig(root / 'summary.pdf')
-print(root / 'summary.png')
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repository root: utils.run_log
+from utils import run_log  # noqa: E402
+
+with run_log.open_run_log(None, 1):
+  run_log.logger(__name__).info('%s', root / 'summary.png')

@@ -9,6 +9,9 @@ import pandas as pd
 import numpy as np
 import families_extended as families
 import one_shot_pg
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 
 def run(output, seconds):
@@ -50,12 +53,13 @@ def run(output, seconds):
     welfare_gain_mean_pct=gains.mean().to_dict(), welfare_gain_min_pct=gains.min().to_dict(),
     winner_including_ties={method:int(np.isclose(w[method], w.max(axis=1), atol=1e-6, rtol=0).sum()) for method in methods})
   (output / 'metrics.json').write_text(json.dumps(metrics, indent=2))
-  print(json.dumps(metrics, indent=2))
+  log.info("%s", json.dumps(metrics, indent=2))
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--output', default='solutions/one-shot-pg-planar-2026-10-01')
-  parser.add_argument('--seconds', type=float, default=300.)
-  args = parser.parse_args()
-  run(families.ROOT / args.output, args.seconds)
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--output', default='solutions/one-shot-pg-planar-2026-10-01')
+    parser.add_argument('--seconds', type=float, default=300.)
+    args = parser.parse_args()
+    run(families.ROOT / args.output, args.seconds)

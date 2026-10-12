@@ -9,6 +9,9 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 import families_extended as families
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 
 SCREEN = [
@@ -72,13 +75,14 @@ def run(output, seconds, holdout):
         steps.loc[selected, key] = value
   steps.to_csv(output / 'timesteps.csv', index=False)
   assert set(runs.case_id) == set(requested), 'Not all planned cases were measured'
-  print('MEASURED ' + json.dumps(runs.status.value_counts().to_dict()), flush=True)
+  log.info("%s", 'MEASURED ' + json.dumps(runs.status.value_counts().to_dict()))
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--output', required=True)
-  parser.add_argument('--seconds', type=float, default=900.)
-  parser.add_argument('--holdout', action='store_true')
-  args = parser.parse_args()
-  run(families.ROOT / args.output, args.seconds, args.holdout)
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--output', required=True)
+    parser.add_argument('--seconds', type=float, default=900.)
+    parser.add_argument('--holdout', action='store_true')
+    args = parser.parse_args()
+    run(families.ROOT / args.output, args.seconds, args.holdout)

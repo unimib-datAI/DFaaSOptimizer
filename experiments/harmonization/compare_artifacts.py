@@ -18,6 +18,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from utils import run_log  # noqa: E402
+
+log = run_log.logger(__name__)
+
 COLUMNS = ("step", "algorithm_s", "wall_s", "parallel_phases", "workers")  # utils.step_time.COLUMNS
 STRUCTURAL = ("step", "parallel_phases", "workers")
 TIMING_COLUMNS = {"refinement.csv": {"seconds"}}  # diagnostic file -> its timing columns
@@ -165,9 +169,10 @@ def main(argv=None) -> int:
   parser.add_argument("--method", action="append", help="compare only these methods (default: all captured before)")
   args = parser.parse_args(argv)
   problems = compare_artifacts(args.before, args.after, args.method)
-  print("\n".join(problems) if problems else "artifacts match")
+  log.info("%s", "\n".join(problems) if problems else "artifacts match")
   return 1 if problems else 0
 
 
 if __name__ == "__main__":
-  sys.exit(main())
+  with run_log.open_run_log(None, 1):
+    sys.exit(main())

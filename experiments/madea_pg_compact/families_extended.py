@@ -28,6 +28,9 @@ from run_centralized_model import get_current_load, update_data
 from utils.centralized import encode_solution, validate_centralized_solution
 from utils.faasmacro import compute_centralized_objective
 from run_faasmacro import _available_cpu_count
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 METHODS = [('MADEA', run_faasmadea.run), ('MADEA-one-shot', decentralized_auction.run),
            ('MADEA-PG', madea_pg.run), ('PLASMA-Welfare', run_plasma_welfare)]
@@ -191,7 +194,7 @@ def run(output, deadline, workers, max_cases, plasma_workers=None, *, config=Non
       runs.append(row)
       pd.DataFrame(runs).to_csv(output / 'runs.csv', index=False)
       pd.DataFrame(steps).to_csv(output / 'timesteps.csv', index=False)
-      print(json.dumps({k: v for k, v in row.items() if k not in ('folder', 'input_hash')}), flush=True)
+      log.info("%s", json.dumps({k: v for k, v in row.items() if k not in ('folder', 'input_hash')}))
     if any(item['status'] == 'error' for item in runs if item['case_id'] == case['id']):
       break
   assert all(hashlib.sha256((ROOT / p).read_bytes()).hexdigest() == h
@@ -199,16 +202,17 @@ def run(output, deadline, workers, max_cases, plasma_workers=None, *, config=Non
   finished = dict(completed_runs=len(runs), timestep_records=len(steps),
                   finished_utc=datetime.now(timezone.utc).isoformat())
   (output / 'finished.json').write_text(json.dumps(finished, indent=2))
-  print('COMPLETE ' + json.dumps(finished), flush=True)
+  log.info("%s", 'COMPLETE ' + json.dumps(finished))
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--output', default='solutions/families-planar-hour-2026-10-01')
-  parser.add_argument('--deadline', required=True, help='UTC ISO timestamp')
-  parser.add_argument('--workers', type=int, default=4)
-  parser.add_argument('--plasma-workers', type=int, default=None)
-  parser.add_argument('--max-cases', type=int, default=52)
-  args = parser.parse_args()
-  run(ROOT / args.output, datetime.fromisoformat(args.deadline), args.workers, args.max_cases,
-      args.plasma_workers)
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--output', default='solutions/families-planar-hour-2026-10-01')
+    parser.add_argument('--deadline', required=True, help='UTC ISO timestamp')
+    parser.add_argument('--workers', type=int, default=4)
+    parser.add_argument('--plasma-workers', type=int, default=None)
+    parser.add_argument('--max-cases', type=int, default=52)
+    args = parser.parse_args()
+    run(ROOT / args.output, datetime.fromisoformat(args.deadline), args.workers, args.max_cases,
+        args.plasma_workers)

@@ -26,6 +26,9 @@ import families_extended as families
 
 REFERENCE_PROTOCOL = 'solutions/families-pg-standalone-hier-2026-10-09/protocol.json'
 import methods as _methods
+from utils import run_log
+
+log = run_log.logger(__name__)
 # harmonized methods only (DP local solves, shared pool, modelled time): methods.py
 METHODS = dict(_methods.HARMONIZED)
 SCALE_FAMILIES = ('synthetic-planar-cubic', 'zhang-regional', 'data7-pisa', 'wondernetwork')
@@ -108,34 +111,35 @@ def run_one(case, method, output, config):
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--catalog', type=Path, help='edge-dataset catalogue (only needed with --sample)')
-  parser.add_argument('--reference-root', type=Path, help='worktree holding the 09/10 reference protocol (default config source)')
-  parser.add_argument('--config', type=Path, help='full run configuration (JSON); overrides --reference-root')
-  parser.add_argument('--folder', default='solutions/catalog-sample-2026-10-10')
-  parser.add_argument('--seed', type=int, default=20261010)
-  parser.add_argument('--sample', action='store_true')
-  parser.add_argument('--case')
-  parser.add_argument('--method', choices=sorted(METHODS))
-  args = parser.parse_args()
-  folder = families.ROOT / args.folder
-  folder.mkdir(parents=True, exist_ok=True)
-  if args.sample:
-    cases = sample(args.catalog, args.seed)
-    (folder / 'sample.json').write_text(json.dumps(cases, indent=2))
-    for x in cases:
-      print(x['group'], x['family'], x['name'])
-  else:
-    cases = {x['id']: x for x in json.loads((folder / 'sample.json').read_text())}
-    if args.config:
-      config = json.loads(args.config.read_text())
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--catalog', type=Path, help='edge-dataset catalogue (only needed with --sample)')
+    parser.add_argument('--reference-root', type=Path, help='worktree holding the 09/10 reference protocol (default config source)')
+    parser.add_argument('--config', type=Path, help='full run configuration (JSON); overrides --reference-root')
+    parser.add_argument('--folder', default='solutions/catalog-sample-2026-10-10')
+    parser.add_argument('--seed', type=int, default=20261010)
+    parser.add_argument('--sample', action='store_true')
+    parser.add_argument('--case')
+    parser.add_argument('--method', choices=sorted(METHODS))
+    args = parser.parse_args()
+    folder = families.ROOT / args.folder
+    folder.mkdir(parents=True, exist_ok=True)
+    if args.sample:
+      cases = sample(args.catalog, args.seed)
+      (folder / 'sample.json').write_text(json.dumps(cases, indent=2))
+      for x in cases:
+        log.info("%s %s %s", x['group'], x['family'], x['name'])
     else:
-      config = json.loads((args.reference_root / REFERENCE_PROTOCOL).read_text())['config']
-    config['solver_options']['frankwolfe'] = dict(iterations=400, kappa=10.0, smoothing=1.0, max_rounds=20)
-    case = cases[args.case]
-    local = folder / 'instances' / case['name']
-    if local.exists():  # frozen copy shipped with the campaign folder
-      case['path'] = str(local.resolve())
-    out = folder / 'runs' / args.case / args.method
-    if not (out / 'finished.json').exists():
-      run_one(case, args.method, out, config)
+      cases = {x['id']: x for x in json.loads((folder / 'sample.json').read_text())}
+      if args.config:
+        config = json.loads(args.config.read_text())
+      else:
+        config = json.loads((args.reference_root / REFERENCE_PROTOCOL).read_text())['config']
+      config['solver_options']['frankwolfe'] = dict(iterations=400, kappa=10.0, smoothing=1.0, max_rounds=20)
+      case = cases[args.case]
+      local = folder / 'instances' / case['name']
+      if local.exists():  # frozen copy shipped with the campaign folder
+        case['path'] = str(local.resolve())
+      out = folder / 'runs' / args.case / args.method
+      if not (out / 'finished.json').exists():
+        run_one(case, args.method, out, config)

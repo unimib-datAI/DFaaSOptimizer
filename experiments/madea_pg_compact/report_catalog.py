@@ -5,6 +5,11 @@ import json
 import re
 
 import pandas as pd
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repository root: utils.run_log
+from utils import run_log  # noqa: E402
+
+log = run_log.logger(__name__)
 
 PAIRS = [('MADEA2', 'MADEA'), ('MADEA2-one-shot', 'MADEA-one-shot'), ('one-shot2-pg', 'one-shot-pg'),
          ('FaaS-MAFW', 'MADEA'), ('MAFW-PG', 'one-shot-pg'), ('one-shot2-pg', 'hierarchical-one-shot-pg'),
@@ -102,12 +107,13 @@ def main(folder, output):
   (output / 'comparison.md').write_text('\n'.join(lines))
   df.to_csv(output / 'runs.csv', index=False)
   W.to_csv(output / 'welfare.csv')
-  print('\n'.join(lines))
+  log.info("%s", '\n'.join(lines))
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--folder', type=Path, default=Path('solutions/catalog-sample-2026-10-10'))
-  parser.add_argument('--output', type=Path, default=Path('experiments/madea_pg_compact/results_catalog_2026_10_11'))
-  args = parser.parse_args()
-  main(args.folder, args.output)
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--folder', type=Path, default=Path('solutions/catalog-sample-2026-10-10'))
+    parser.add_argument('--output', type=Path, default=Path('experiments/madea_pg_compact/results_catalog_2026_10_11'))
+    args = parser.parse_args()
+    main(args.folder, args.output)

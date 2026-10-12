@@ -178,3 +178,13 @@ def test_call_site_inside_a_task_including_a_failure(now, monkeypatch):
       log.info("done")
     row = step_time.end_step(clock)
   assert row["algorithm_s"] == pytest.approx(4.0) and row["wall_s"] == pytest.approx(6.0)
+
+
+def test_quiet_nested_run_neither_suppresses_nor_leaks(capsys):
+  with run_log.open_run_log(None, 1):          # a report tool: INFO on stdout
+    log.info("report 1")
+    with run_log.open_run_log(None, 0):        # a runner with verbose 0, also on stdout
+      log.info("runner detail")
+      log.warning("runner warning")
+    log.info("report 2")
+  assert capsys.readouterr().out == "report 1\nrunner warning\nreport 2\n"

@@ -10,6 +10,9 @@ import pandas as pd
 import networkx as nx
 import families_extended as families
 import one_shot_pg
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 
 def run(source, output, merged, seconds, method='one-shot-pg'):
@@ -106,16 +109,17 @@ def run(source, output, merged, seconds, method='one-shot-pg'):
     f'dei {len(previous_methods)} metodi precedenti sono conservati integralmente. I tempi provengono '
     'quindi da sessioni distinte sulla stessa macchina.')
   (merged / 'protocol.json').write_text(json.dumps(original_protocol, indent=2))
-  print(f'EXTENDED {len(added_runs)} cases; previous measurements preserved', flush=True)
+  log.info('EXTENDED %s cases; previous measurements preserved', len(added_runs))
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--source', default='solutions/families-planar-hour-2026-10-01-adaptive')
-  parser.add_argument('--output', default='solutions/families-one-shot-pg-extension-2026-10-01')
-  parser.add_argument('--merged', default='solutions/families-five-methods-2026-10-01')
-  parser.add_argument('--seconds', type=float, default=600.)
-  parser.add_argument('--method', choices=('one-shot-pg', 'hierarchical-one-shot-pg'), default='one-shot-pg')
-  args = parser.parse_args()
-  run(families.ROOT / args.source, families.ROOT / args.output,
-      families.ROOT / args.merged, args.seconds, args.method)
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--source', default='solutions/families-planar-hour-2026-10-01-adaptive')
+    parser.add_argument('--output', default='solutions/families-one-shot-pg-extension-2026-10-01')
+    parser.add_argument('--merged', default='solutions/families-five-methods-2026-10-01')
+    parser.add_argument('--seconds', type=float, default=600.)
+    parser.add_argument('--method', choices=('one-shot-pg', 'hierarchical-one-shot-pg'), default='one-shot-pg')
+    args = parser.parse_args()
+    run(families.ROOT / args.source, families.ROOT / args.output,
+        families.ROOT / args.merged, args.seconds, args.method)

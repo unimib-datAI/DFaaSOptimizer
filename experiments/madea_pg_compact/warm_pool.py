@@ -17,6 +17,9 @@ import run_faasmacro as macro
 from models.sp import LSP
 from remote_experiments.instances import load_materialized_instance
 from run_centralized_model import get_current_load, update_data
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 
 def cold_solve(data, agents, model, solver, options, processes, prices=None):
@@ -55,7 +58,7 @@ def run(instance, output):
                    lifecycle='cold/startup' if step == 0 or mode == 'cold' else 'warm',
                    exact_match=True)
         rows.append(row)
-        print(json.dumps(row), flush=True)
+        log.info("%s", json.dumps(row))
   output.parent.mkdir(parents=True, exist_ok=True)
   output.write_text(json.dumps(dict(nodes=len(agents), functions=nf, planar=True,
     start_method=mp.get_start_method(), available_cpus=macro._available_cpu_count(),
@@ -64,8 +67,9 @@ def run(instance, output):
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--instance', default='solutions/madea-pg-compact-planar-temporal-2026-10-01/instances/n80-f10-s7')
-  parser.add_argument('--output', default='solutions/madea-pg-warm-pool-planar-2026-10-01/batches.json')
-  args = parser.parse_args()
-  run(args.instance, Path(args.output))
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--instance', default='solutions/madea-pg-compact-planar-temporal-2026-10-01/instances/n80-f10-s7')
+    parser.add_argument('--output', default='solutions/madea-pg-warm-pool-planar-2026-10-01/batches.json')
+    args = parser.parse_args()
+    run(args.instance, Path(args.output))

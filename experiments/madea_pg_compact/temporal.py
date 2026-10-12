@@ -22,6 +22,9 @@ from remote_experiments.instances import materialize_instance, load_materialized
 from run_centralized_model import get_current_load, update_data
 from utils.centralized import encode_solution, validate_centralized_solution
 from utils.faasmacro import compute_centralized_objective
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 
 def run(output, seconds):
@@ -79,14 +82,15 @@ def run(output, seconds):
                        wall_seconds=wall, final_flow=digest(x, y), final_replicas=digest(r),
                        feasible=True, status='ok', folder=folder)
             rows.append(row)
-            print(json.dumps({k: v for k, v in row.items() if k not in ('folder', 'final_flow', 'final_replicas')}), flush=True)
+            log.info("%s", json.dumps({k: v for k, v in row.items() if k not in ('folder', 'final_flow', 'final_replicas')}))
         except TimeoutError:
           rows.append(dict(nodes=nn, functions=nf, seed=seed, initial_backend=backend, proposal=proposal, status='timeout'))
         finally:
           signal.setitimer(signal.ITIMER_REAL, 0)
         pd.DataFrame(rows).to_csv(output / 'results.csv', index=False)
-  print(f'COMPLETE {len(rows)} timestep records', flush=True)
+  log.info('COMPLETE %s timestep records', len(rows))
 
 
 if __name__ == '__main__':
-  run(Path(sys.argv[1]), float(sys.argv[2]))
+  with run_log.open_run_log(None, 1):
+    run(Path(sys.argv[1]), float(sys.argv[2]))

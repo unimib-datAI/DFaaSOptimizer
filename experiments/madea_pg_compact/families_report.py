@@ -6,6 +6,11 @@ import json
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repository root: utils.run_log
+from utils import run_log  # noqa: E402
+
+log = run_log.logger(__name__)
 
 METHODS = ['MADEA', 'MADEA-one-shot', 'MADEA-PG', 'PLASMA-Welfare']
 
@@ -243,13 +248,14 @@ def run(source, output, pilot):
     '- [Metriche e verifiche](metrics.json)\n'
     '- [Protocollo, configurazione e hash del codice](protocol.json)']
   (output / 'report.md').write_text('\n\n'.join(report) + '\n')
-  print(json.dumps(metrics, indent=2))
+  log.info("%s", json.dumps(metrics, indent=2))
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('source', type=Path)
-  parser.add_argument('output', type=Path)
-  parser.add_argument('--pilot', type=Path)
-  args = parser.parse_args()
-  run(args.source, args.output, args.pilot)
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('source', type=Path)
+    parser.add_argument('output', type=Path)
+    parser.add_argument('--pilot', type=Path)
+    args = parser.parse_args()
+    run(args.source, args.output, args.pilot)

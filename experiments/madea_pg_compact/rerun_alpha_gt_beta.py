@@ -15,6 +15,9 @@ import one_shot_pg
 from ablate_hierarchical_madea_pg import SCREEN, HOLDOUT
 from remote_experiments.batch import Experiment
 from remote_experiments.instances import materialize_instance, validate_instance
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 
 def correct_instance(source, target):
@@ -85,9 +88,9 @@ def run(output, seconds):
       violations_after=sum(b >= 1 for b in ratios[1]),
       ratio_min=min(ratios[1]), ratio_max=max(ratios[1]), physical_inputs_identical=True))
   pd.DataFrame(audit).to_csv(output/'instance_audit.csv', index=False)
-  print('CORRECTED ' + json.dumps(dict(instances=len(audit),
+  log.info("%s", 'CORRECTED ' + json.dumps(dict(instances=len(audit),
         violations_before=sum(row['violations_before'] for row in audit),
-        violations_after=sum(row['violations_after'] for row in audit))), flush=True)
+        violations_after=sum(row['violations_after'] for row in audit))))
   planned = [case for case in available_cases if case['id'] in SCREEN+HOLDOUT]
   assert len(planned) == 12
 
@@ -125,12 +128,13 @@ def run(output, seconds):
   steps = pd.read_csv(output/'timesteps.csv')
   pg = steps[steps.pg_before.notna()]
   np.testing.assert_array_less(pg.pg_before.to_numpy()-1e-6, pg.welfare.to_numpy())
-  print('VERIFIED ' + json.dumps(dict(runs=len(runs), timesteps=len(steps))), flush=True)
+  log.info("%s", 'VERIFIED ' + json.dumps(dict(runs=len(runs), timesteps=len(steps))))
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--output', default='solutions/families-alpha-gt-beta-2026-10-01')
-  parser.add_argument('--seconds', type=float, default=1800.)
-  args = parser.parse_args()
-  run(families.ROOT/args.output, args.seconds)
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--output', default='solutions/families-alpha-gt-beta-2026-10-01')
+    parser.add_argument('--seconds', type=float, default=1800.)
+    args = parser.parse_args()
+    run(families.ROOT/args.output, args.seconds)

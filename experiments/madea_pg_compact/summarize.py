@@ -5,6 +5,10 @@ import sys
 
 import numpy as np
 import pandas as pd
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repository root: utils.run_log
+from utils import run_log  # noqa: E402
+
+log = run_log.logger(__name__)
 
 
 def summarize(output):
@@ -93,9 +97,10 @@ I tempi sono misure su un solo computer e una ripetizione per variante/istanza; 
 <h2>Confronti</h2>{pairs[keys + ['pg_throughput_speedup','wall_speedup','welfare_gain_pct','pg_budget_full','pg_budget_compact','compact_within_lower_cap','uncensored']].to_html(index=False, float_format=lambda a:f'{a:.3f}')}
 </html>'''
   (output / 'report.html').write_text(html)
-  print(json.dumps(metrics, indent=2))
-  print(summary.to_string(index=False))
+  log.info("%s", json.dumps(metrics, indent=2))
+  log.info("%s", summary.to_string(index=False))
 
 
 if __name__ == '__main__':
-  summarize(Path(sys.argv[1]))
+  with run_log.open_run_log(None, 1):
+    summarize(Path(sys.argv[1]))

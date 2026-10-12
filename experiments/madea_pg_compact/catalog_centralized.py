@@ -22,6 +22,9 @@ from models.model import LoadManagementModel
 from run_centralized_model import get_current_load, update_data
 from utils.centralized import validate_centralized_solution
 from utils.faasmacro import compute_centralized_objective
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 
 def _array(var, shape):
@@ -60,25 +63,26 @@ def solve(path, time_limit, threads=1, gap=1e-6):
 
 
 if __name__ == '__main__':
-  parser = ArgumentParser(description=__doc__)
-  parser.add_argument('--folder', default='solutions/catalog-sample-2026-10-10')
-  parser.add_argument('--case')
-  parser.add_argument('--path', help='instance folder (instead of --case)')
-  parser.add_argument('--time-limit', type=float, default=300.)
-  args = parser.parse_args()
-  folder = families.ROOT / args.folder
-  if args.path:
-    case = dict(id=Path(args.path).name, path=args.path)
-  else:
-    case = {x['id']: x for x in json.loads((folder / 'sample.json').read_text())}[args.case]
-    local = folder / 'instances' / case['name']
-    if local.exists():
-      case['path'] = str(local)
-  out = folder / 'runs' / case['id'] / 'centralized'
-  out.mkdir(parents=True, exist_ok=True)
-  if not (out / 'finished.json').exists():
-    row = dict(case_id=case['id'], method='centralized', time_limit=args.time_limit,
-               **solve(case['path'], args.time_limit))
-    pd.DataFrame([row]).to_csv(out / 'runs.csv', index=False)
-    (out / 'finished.json').write_text(json.dumps({'status': row['status']}))
-    print(json.dumps({k: v for k, v in row.items() if k != 'input_hash'}, default=str))
+  with run_log.open_run_log(None, 1):
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument('--folder', default='solutions/catalog-sample-2026-10-10')
+    parser.add_argument('--case')
+    parser.add_argument('--path', help='instance folder (instead of --case)')
+    parser.add_argument('--time-limit', type=float, default=300.)
+    args = parser.parse_args()
+    folder = families.ROOT / args.folder
+    if args.path:
+      case = dict(id=Path(args.path).name, path=args.path)
+    else:
+      case = {x['id']: x for x in json.loads((folder / 'sample.json').read_text())}[args.case]
+      local = folder / 'instances' / case['name']
+      if local.exists():
+        case['path'] = str(local)
+    out = folder / 'runs' / case['id'] / 'centralized'
+    out.mkdir(parents=True, exist_ok=True)
+    if not (out / 'finished.json').exists():
+      row = dict(case_id=case['id'], method='centralized', time_limit=args.time_limit,
+                 **solve(case['path'], args.time_limit))
+      pd.DataFrame([row]).to_csv(out / 'runs.csv', index=False)
+      (out / 'finished.json').write_text(json.dumps({'status': row['status']}))
+      log.info("%s", json.dumps({k: v for k, v in row.items() if k != 'input_hash'}, default=str))

@@ -33,6 +33,9 @@ import json
 import os
 
 import logging
+from utils import run_log
+
+log = run_log.logger(__name__)
 logging.getLogger('pyomo.core').setLevel(logging.ERROR)
 
 
@@ -373,7 +376,7 @@ def results_postprocessing(
   for exp_idx, exp_description_tuple in enumerate(
       solution_folders["experiments_list"]
     ):
-    print(f"Postprocessing exp: {exp_description_tuple}")
+    log.info('Postprocessing exp: %s', exp_description_tuple)
     # prepare folder to store results
     exp_description = "_".join([str(s) for s in exp_description_tuple])
     exp_plot_folder = os.path.join(plot_folder, exp_description)
@@ -1251,8 +1254,7 @@ def run(
       if "experiments_list" in old_instance_paths:
         old_exp_path = find_previous_instance(old_instance_paths, exp_value, seed)
         if old_exp_path is None:
-          print(f"WARNING: {[exp_value, seed]} not in {from_instances}/experiments.json: "
-                "a new instance is generated", flush=True)
+          log.warning('WARNING: %s not in %s/experiments.json: a new instance is generated', [exp_value, seed], from_instances)
         else:
           config["limits"]["path"] = old_exp_path
           if config["limits"]["load"]["trace_type"] in ("load_existing", "load_filtered"):
@@ -1504,68 +1506,69 @@ def run(
 
 
 if __name__ == "__main__":
-  args = parse_arguments()
-  config_file = args.config
-  n_experiments = args.n_experiments
-  methods = args.methods
-  reference_method = args.reference_method
-  postprocessing_only = args.postprocessing_only
-  postprocessing_list = args.postprocessing_list
-  fix_r = args.fix_r
-  sp_parallelism = args.sp_parallelism
-  enable_plotting = args.enable_plotting
-  loop_over = args.loop_over
-  # load configuration file
-  base_config = load_configuration(config_file)
-  base_solution_folder = base_config["base_solution_folder"]
-  if not postprocessing_only:
-    # write configuration file in the base folder
-    os.makedirs(base_solution_folder, exist_ok = True)
-    with open(os.path.join(base_solution_folder, "config.json"), "w") as ost:
-      ost.write(json.dumps(base_config, indent = 2))
-    # run
-    run(
-      base_config, 
-      base_solution_folder, 
-      n_experiments, 
-      methods,
-      reference_method,
-      fix_r,
-      sp_parallelism,
-      enable_plotting,
-      loop_over
-    )
-  else:
-    if not postprocessing_list:
-      solution_folders = {}
-      with open(
-        os.path.join(base_solution_folder, "experiments.json"), "r"
-      ) as ist:
-        solution_folders = json.load(ist)
-      results_postprocessing(
-        solution_folders, 
+  with run_log.open_run_log(None, 1):
+    args = parse_arguments()
+    config_file = args.config
+    n_experiments = args.n_experiments
+    methods = args.methods
+    reference_method = args.reference_method
+    postprocessing_only = args.postprocessing_only
+    postprocessing_list = args.postprocessing_list
+    fix_r = args.fix_r
+    sp_parallelism = args.sp_parallelism
+    enable_plotting = args.enable_plotting
+    loop_over = args.loop_over
+    # load configuration file
+    base_config = load_configuration(config_file)
+    base_solution_folder = base_config["base_solution_folder"]
+    if not postprocessing_only:
+      # write configuration file in the base folder
+      os.makedirs(base_solution_folder, exist_ok = True)
+      with open(os.path.join(base_solution_folder, "config.json"), "w") as ost:
+        ost.write(json.dumps(base_config, indent = 2))
+      # run
+      run(
+        base_config, 
         base_solution_folder, 
-        loop_over, 
+        n_experiments, 
         methods,
-        reference_method
+        reference_method,
+        fix_r,
+        sp_parallelism,
+        enable_plotting,
+        loop_over
       )
     else:
-      for foldername in os.listdir(base_solution_folder):
-        if (
-            not foldername.startswith(".") and 
-              not foldername.startswith("postprocessing")
-          ):
-          bsf = os.path.join(base_solution_folder, foldername)
-          print(f"{'-'*80}\n{bsf}")
-          solution_folders = {}
-          with open(
-            os.path.join(bsf, "experiments.json"), "r"
-          ) as ist:
-            solution_folders = json.load(ist)
-          results_postprocessing(
-            solution_folders, 
-            bsf, 
-            loop_over, 
-            methods,
-            reference_method
-          )
+      if not postprocessing_list:
+        solution_folders = {}
+        with open(
+          os.path.join(base_solution_folder, "experiments.json"), "r"
+        ) as ist:
+          solution_folders = json.load(ist)
+        results_postprocessing(
+          solution_folders, 
+          base_solution_folder, 
+          loop_over, 
+          methods,
+          reference_method
+        )
+      else:
+        for foldername in os.listdir(base_solution_folder):
+          if (
+              not foldername.startswith(".") and 
+                not foldername.startswith("postprocessing")
+            ):
+            bsf = os.path.join(base_solution_folder, foldername)
+            log.info('%s\n%s', '-'*80, bsf)
+            solution_folders = {}
+            with open(
+              os.path.join(bsf, "experiments.json"), "r"
+            ) as ist:
+              solution_folders = json.load(ist)
+            results_postprocessing(
+              solution_folders, 
+              bsf, 
+              loop_over, 
+              methods,
+              reference_method
+            )

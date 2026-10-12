@@ -19,6 +19,9 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "experiments" / "madea_pg_compact"))
 
 import pandas as pd  # noqa: E402
+from utils import run_log
+
+log = run_log.logger(__name__)
 
 DATA = ROOT / "tests" / "data" / "harmonization"
 CONFIG = ROOT / "experiments" / "madea_pg_compact" / "catalog_config_overnight.json"
@@ -146,27 +149,28 @@ def capture_artifacts(destination: Path, names: list[str] | None = None, solver:
     manifest["methods"][name] = entry
     destination.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=1, default=str))
-    print(f"{name}: {entry['status']}", flush=True)
+    log.info('%s: %s', name, entry['status'])
 
 
 def main(output: Path) -> None:
   result = {name: {i.name: welfare(run, i) for i in instances()} for name, run in runners().items()}
   output.write_text(json.dumps(result, indent=1))
-  print(json.dumps(result, indent=1))
+  log.info("%s", json.dumps(result, indent=1))
 
 
 if __name__ == "__main__":
-  parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-  parser.add_argument("output", nargs="?", type=Path, help="welfare JSON of the harmonized methods")
-  parser.add_argument("--artifacts", type=Path, help="capture raw run folders here instead")
-  parser.add_argument("--method", action="append", help="capture only these methods (default: all)")
-  parser.add_argument("--solver", default=DEFAULT_SOLVER, help="solver of the centralized model")
-  args = parser.parse_args()
-  if args.artifacts is None and args.output is None:
-    parser.error("give a welfare JSON path or --artifacts DIR")
-  if args.artifacts is None:
-    main(args.output)
-  else:
-    capture_artifacts(args.artifacts, args.method, args.solver)
-    statuses = json.loads((args.artifacts / "manifest.json").read_text())["methods"]
-    sys.exit(0 if all(statuses[n]["status"] == "ok" for n in (args.method or statuses)) else 1)
+  with run_log.open_run_log(None, 1):
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("output", nargs="?", type=Path, help="welfare JSON of the harmonized methods")
+    parser.add_argument("--artifacts", type=Path, help="capture raw run folders here instead")
+    parser.add_argument("--method", action="append", help="capture only these methods (default: all)")
+    parser.add_argument("--solver", default=DEFAULT_SOLVER, help="solver of the centralized model")
+    args = parser.parse_args()
+    if args.artifacts is None and args.output is None:
+      parser.error("give a welfare JSON path or --artifacts DIR")
+    if args.artifacts is None:
+      main(args.output)
+    else:
+      capture_artifacts(args.artifacts, args.method, args.solver)
+      statuses = json.loads((args.artifacts / "manifest.json").read_text())["methods"]
+      sys.exit(0 if all(statuses[n]["status"] == "ok" for n in (args.method or statuses)) else 1)

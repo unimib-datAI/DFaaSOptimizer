@@ -197,3 +197,12 @@ def test_old_welfare_interface_unchanged():
   values = capture_baseline.welfare(methods.HARMONIZED["MADEA"], instance)
   baseline = json.loads((capture_baseline.DATA / "baseline.json").read_text())
   assert values == baseline["MADEA"][instance.name]
+
+
+def test_cli_reports_on_stdout(pair):
+  import subprocess
+  before, after = pair
+  done = subprocess.run([sys.executable, str(ROOT / "experiments/harmonization/compare_artifacts.py"),
+                         str(before), str(after)], capture_output=True, text=True,
+                        cwd=str(before.parent))   # outside the repository: the script finds its root
+  assert done.returncode == 0 and done.stdout == "artifacts match\n"
