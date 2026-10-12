@@ -221,3 +221,10 @@ def test_runner_failure_releases_pool_clock_and_log(tmp_path, monkeypatch):
   folder = Path(decentralized_diffusion.run(config, 0, log_on_file=True, disable_plotting=True))
   assert (folder / "out.log").read_text().startswith("t = 0\n")
   assert pd.read_csv(folder / "runtime.csv")["step"].tolist() == [0, 1]
+
+
+@pytest.mark.parametrize("limit, drawn", [(None, True), (1, False), (2, True)])
+def test_plot_size_limit(tmp_path, limit, drawn):
+  outputs = {"LSP": run_frame.Output(plot_filename="sp.png", plot_max_size=limit), "LSPc": run_frame.Output()}
+  folder = _run(_config(tmp_path), FakeStep(), outputs, disable_plotting=False)   # Nn = 2, Nf = 1
+  assert (folder / "sp.png").exists() == drawn
