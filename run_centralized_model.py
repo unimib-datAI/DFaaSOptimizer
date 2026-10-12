@@ -6,6 +6,7 @@ from utils.common import (
   load_configuration,
   NpEncoder
 )
+from utils import step_time
 from utils.centralized import get_current_load, decode_solution
 from generators.generate_data import generate_data, update_data
 from generators.generate_load import generate_load_traces
@@ -282,6 +283,16 @@ def join_complete_solution(
   return solution, offloaded, detailed_fwd_solution
 
 
+def solver_threads(solver_name: str, solver_options: dict) -> int:
+  """Threads of the centralized solve: an explicit positive setting, 1 for a
+  single-threaded backend, 0 when automatic or unknown."""
+  for key in ("Threads", "threads"):
+    value = solver_options.get(key)
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+      return value
+  return 1 if solver_name in {"glpk", "glpsol"} else 0
+
+
 def solve_instance(
     M: BaseLoadManagementModel, 
     data: dict, 
@@ -416,14 +427,13 @@ def run(
   if not generate_only or filter_traces:
     obj_dict = {}
     tc_dict = {}
-    runtime_dict = {}
+    runtime_rows = []
     for M in models:
       if verbose > 0:
         print(f"### solving model {M.name}", file = log_stream, flush = True)
       complete_solution = init_complete_solution()
       obj_values = []
       termination_conditions = []
-      runtimes = []
       r = None
       steps = run_steps(config)
       for t in steps:
@@ -434,15 +444,19 @@ def run(
         # update data
         data = update_data(base_instance_data, {"incoming_load": incoming_load})
         # solve
+        started = step_time.now()
         x, y, z, r, xi, omega, rho, U, obj, runtime, tc = solve_instance(
           M, data, solver_name, solver_options
         )
+        runtime_rows.append(dict(
+          step = t, algorithm_s = runtime, wall_s = step_time.now() - started,
+          parallel_phases = 0, workers = solver_threads(solver_name, solver_options)
+        ))
         complete_solution = decode_solution(
           x, y, z, r, xi, rho, U, complete_solution
         )
         obj_values.append(obj)
         termination_conditions.append(tc)
-        runtimes.append(runtime)
         # save checkpoint
         if checkpoint_due(t, steps, checkpoint_interval):
           save_checkpoint(
@@ -470,7 +484,6 @@ def run(
             )
       obj_dict[M.name] = obj_values
       tc_dict[M.name] = termination_conditions
-      runtime_dict[M.name] = runtimes
       # join
       solution, offloaded, detailed_fwd_solution = join_complete_solution(
         complete_solution
@@ -504,9 +517,7 @@ def run(
     pd.DataFrame(tc_dict).to_csv(
       os.path.join(solution_folder, "termination_condition.csv"), index = False
     )
-    pd.DataFrame(runtime_dict).to_csv(
-      os.path.join(solution_folder, "runtime.csv"), index = False
-    )
+    step_time.write_runtime(solution_folder, runtime_rows)
     if verbose > 0:
       print(
         f"All solutions saved in: {solution_folder}", 

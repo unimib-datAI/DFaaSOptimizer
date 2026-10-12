@@ -2,6 +2,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from utils import step_time
 import pyomo.environ as pyo
 import pytest
 
@@ -61,8 +63,8 @@ def _assert_artifacts(folder, column):
   assert np.isfinite(pd.to_numeric(obj[column], errors="coerce")).all()
 
   runtime = pd.read_csv(Path(folder, "runtime.csv"))
-  assert "tot" in runtime.columns
-  assert (runtime["tot"] >= 0).all()
+  assert tuple(runtime.columns) == step_time.COLUMNS
+  assert (runtime["algorithm_s"] >= 0).all() and (runtime["wall_s"] >= runtime["algorithm_s"]).all()
 
   assert Path(folder, "termination_condition.csv").exists()
   assert Path(folder, "LSPc_solution.csv").exists()
@@ -118,3 +120,36 @@ def test_br_r_reproducible(tmp_path):
   ob = pd.read_csv(Path(fb, "obj.csv"))["FaaS-MABR-R"].to_numpy()
   assert oa.shape == ob.shape and oa.shape[0] >= 1
   assert np.allclose(oa, ob)
+
+
+@pytest.mark.parametrize("module_name, runner_name", [
+  ("decentralized_bestresponse", "run_br_s"), ("decentralized_bestresponse", "run_br_o"),
+  ("decentralized_potentialgame", "run_pg_s"), ("decentralized_potentialgame", "run_pg_r"),
+])
+def test_sequential_sweeps_run_on_the_step_clock_with_untimed_observers(tmp_path, monkeypatch,
+                                                                        module_name, runner_name):
+  import importlib
+  import sys
+  import time
+  sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "experiments" / "harmonization"))
+  from capture_baseline import capture_config, instances
+  module = importlib.import_module(module_name)
+  original, calls = module.compute_centralized_objective, []
+
+  def slow_objective(*args, **kwargs):  # observer: global welfare of the incumbent
+    calls.append(1)
+    time.sleep(0.02)
+    return original(*args, **kwargs)
+
+  monkeypatch.setattr(module, "compute_centralized_objective", slow_objective)
+  config = capture_config(instances()[0], tmp_path, runner_name)
+  config["verbose"] = 0
+  folder = getattr(module, runner_name)(config, 0, log_on_file=True, disable_plotting=True)
+  runtime = pd.read_csv(Path(folder, "runtime.csv"))
+  assert tuple(runtime.columns) == step_time.COLUMNS and runtime["step"].tolist() == [0, 1]
+  assert calls and (runtime["wall_s"] - runtime["algorithm_s"]).sum() >= 0.02 * len(calls) * 0.9
+  assert (runtime["parallel_phases"] >= 1).all()          # the parallel initialization stays a phase
+  termination = pd.read_csv(Path(folder, "termination_condition.csv")).iloc[:, 1]
+  totals = [float(t.rsplit("total runtime: ", 1)[1].rstrip(")")) for t in termination]
+  assert all(total <= a + 1e-9 for total, a in zip(totals, runtime["algorithm_s"]))
+  assert not step_time.active()

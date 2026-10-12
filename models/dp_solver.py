@@ -7,12 +7,12 @@ max_j beta[i,j,f] over outgoing neighbors, or offloading is disabled if isolated
 """
 from math import ceil, floor, isfinite, gcd
 from functools import reduce
-from time import perf_counter
 
 import numpy as np
 import pyomo.environ as pyo
 
 from models import sp as sp_models
+from utils import step_time
 from plasma.core.sbm import minimize_replica_costs
 
 _SUPPORTED = {
@@ -27,7 +27,7 @@ def try_solve_local(model, data):
   """Return an exact local solution, or None to retain the Pyomo solve path."""
   if type(model) not in _SUPPORTED or sp_models.PYO_VAR_TYPE is not pyo.NonNegativeIntegers:
     return None
-  started = perf_counter()
+  started = step_time.now()
   name = model.name
   detailed = type(model) is sp_models.LSP_detailed
   restricted = name.startswith('LSPr')
@@ -171,7 +171,7 @@ def try_solve_local(model, data):
     objective = sum(costs[f][r] for f, r in enumerate(replicas))
   x, omega, z, r = map(list, zip(*chosen))
   result = dict(x=x, r=r, obj=objective, solver_status='ok', solution_exists=True,
-                termination_condition='optimal', runtime=perf_counter() - started)
+                termination_condition='optimal', runtime=step_time.now() - started)
   if detailed:
     result['obj'] = -objective
     result['y'] = [omega[f] if j == destinations[f] else 0

@@ -38,7 +38,6 @@ from heuristic_coordinator import GreedyCoordinator
 from utils import step_time
 
 import multiprocessing as mpp
-import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime
@@ -108,9 +107,9 @@ def _solve_parallel_batch(task):
   init_parallel_worker(data, options, solver, model)
   out = []
   for agent in agents:
-    started = time.perf_counter()  # the node's own computation, without transfer
+    started = step_time.now()  # the node's own computation, without transfer
     agent_id, result = solve_single_agent(agent, prices)
-    out.append((agent_id, result, time.perf_counter() - started))
+    out.append((agent_id, result, step_time.now() - started))
   return out
 
 

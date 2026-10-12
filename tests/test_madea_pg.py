@@ -7,6 +7,7 @@ import pyomo.environ as pyo
 import pytest
 
 import madea_pg
+from utils import step_time
 import run_faasmadea
 from hierarchical_auction import madea_level_cycles_runner
 from postprocessing import load_solution
@@ -205,7 +206,7 @@ def test_proportional_budget_reaches_local_solver(monkeypatch, per_node, remaini
     limits.append(options["TimeLimit"])
     return np.array([5.]), np.array([1.]), np.array([0.]), 0.
   monkeypatch.setattr(madea_pg, "propose_node_move", propose)
-  monkeypatch.setattr(madea_pg.time, "monotonic", lambda: 10.)
+  monkeypatch.setattr(step_time, "perf_counter", lambda: 10.)
   result, stats = madea_pg.refine_solution(data, solution, {
     "solver_name": "gurobi", "solver_options": {
       "madea_pg": {"time_limit": 5., "time_limit_per_node": per_node},
@@ -230,7 +231,7 @@ def test_glpk_whole_second_guard_only_without_dp(monkeypatch, use_dp, expected):
     limits.append(options["TimeLimit"])
     return np.array([5.]), np.array([1.]), np.array([0.]), 0.
   monkeypatch.setattr(madea_pg, "propose_node_move", propose)
-  monkeypatch.setattr(madea_pg.time, "monotonic", lambda: 10.)
+  monkeypatch.setattr(step_time, "perf_counter", lambda: 10.)
   madea_pg.refine_solution(data, solution, {
     "solver_name": "glpk", "solver_options": {"general": {"use_dp": use_dp}},
   }, 0.75)
@@ -241,3 +242,76 @@ def test_glpk_whole_second_guard_only_without_dp(monkeypatch, use_dp, expected):
 def test_invalid_proportional_budget_fails_early(value):
   with pytest.raises(ValueError, match="madea_pg.time_limit_per_node"):
     madea_pg.run({"solver_options": {"madea_pg": {"time_limit_per_node": value}}})
+
+
+class _FakeClock:
+  def __init__(self):
+    self.t = 0.0
+
+  def __call__(self):
+    return self.t
+
+
+def _refinement_case(monkeypatch, propose_seconds, observer_seconds=0.):
+  from test_review_distributed_regressions import _two_node_data
+  from run_faasmacro import combine_solutions
+  clock = _FakeClock()
+  monkeypatch.setattr(step_time, "perf_counter", clock)
+  data = _two_node_data()
+  solution = combine_solutions(
+    2, 1, data, data[None]["incoming_load"], np.full((2, 1), 5.), np.ones((2, 1)),
+    np.zeros(2), None, np.zeros((2, 2, 1)), None, None, None, None,
+  )
+  limits, welfare = [], madea_pg.compute_centralized_objective
+
+  def propose(node, cap, y, data, model, solver, options, verbose):
+    limits.append(options["TimeLimit"])
+    clock.t += propose_seconds
+    return np.array([5.]), np.array([1.]), np.array([0.]), 0.   # no improvement
+
+  def slow_welfare(*args):
+    clock.t += observer_seconds                                  # observer only
+    return welfare(*args)
+
+  monkeypatch.setattr(madea_pg, "propose_node_move", propose)
+  monkeypatch.setattr(madea_pg, "compute_centralized_objective", slow_welfare)
+  config = {"solver_name": "gurobi", "solver_options": {"madea_pg": {"time_limit": 100., "max_sweeps": 1}}}
+  return clock, data, solution, config, limits
+
+
+@pytest.mark.parametrize("observer_seconds", [0., 1.])
+def test_refinement_after_a_parallel_phase_counts_on_the_step_clock(monkeypatch, observer_seconds):
+  clock, data, solution, config, limits = _refinement_case(monkeypatch, 2., observer_seconds)
+  step = step_time.start_step()
+  with step_time.parallel_phase():
+    with step_time.task(0):
+      clock.t += 2.
+    with step_time.task(1):
+      clock.t += 3.
+  remaining = 10. - step_time.current_modelled()
+  assert remaining == pytest.approx(7.)
+  _, stats = madea_pg.refine_solution(data, solution, config, remaining)
+  assert stats["time_budget"] == pytest.approx(7.) and stats["seconds"] == pytest.approx(4.)
+  assert limits == [pytest.approx(7.), pytest.approx(5.)]   # the remaining budget, observers excluded
+  row = step_time.end_step(step)
+  assert row["algorithm_s"] == pytest.approx(7.)
+  assert row["parallel_phases"] == 3   # the coordination phase + one (sequential) phase per node move
+  assert row["wall_s"] == pytest.approx(9. + 2 * observer_seconds)
+
+
+def test_standalone_refinement_enforces_its_budget_without_a_step_clock(monkeypatch):
+  clock, data, solution, config, limits = _refinement_case(monkeypatch, 4.)
+  config["solver_options"]["madea_pg"]["time_limit"] = 5.
+  assert not step_time.active()
+  _, stats = madea_pg.refine_solution(data, solution, config)
+  assert limits == [pytest.approx(5.), pytest.approx(1.)] and stats["seconds"] == pytest.approx(8.)
+  assert not step_time.active()
+
+
+def test_refinement_without_budget_left_on_the_step_clock_does_not_solve(monkeypatch):
+  clock, data, solution, config, limits = _refinement_case(monkeypatch, 1.)
+  step = step_time.start_step()
+  clock.t += 10.
+  _, stats = madea_pg.refine_solution(data, solution, config, 10. - step_time.current_modelled())
+  assert limits == [] and stats["reason"] == "time budget exhausted"
+  step_time.cancel_step(step)

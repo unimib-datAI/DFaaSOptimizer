@@ -3,6 +3,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from utils import step_time
 import pyomo.environ as pyo
 import pytest
 from parse import parse
@@ -61,8 +63,8 @@ def _assert_artifacts(folder, column):
   assert len(obj) >= 1
   assert np.isfinite(pd.to_numeric(obj[column], errors="coerce")).all()
   runtime = pd.read_csv(Path(folder, "runtime.csv"))
-  assert "tot" in runtime.columns
-  assert (runtime["tot"] >= 0).all()
+  assert tuple(runtime.columns) == step_time.COLUMNS
+  assert (runtime["algorithm_s"] >= 0).all() and (runtime["wall_s"] >= runtime["algorithm_s"]).all()
   tc = pd.read_csv(Path(folder, "termination_condition.csv"))
   assert len(tc) >= 1
   for s in tc["0"]:

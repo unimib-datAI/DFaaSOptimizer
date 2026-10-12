@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from math import isfinite
 from numbers import Integral
 import multiprocessing as mp
-from time import perf_counter
 
 import numpy as np
 
@@ -283,9 +282,9 @@ def _solve_plan(job):
 
 def _timed_plan(job):
   """Worker side: the plan and the node's own computation time."""
-  started = perf_counter()
+  started = step_time.now()
   plan = _solve_plan(job)
-  return plan, perf_counter() - started
+  return plan, step_time.now() - started
 
 
 class WelfareEngine(PlasmaEngine):

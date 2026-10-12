@@ -25,6 +25,7 @@ from run_faasmadea import (
 )
 from utils.common import checkpoint_due, run_steps
 from utils.centralized import check_feasibility, encode_solution
+from utils import step_time
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.sp import (
@@ -207,16 +208,6 @@ def reoptimize_node(
   return np.array(sp_omega[node, :], dtype=float), float(runtime)
 
 
-def compute_sweep_runtime(
-    elapsed: float, reopt_runtime: float, n_active: int
-  ) -> float:
-  bookkeeping_runtime = max(0.0, elapsed - reopt_runtime)
-  amortized_bookkeeping = (
-    bookkeeping_runtime / n_active if n_active else bookkeeping_runtime
-  )
-  return reopt_runtime + amortized_bookkeeping
-
-
 def parse_arguments() -> argparse.Namespace:
   parser = argparse.ArgumentParser(
     description="Run FaaS-MABR",
@@ -303,14 +294,14 @@ def _run(
   spc_complete_solution = init_complete_solution()
   obj_dict = {"LSPr_final": []}
   tc_dict = {"LSPr": []}
-  runtime_list = []
+  runtime_rows = []
   for t in steps:
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
-    total_runtime = 0
-    ss = datetime.now()
+    # sequential sweeps: wall time minus observers; the initialization is a parallel phase
+    clock = step_time.start_step()
     sp_data = deepcopy(data)
     if opt_solution is not None:
       _, _, _, opt_r, _ = encode_solution(
@@ -327,7 +318,6 @@ def _run(
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism
     )
-    total_runtime += sp_runtime["tot"]
     it = 0
     stop_searching = False
     best_solution_so_far = None
@@ -342,7 +332,6 @@ def _run(
     fairness = np.zeros((Nn, Nf))
     n_accepted_queue = deque(maxlen=patience)
     while not stop_searching:
-      s = datetime.now()
       capacity, residual_capacity, ell = compute_residual_capacity(
         sp_x, y, sp_r, sp_data
       )
@@ -350,7 +339,6 @@ def _run(
       coordination_rho = (
         sp_rho if opt_solution is None else np.zeros_like(sp_rho)
       )
-      total_runtime += (datetime.now() - s).total_seconds()
       reopt_fn = None
       if response == "reopt":
         def reopt_fn(node, omega_ub_row):
@@ -359,8 +347,7 @@ def _run(
             general_solver_options, parallelism,
             use_fixed_r=(opt_solution is not None),
           )
-      s = datetime.now()
-      sweep_y, memory_bids, n_active, _, reopt_runtime = best_response_sweep(
+      sweep_y, memory_bids, n_active, _, _ = best_response_sweep(
         sp_omega, residual_capacity, sp_data, neighborhood, coordination_rho,
         br_options, latency, fairness,
         force_memory_bids=(
@@ -371,8 +358,6 @@ def _run(
         order=order, response=response, rng=rng, reopt_fn=reopt_fn,
         current_y=y, tolerance=tolerance,
       )
-      rt = (datetime.now() - s).total_seconds()
-      total_runtime += compute_sweep_runtime(rt, reopt_runtime, n_active)
       allocation_changed = (np.abs(sweep_y) > tolerance).any()
       rmp_omega = y.sum(axis=1)
       additional_replicas = np.zeros((Nn, Nf))
@@ -389,41 +374,40 @@ def _run(
           spr, sp_data, agents, solver_name, general_solver_options,
           y, rmp_omega, parallelism
         )
-        total_runtime += spr_runtime
         sp_x, _, _, _, sp_r, sp_rho = spr_sol
         omega = sp_omega - rmp_omega
         omega[np.abs(omega) < tolerance] = 0.0
       if len(memory_bids) > 0 and not (additional_replicas > 0).any():
-        s = datetime.now()
         additional_replicas, sp_rho = start_additional_replicas(
           memory_bids, sp_r, sp_data, sp_rho
         )
         sp_r += additional_replicas
-        total_runtime += (datetime.now() - s).total_seconds()
       mabr_no_progress = (
         not allocation_changed and not (additional_replicas > tolerance).any()
       )
-      csol = combine_solutions(
-        Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
-        None, y, None, None, None, None
-      )
-      cobj = compute_centralized_objective(
-        sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
-      )
-      feas = check_feasibility(
-        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-        csol["sp"]["r"], csol["sp"]["U"], sp_data
-      )
-      if not (feas[0]):
-        raise RuntimeError(feas[1])
-      if spr_obj < best_cost_so_far or it == 0:
-        best_cost_so_far = spr_obj
-        best_solution_so_far = deepcopy(csol)
-        best_it_so_far = it
-      if cobj > best_centralized_cost:
-        best_centralized_cost = cobj
-        best_centralized_solution = deepcopy(csol)
-        best_centralized_it = it
+      with step_time.untimed():  # observers: validation and incumbents
+        csol = combine_solutions(
+          Nn, Nf, sp_data, loadt, sp_x, sp_r, sp_rho,
+          None, y, None, None, None, None
+        )
+        cobj = compute_centralized_objective(
+          sp_data, csol["sp"]["x"], csol["sp"]["y"], csol["sp"]["z"]
+        )
+        feas = check_feasibility(
+          csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+          csol["sp"]["r"], csol["sp"]["U"], sp_data
+        )
+        if not (feas[0]):
+          raise RuntimeError(feas[1])
+        if spr_obj < best_cost_so_far or it == 0:
+          best_cost_so_far = spr_obj
+          best_solution_so_far = deepcopy(csol)
+          best_it_so_far = it
+        if cobj > best_centralized_cost:
+          best_centralized_cost = cobj
+          best_centralized_solution = deepcopy(csol)
+          best_centralized_it = it
+      total_runtime = step_time.current_modelled()
       stop_searching, why_stop_searching = check_stopping_criteria(
         it, max_iterations, blackboard, omega, rmp_omega,
         a=additional_replicas, memory_bids=memory_bids,
@@ -435,31 +419,33 @@ def _run(
       if not stop_searching:
         it += 1
       else:
-        sp_complete_solution, _, objf = decode_solutions(
-          sp_data, best_solution_so_far, sp_complete_solution, None
-        )
-        spc_complete_solution, _, _ = decode_solutions(
-          sp_data, best_centralized_solution, spc_complete_solution, None
-        )
-        obj_dict["LSPr_final"].append(objf)
-        tc_dict["LSPr"].append(
-          f"{why_stop_searching} "
-          f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
-          f"best centralized it: {best_centralized_it}; "
-          f"total runtime: {total_runtime})"
-        )
-        if checkpoint_due(t, steps, checkpoint_interval):
-          save_checkpoint(
-            sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+        with step_time.untimed():  # output
+          sp_complete_solution, _, objf = decode_solutions(
+            sp_data, best_solution_so_far, sp_complete_solution, None
           )
-          save_checkpoint(
-            spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+          spc_complete_solution, _, _ = decode_solutions(
+            sp_data, best_centralized_solution, spc_complete_solution, None
           )
-    runtime_list.append(total_runtime)
+          obj_dict["LSPr_final"].append(objf)
+          tc_dict["LSPr"].append(
+            f"{why_stop_searching} "
+            f"(it: {it}; obj. deviation: {None}; best it: {best_it_so_far}; "
+            f"best centralized it: {best_centralized_it}; "
+            f"total runtime: {total_runtime})"
+          )
+          if checkpoint_due(t, steps, checkpoint_interval):
+            save_checkpoint(
+              sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+            )
+            save_checkpoint(
+              spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+            )
+    row = step_time.end_step(clock)
+    runtime_rows.append(dict(step=t, **row))
     if verbose > 0:
       print(
-        f"    TOTAL RUNTIME [s] = {total_runtime} "
-        f"(wallclock: {(datetime.now() - ss).total_seconds()})",
+        f"    TOTAL RUNTIME [s] = {row['algorithm_s']} "
+        f"(wallclock: {row['wall_s']})",
         file=log_stream, flush=True
       )
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
@@ -489,9 +475,7 @@ def _run(
   pd.DataFrame(tc_dict["LSPr"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
   )
-  pd.DataFrame({"tot": runtime_list}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   if verbose > 0:
     print(f"All solutions saved in: {solution_folder}", file=log_stream, flush=True)
   if log_on_file:

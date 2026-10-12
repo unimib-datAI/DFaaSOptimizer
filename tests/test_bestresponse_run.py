@@ -81,9 +81,3 @@ def test_run_br_o_uses_fixed_replicas_and_does_not_mutate_options(tmp_path, monk
   assert (seen["coordination_rho"] == 0).all()
   assert len(decoded) == 2
   assert "latency_weight" not in config["solver_options"]["br_o"]
-
-
-def test_mabr_runtime_excludes_reoptimization_before_amortizing():
-  compute = getattr(mabr, "compute_sweep_runtime", None)
-  assert compute is not None
-  assert compute(elapsed=11.0, reopt_runtime=10.0, n_active=2) == 10.5

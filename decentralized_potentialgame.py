@@ -22,6 +22,7 @@ from run_faasmadea import (
 )
 from utils.common import checkpoint_due, run_steps
 from utils.centralized import check_feasibility, encode_solution
+from utils import step_time
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.model import PYO_VAR_TYPE
@@ -433,14 +434,14 @@ def _run(
   spc_complete_solution = init_complete_solution()
   obj_dict = {"phi_final": []}
   tc_dict = {"pg": []}
-  runtime_list = []
+  runtime_rows = []
   for t in steps:
     if verbose > 0:
       print(f"t = {t}", file=log_stream, flush=True)
     loadt = get_current_load(input_requests_traces, agents, t)
     data = update_data(base_instance_data, {"incoming_load": loadt})
-    total_runtime = 0
-    ss = datetime.now()
+    # sequential sweeps: wall time minus observers; the initialization is a parallel phase
+    clock = step_time.start_step()
     sp_data = deepcopy(data)
     if opt_solution is not None:
       _, _, _, opt_r, _ = encode_solution(
@@ -457,7 +458,6 @@ def _run(
     ) = solve_subproblem(
       sp_data, agents, sp, solver_name, general_solver_options, parallelism
     )
-    total_runtime += sp_runtime["tot"]
     x = np.array(sp_x, dtype=float)
     r = np.array(sp_r, dtype=float)
     rho = np.array(
@@ -473,27 +473,21 @@ def _run(
 
     it = 0
     stop_searching = False
-    phi_prev = compute_centralized_objective(
-      sp_data, x, y, compute_z(x, y, sp_data)
-    )
+    with step_time.untimed():  # the potential only validates monotonicity
+      phi_prev = compute_centralized_objective(
+        sp_data, x, y, compute_z(x, y, sp_data)
+      )
     while not stop_searching:
       if opt_solution is None:
         rho = compute_rho(r, sp_data)
-      s = datetime.now()
-      n_accepted, delta_phi, memory_bids, proposal_runtime = (
+      n_accepted, delta_phi, memory_bids, _ = (
         potential_game_sweep(
           x, y, r, sp_data, neighborhood, rho, epsilon, tolerance,
           order, rng, propose_fn,
         )
       )
-      elapsed = (datetime.now() - s).total_seconds()
-      bookkeeping = max(0.0, elapsed - proposal_runtime)
-      total_runtime += proposal_runtime + (
-        bookkeeping / n_accepted if n_accepted else bookkeeping
-      )
       additional_replicas = np.zeros((Nn, Nf))
       if len(memory_bids) > 0 and opt_solution is None:
-        s = datetime.now()
         # accepted moves in the sweep re-decide r and consume memory slack:
         # recompute rho before the market or it would allocate stale slack
         rho = compute_rho(r, sp_data)
@@ -502,51 +496,54 @@ def _run(
             memory_bids, r, sp_data, rho
           )
           r += additional_replicas
-        total_runtime += (datetime.now() - s).total_seconds()
-      phi = compute_centralized_objective(
-        sp_data, x, y, compute_z(x, y, sp_data)
-      )
-      if not (phi >= phi_prev - 1e-9):
-        raise RuntimeError(f"potential decreased: {phi_prev} -> {phi}")
-      phi_prev = phi
+      with step_time.untimed():
+        phi = compute_centralized_objective(
+          sp_data, x, y, compute_z(x, y, sp_data)
+        )
+        if not (phi >= phi_prev - 1e-9):
+          raise RuntimeError(f"potential decreased: {phi_prev} -> {phi}")
+        phi_prev = phi
+      total_runtime = step_time.current_modelled()
       stop_searching, why_stop_searching = check_pg_stopping(
         it, max_iterations, n_accepted,
         int(additional_replicas.sum()), total_runtime, time_limit,
       )
       if not stop_searching:
         it += 1
-    csol = combine_solutions(
-      Nn, Nf, sp_data, loadt, x, r, rho,
-      None, y, None, None, None, None
-    )
-    feas = check_feasibility(
-      csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
-      csol["sp"]["r"], csol["sp"]["U"], sp_data
-    )
-    if not (feas[0]):
-      raise RuntimeError(feas[1])
-    sp_complete_solution, _, objf = decode_solutions(
-      sp_data, csol, sp_complete_solution, None
-    )
-    spc_complete_solution, _, _ = decode_solutions(
-      sp_data, csol, spc_complete_solution, None
-    )
-    obj_dict["phi_final"].append(objf)
-    tc_dict["pg"].append(
-      f"{why_stop_searching} (it: {it}; obj. deviation: {None}; best it: {it}; total runtime: {total_runtime})"
-    )
-    if checkpoint_due(t, steps, checkpoint_interval):
-      save_checkpoint(
-        sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+    with step_time.untimed():  # validation and output
+      csol = combine_solutions(
+        Nn, Nf, sp_data, loadt, x, r, rho,
+        None, y, None, None, None, None
       )
-      save_checkpoint(
-        spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+      feas = check_feasibility(
+        csol["sp"]["x"], csol["sp"]["y"].sum(axis=1), csol["sp"]["z"],
+        csol["sp"]["r"], csol["sp"]["U"], sp_data
       )
-    runtime_list.append(total_runtime)
+      if not (feas[0]):
+        raise RuntimeError(feas[1])
+      sp_complete_solution, _, objf = decode_solutions(
+        sp_data, csol, sp_complete_solution, None
+      )
+      spc_complete_solution, _, _ = decode_solutions(
+        sp_data, csol, spc_complete_solution, None
+      )
+      obj_dict["phi_final"].append(objf)
+      tc_dict["pg"].append(
+        f"{why_stop_searching} (it: {it}; obj. deviation: {None}; best it: {it}; total runtime: {total_runtime})"
+      )
+      if checkpoint_due(t, steps, checkpoint_interval):
+        save_checkpoint(
+          sp_complete_solution, os.path.join(solution_folder, "LSP"), t
+        )
+        save_checkpoint(
+          spc_complete_solution, os.path.join(solution_folder, "LSPc"), t
+        )
+    row = step_time.end_step(clock)
+    runtime_rows.append(dict(step=t, **row))
     if verbose > 0:
       print(
-        f"    TOTAL RUNTIME [s] = {total_runtime} "
-        f"(wallclock: {(datetime.now() - ss).total_seconds()})",
+        f"    TOTAL RUNTIME [s] = {row['algorithm_s']} "
+        f"(wallclock: {row['wall_s']})",
         file=log_stream, flush=True
       )
   sp_solution, sp_offloaded, sp_detailed_fwd_solution = join_complete_solution(
@@ -576,9 +573,7 @@ def _run(
   pd.DataFrame(tc_dict["pg"]).to_csv(
     os.path.join(solution_folder, "termination_condition.csv")
   )
-  pd.DataFrame({"tot": runtime_list}).to_csv(
-    os.path.join(solution_folder, "runtime.csv"), index=False
-  )
+  step_time.write_runtime(solution_folder, runtime_rows)
   if verbose > 0:
     print(
       f"All solutions saved in: {solution_folder}",

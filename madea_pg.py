@@ -3,7 +3,6 @@
 import argparse
 from copy import deepcopy
 from math import isfinite
-import time
 
 import numpy as np
 import pyomo.environ as pyo
@@ -13,6 +12,7 @@ from models.local_sp import dp_enabled
 from models.model import PYO_VAR_TYPE
 from models.sp import LSP_pg, LSP_pg_fixedr
 from run_faasmacro import combine_solutions
+from utils import step_time
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 
@@ -44,14 +44,16 @@ def refine_solution(data, solution, config, remaining_time=float("inf")):
   means the proposals stalled, not a certificate of Nash/global optimality.
   """
   options = refinement_options(config)
-  started = time.monotonic()
+  # inside a step: modelled time (observers excluded); called directly: wall time
+  elapsed_clock = step_time.current_modelled if step_time.active() else step_time.now
+  started = elapsed_clock()
   sp = solution["sp"]
   Nn, Nf = sp["x"].shape
   budget = (options["time_limit_per_node"] * Nn
             if "time_limit_per_node" in options else options["time_limit"])
   budget = max(0., min(budget, remaining_time))
-  deadline = started + budget
-  welfare = compute_centralized_objective(data, sp["x"], sp["y"], sp["z"])
+  with step_time.untimed():
+    welfare = compute_centralized_objective(data, sp["x"], sp["y"], sp["z"])
   stats = dict(welfare_before=welfare, welfare_after=welfare, sweeps=0, moves=0,
                seconds=0., time_budget=budget, reason="max sweeps reached")
   x, y, r = (sp[k].copy() for k in ("x", "y", "r"))
@@ -69,7 +71,7 @@ def refine_solution(data, solution, config, remaining_time=float("inf")):
   for sweep in range(options["max_sweeps"]):
     accepted_in_sweep = 0
     for i in range(Nn):
-      remaining = deadline - time.monotonic()
+      remaining = budget - (elapsed_clock() - started)
       if remaining <= 0 or (integer_limit and remaining < 1):
         exhausted = True
         break
@@ -121,8 +123,9 @@ def refine_solution(data, solution, config, remaining_time=float("inf")):
     )
     solution["sp"]["rho"] = compute_rho(solution["sp"]["r"], data)
   sp = solution["sp"]
-  stats["welfare_after"] = compute_centralized_objective(data, sp["x"], sp["y"], sp["z"])
-  stats["seconds"] = time.monotonic() - started
+  with step_time.untimed():
+    stats["welfare_after"] = compute_centralized_objective(data, sp["x"], sp["y"], sp["z"])
+  stats["seconds"] = elapsed_clock() - started
   return solution, stats
 
 

@@ -4,8 +4,10 @@ from pyomo.opt import TerminationCondition
 from pyomo.contrib.iis import write_iis
 import pyomo.environ as pyo
 
+from utils import step_time
+from utils.common import run_timestamp
+
 from abc import ABC, abstractmethod
-from datetime import datetime
 
 
 # PYO_VAR_TYPE = pyo.NonNegativeReals
@@ -73,7 +75,7 @@ class BaseAbstractModel():
       instance = self._provide_initial_solution(instance, initial_solution)
       warmstart = True
     # solve
-    s = datetime.now()
+    s = step_time.now()  # the solver call only
     solve_kwargs = {"warmstart": True} if warmstart else {}
     try:
       results = solver.solve(instance, **solve_kwargs)
@@ -81,7 +83,7 @@ class BaseAbstractModel():
       if not warmstart or "warmstart" not in str(exc):
         raise
       results = solver.solve(instance)
-    e = datetime.now()
+    e = step_time.now()
     # check solver status
     get_solution_ok = results.solver.status == SolverStatus.ok
     if not get_solution_ok:
@@ -94,7 +96,7 @@ class BaseAbstractModel():
       "solver_status": str(results.solver.status),
       "solution_exists": get_solution_ok,
       "termination_condition": str(results.solver.termination_condition),
-      "runtime": (e - s).total_seconds()
+      "runtime": e - s
     }
     # get solution
     if get_solution_ok:
@@ -106,7 +108,7 @@ class BaseAbstractModel():
       # get objective function value
       solution["obj"] = pyo.value(instance.OBJ)
     else:
-      now = datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')
+      now = run_timestamp()
       try:
         _ = write_iis(instance, f"infeas_{now}.ilp", "gurobi")
       except Exception as e:

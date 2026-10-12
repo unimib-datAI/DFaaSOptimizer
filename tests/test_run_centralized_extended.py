@@ -1,7 +1,10 @@
+import os
+
 import numpy as np
 import pandas as pd
 import pytest
 
+import run_centralized_model
 from run_centralized_model import (
   compute_utilization,
   extract_solution,
@@ -301,3 +304,38 @@ def test_save_solution_writes_all_components(tmp_path):
   assert (tmp_path / "Test_replicas.csv").exists()
   assert (tmp_path / "Test_detailed_fwd_solution.csv").exists()
   assert (tmp_path / "Test_residual_capacity.csv").exists()
+
+
+@pytest.mark.parametrize("solver, options, expected", [
+  ("gurobi", {"Threads": 4}, 4), ("appsi_highs", {"threads": 2}, 2),
+  ("glpk", {}, 1), ("glpsol", {"TimeLimit": 5}, 1),
+  ("gurobi", {}, 0), ("appsi_highs", {"threads": 0}, 0), ("cplex", {"Threads": "auto"}, 0),
+])
+def test_centralized_workers_are_the_effective_solver_threads(solver, options, expected):
+  assert run_centralized_model.solver_threads(solver, options) == expected
+
+
+def test_centralized_runtime_rows_use_the_solver_call(tmp_path, monkeypatch):
+  import pyomo.environ as pyo
+  from test_review_distributed_regressions import _materialized_config, _two_node_data
+  from utils import step_time
+  if not pyo.SolverFactory("glpk").available(exception_flag=False):
+    pytest.skip("GLPK required")
+  config = _materialized_config(tmp_path, _two_node_data(), steps=2)
+  original, solver_seconds = run_centralized_model.solve_instance, []
+
+  def recorded(*args, **kwargs):
+    result = original(*args, **kwargs)
+    solver_seconds.append(result[9])          # the solver call, as M.solve reports it
+    return result
+
+  monkeypatch.setattr(run_centralized_model, "solve_instance", recorded)
+  folder = run_centralized_model.run(config, disable_plotting=True)
+  runtime = pd.read_csv(os.path.join(folder, "runtime.csv"))
+  assert tuple(runtime.columns) == step_time.COLUMNS
+  assert runtime["step"].tolist() == [0, 1]
+  assert runtime["algorithm_s"].tolist() == pytest.approx(solver_seconds)
+  assert (runtime["wall_s"] >= runtime["algorithm_s"]).all()
+  assert runtime["parallel_phases"].tolist() == [0, 0] and runtime["workers"].tolist() == [1, 1]
+  assert list(pd.read_csv(os.path.join(folder, "obj.csv")).columns) == ["LoadManagementModel"]
+  assert list(pd.read_csv(os.path.join(folder, "termination_condition.csv")).columns) == ["LoadManagementModel"]
