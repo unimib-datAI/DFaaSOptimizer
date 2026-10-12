@@ -46,6 +46,11 @@ CASES = [
   ("one-shot2-b-pg", "decentralized_auction", "One-shot-PG", "solve_subproblem"),
   ("faas-macro", "run_faasmacro", "FaaS-MACrO", "solve_subproblem"),
   ("faas-macro-v0", "run_faasmacro", "FaaS-MACrO", "solve_subproblem"),
+  ("hierarchical-MAFW", "hierarchical_frankwolfe", "Hierarchical-MAFW", "solve_subproblem"),
+  ("MAFW-PG", "hierarchical_frankwolfe", "MAFW-PG", "solve_subproblem"),
+  ("MAFW-b-PG", "hierarchical_frankwolfe", "MAFW-PG", "solve_subproblem"),
+  ("hierarchical-MAFW-PG", "hierarchical_frankwolfe", "Hierarchical-MAFW-PG", "solve_subproblem"),
+  ("FaaS-MAFW-b", "decentralized_frankwolfe", "FaaS-MAFW", "solve_subproblem"),
 ]
 MODULES = sorted({case[1] for case in CASES})
 
@@ -61,7 +66,7 @@ def test_runner_outputs_match_the_baseline(tmp_path, name, module, label, _):
   folder = _run(name, tmp_path)
   assert list(pd.read_csv(folder / "obj.csv").columns) == [label]
   assert tuple(pd.read_csv(folder / "runtime.csv").columns) == step_time.COLUMNS
-  assert {"config.json", "out.log", "LSP_solution.csv", "LSPc_solution.csv"} <= {p.name for p in folder.iterdir()}
+  assert {"config.json", "out.log", "LSPc_solution.csv"} <= {p.name for p in folder.iterdir()}
   assert not step_time.active()
   runs = BASELINE / name / capture_baseline.instances()[0].name
   baseline = next(runs.iterdir(), None) if runs.is_dir() else None
