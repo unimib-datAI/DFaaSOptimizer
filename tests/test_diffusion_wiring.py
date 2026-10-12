@@ -62,19 +62,23 @@ def test_diffusion_run_uses_fixed_replicas_without_mutating_options(tmp_path, mo
     }
   }
 
+  import postprocessing
+  import run_centralized_model
+  import run_faasmacro
+  import utils.centralized
+  import utils.faasmacro
   monkeypatch.setattr(
-    decentralized_diffusion,
+    run_centralized_model,
     "init_problem",
     lambda *args, **kwargs: (base_data, {}, [], nx.empty_graph(1)),
   )
   monkeypatch.setattr(
-    decentralized_diffusion,
+    postprocessing,
     "load_solution",
     lambda folder, model: ("opt_solution", "opt_replicas", "opt_detailed", None, None),
-    raising=False,
   )
   monkeypatch.setattr(
-    decentralized_diffusion,
+    utils.centralized,
     "encode_solution",
     lambda Nn, Nf, solution, detailed, replicas, t: (None, None, None, np.array([[3]]), None),
     raising=False,
@@ -107,8 +111,9 @@ def test_diffusion_run_uses_fixed_replicas_without_mutating_options(tmp_path, mo
     )
 
   monkeypatch.setattr(decentralized_diffusion, "solve_subproblem", _solve_subproblem)
-  monkeypatch.setattr(decentralized_diffusion, "get_current_load", lambda *args: {})
-  monkeypatch.setattr(decentralized_diffusion, "update_data", lambda data, update: data)
+  monkeypatch.setattr(run_centralized_model, "get_current_load", lambda *args: {})
+  monkeypatch.setattr(run_centralized_model, "update_data",
+                      lambda data, update: {None: {**data[None], **update}})
   monkeypatch.setattr(
     decentralized_diffusion,
     "compute_residual_capacity",
@@ -124,31 +129,30 @@ def test_diffusion_run_uses_fixed_replicas_without_mutating_options(tmp_path, mo
 
   monkeypatch.setattr(decentralized_diffusion, "define_assignments", _define_assignments)
   monkeypatch.setattr(
-    decentralized_diffusion,
+    run_faasmacro,
     "combine_solutions",
-    lambda *args: {"sp": {"x": np.zeros((1, 1)), "y": np.zeros((1, 1, 1)), "z": np.zeros((1, 1)), "r": np.ones((1, 1)), "U": np.zeros((1, 1))}},
+    lambda *args: {"sp": {"x": np.zeros((1, 1)), "y": np.zeros((1, 1, 1)), "z": np.zeros((1, 1)),
+                          "r": np.ones((1, 1)), "xi": np.zeros((1, 1, 1)), "rho": np.zeros(1),
+                          "U": np.zeros((1, 1))}},
   )
-  monkeypatch.setattr(decentralized_diffusion, "compute_centralized_objective", lambda *args: -1.0)
-  monkeypatch.setattr(decentralized_diffusion, "check_feasibility", lambda *args: (True, "ok"))
+  for owner in (decentralized_diffusion, utils.faasmacro):
+    monkeypatch.setattr(owner, "compute_centralized_objective", lambda *args: -1.0)
+  monkeypatch.setattr(utils.centralized, "check_feasibility", lambda *args: (True, "ok"))
   decoded = []
 
-  def _decode(sp_data, solution, complete, arg):
-    decoded.append(solution)
-    assert solution is not None
-    return complete, None, 1.0
+  def _decode(x, y, z, r, xi, rho, U, complete):
+    decoded.append(x)
+    assert x is not None
+    return complete
 
+  monkeypatch.setattr(utils.centralized, "decode_solution", _decode)
   monkeypatch.setattr(
-    decentralized_diffusion,
-    "decode_solutions",
-    _decode,
-  )
-  monkeypatch.setattr(
-    decentralized_diffusion,
+    run_centralized_model,
     "join_complete_solution",
     lambda complete: ({}, {}, {}),
   )
-  monkeypatch.setattr(decentralized_diffusion, "save_checkpoint", lambda *args: None)
-  monkeypatch.setattr(decentralized_diffusion, "save_solution", lambda *args: None)
+  monkeypatch.setattr(run_centralized_model, "save_checkpoint", lambda *args: None)
+  monkeypatch.setattr(run_centralized_model, "save_solution", lambda *args: None)
 
   config = {
     "base_solution_folder": str(tmp_path),
