@@ -4,6 +4,7 @@ import numpy as np
 import json
 import ast
 import os
+from datetime import datetime
 
 
 class NpEncoder(json.JSONEncoder):
@@ -189,3 +190,8 @@ def run_steps(config: dict) -> range:
 def checkpoint_due(t: int, steps: range, interval: int) -> bool:
   """Every `interval` steps and at the last simulated step."""
   return t % interval == 0 or t == steps[-1]
+
+
+def run_timestamp() -> str:
+  """Name of a run folder: the only calendar-clock reading of the core modules."""
+  return datetime.now().strftime('%Y-%m-%d_%H-%M-%S.%f')

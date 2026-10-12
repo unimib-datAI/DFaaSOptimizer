@@ -250,3 +250,91 @@ def test_verbose_output_of_harmonized_runners_is_untimed():
           and id(node) not in guarded):
         bare.append(f"{name}:{node.lineno}")
   assert not bare, bare
+
+
+def test_nested_untimed_counts_union(now):
+  clock = step_time.start_step()
+  now.t = 1.0                       # 1 s of work
+  with step_time.untimed():         # outer observer: 5 s ...
+    now.t = 2.0
+    with step_time.untimed():       # ... containing an inner 2 s observer
+      now.t = 4.0
+    now.t = 6.0
+  assert step_time.end_step(clock) == {"algorithm_s": pytest.approx(1.0), "wall_s": 6.0,
+                                       "parallel_phases": 0, "workers": 0}
+
+
+def test_nested_untimed_in_task(now):
+  clock = step_time.start_step()
+  with step_time.parallel_phase():
+    with step_time.task(0):
+      now.t = 1.0                   # node 0: 1 s of work
+      with step_time.untimed():
+        now.t = 2.0
+        with step_time.untimed():
+          now.t = 4.0
+        now.t = 6.0
+  row = step_time.end_step(clock)
+  assert row["algorithm_s"] == pytest.approx(1.0) and row["wall_s"] == 6.0 and row["parallel_phases"] == 1
+
+
+def test_untimed_spanning_a_phase_is_removed_once(now):
+  # An observer may itself run per-node work (e.g. a parallel check): it all counts zero,
+  # the phase's savings are not subtracted again on top of the observer interval.
+  clock = step_time.start_step()
+  now.t = 1.0
+  with step_time.untimed():
+    with step_time.parallel_phase():
+      for node in (0, 1):
+        with step_time.task(node):
+          now.t += 2.0
+          with step_time.untimed():
+            now.t += 1.0
+  now.t += 0.5
+  row = step_time.end_step(clock)
+  assert row["algorithm_s"] == pytest.approx(1.5) and row["wall_s"] == pytest.approx(7.5)
+
+
+def test_untimed_exception_resets_state(now):
+  step_time.start_step()
+  with pytest.raises(ValueError):
+    with step_time.parallel_phase():
+      with step_time.task(0):
+        with step_time.untimed():
+          with step_time.untimed():
+            raise ValueError
+  clock = step_time.start_step()
+  now.t += 3.0
+  with step_time.untimed():         # counted again: no observer depth left behind
+    now.t += 2.0
+  assert step_time.end_step(clock)["algorithm_s"] == pytest.approx(3.0)
+
+
+def test_cancelled_step_does_not_leak(now):
+  clock = step_time.start_step()
+  step_time.cancel_step(clock)
+  assert not step_time.active() and step_time.current_modelled() == 0.0
+  other = step_time.start_step()
+  step_time.cancel_step(clock)      # stale handle: the current clock stays
+  assert step_time.active()
+  now.t = 3.0
+  assert step_time.end_step(other)["algorithm_s"] == pytest.approx(3.0)
+  assert not step_time.active()
+
+
+def test_now_reads_the_module_clock(now):
+  now.t = 42.0
+  assert step_time.now() == 42.0
+
+
+def test_run_timestamp_keeps_the_folder_format(monkeypatch):
+  from datetime import datetime
+  from utils import common
+
+  class Fixed(datetime):
+    @classmethod
+    def now(cls, tz=None):
+      return cls(2026, 1, 2, 3, 4, 5, 6)
+
+  monkeypatch.setattr(common, "datetime", Fixed)
+  assert common.run_timestamp() == "2026-01-02_03-04-05.000006"
