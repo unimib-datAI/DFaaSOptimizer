@@ -141,10 +141,15 @@ def test_complete_call_site_is_untimed_once(now, monkeypatch):
 def test_disabled_level_skips_guarded_preparation(now, monkeypatch):
   monkeypatch.setattr(sys, "stdout", SlowStdout(now, 2.0))
   calls = []
+
+  def prepare():
+    calls.append(1)
+    return "state"
+
   with run_log.open_run_log(None, 1):
     with step_time.untimed():
       if log.isEnabledFor(logging.DEBUG):
-        log.debug("%s", calls.append(1))
+        log.debug("%s", prepare())
   assert calls == [] and sys.stdout.text == ""
 
 

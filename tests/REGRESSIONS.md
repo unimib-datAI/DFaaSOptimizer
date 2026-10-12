@@ -87,3 +87,31 @@ and objective-safety regressions pass. The skipped integrations require Gurobi:
 the sandbox cannot reach its license service, and a separate network-enabled
 probe confirmed that the configured license has expired. GLPK numerical cases
 run successfully. Ruff and mypy also pass with the repository configuration.
+
+## Runner logging and timing refactor
+
+Decisions are pinned by raw run artifacts captured before the refactor
+(fixed seeds, bounded iterations, time budgets that never bind, verbose 2,
+both regression instances, every harmonized and excluded method and the
+centralized model with HiGHS):
+
+```bash
+uv run --locked python experiments/harmonization/capture_baseline.py --artifacts DIR [--method NAME ...] [--solver appsi_highs]
+uv run --locked python experiments/harmonization/compare_artifacts.py BEFORE AFTER [--method NAME ...]
+```
+
+The comparison requires solutions, checkpoints, objectives and inputs to be
+byte-identical; it ignores only timing values (`runtime.csv` by contract,
+durations in termination reasons, `refinement.csv` `seconds`) and compares
+MACrO/MADEA logs through `logs_postprocessing` without their timing fields.
+
+| Contract | Tests |
+| --- | --- |
+| comparison oracle (timing-only changes equal, decision changes fail) | `test_runner_artifacts.py` |
+| nested observers counted once, failed steps cleared | `test_step_time.py` (`test_nested_untimed_*`, `test_cancelled_step_does_not_leak`) |
+| log levels, nesting, untimed emission and preparation | `test_run_log.py` |
+| shared frame: outputs, checkpoints, plots, reference, failures | `test_run_frame.py` |
+| every migrated runner: label, outputs, baseline artifacts, cleanup, no print/clock | `test_runner_logging_timing_contract.py` |
+| verbosity and slow logging leave decisions unchanged | `test_verbosity_and_slow_logging_do_not_change_decisions` |
+| PG refinement after a parallel phase and standalone | `test_madea_pg.py` |
+| mixed historical and five-column runtime files | `test_review_orchestration_regressions.py`, `test_harmonized_methods.py` |

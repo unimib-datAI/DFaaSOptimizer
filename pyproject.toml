@@ -63,6 +63,7 @@ indent-width = 2
 select = [
   "E9",
   "F",
+  "G004",  # lazy logging arguments (utils/run_log.py)
 ]
 ignore = [
   "F401",

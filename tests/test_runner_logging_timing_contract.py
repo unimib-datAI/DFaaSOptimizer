@@ -124,3 +124,116 @@ def test_macro_draws_both_histories(tmp_path):
   assert (folder / "sp.png").exists() and (folder / "rmp.png").exists()
   assert {"LRMP_solution.csv", "LRMPc_solution.csv"} <= {p.name for p in folder.iterdir()}
 
+
+
+# The modules this contract covers: runners, their algorithm helpers that own clocks, the frame.
+# Tests, RL, campaign/report tooling and archived snapshots are out of scope.
+CORE_FILES = [
+  "run_centralized_model.py", "run_faasmacro.py", "run_faasmadea.py", "decentralized_auction.py",
+  "decentralized_diffusion.py", "decentralized_powerd.py", "decentralized_dual.py",
+  "decentralized_frankwolfe.py", "decentralized_gcaa.py", "decentralized_bestresponse.py",
+  "decentralized_potentialgame.py", "madea2.py", "madea_pg.py", "one_shot_pg.py",
+  "hierarchical_frankwolfe.py", "hierarchical_auction/runner.py", "hierarchical_auction/madea_runner.py",
+  "hierarchical_auction/madea_cycles_runner.py", "hierarchical_auction/madea_level_cycles_runner.py",
+  "plasma/runner.py", "plasma/welfare.py", "models/model.py", "models/dp_solver.py",
+  "utils/run_frame.py", "utils/run_log.py", "utils/step_time.py", "utils/common.py",
+]
+CLOCKS = {"datetime.datetime.now", "time.time", "time.monotonic", "time.perf_counter",
+          "pandas.Timestamp.now"}
+LOG_CALLS = {"debug", "info", "warning", "error", "exception", "critical"}
+
+
+def _qualified_calls(tree):
+  """(qualified name, call node, enclosing function) of every call, import aliases resolved."""
+  aliases = {}
+  for node in ast.walk(tree):
+    if isinstance(node, ast.Import):
+      for a in node.names:
+        aliases[a.asname or a.name.split(".")[0]] = a.name if a.asname else a.name.split(".")[0]
+    elif isinstance(node, ast.ImportFrom) and node.module:
+      for a in node.names:
+        aliases[a.asname or a.name] = f"{node.module}.{a.name}"
+
+  def name(expr):
+    if isinstance(expr, ast.Name):
+      return aliases.get(expr.id, expr.id)
+    if isinstance(expr, ast.Attribute):
+      base = name(expr.value)
+      return base and f"{base}.{expr.attr}"
+    return None
+
+  def visit(node, function):
+    for child in ast.iter_child_nodes(node):
+      inner = child.name if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)) else function
+      if isinstance(child, ast.Call):
+        yield name(child.func), child, inner
+      yield from visit(child, inner)
+
+  yield from visit(tree, None)
+
+
+@pytest.mark.parametrize("path", CORE_FILES)
+def test_core_reads_time_only_through_step_time(path):
+  if path == "utils/step_time.py":   # the clock itself
+    return
+  tree = ast.parse((ROOT / path).read_text())
+  direct = [f"{path}:{call.lineno} {qualified}" for qualified, call, function in _qualified_calls(tree)
+            if qualified in CLOCKS and (path, function) != ("utils/common.py", "run_timestamp")]
+  assert not direct, direct
+
+
+@pytest.mark.parametrize("path", CORE_FILES)
+def test_core_has_no_print_and_no_log_stream(path):
+  source = (ROOT / path).read_text()
+  tree = ast.parse(source)
+  prints = [call.lineno for qualified, call, _ in _qualified_calls(tree) if qualified == "print"]
+  assert not prints and "log_stream" not in source, prints
+
+
+@pytest.mark.parametrize("path", [p for p in CORE_FILES if not p.startswith("utils/")])
+def test_logging_call_sites_in_steps_are_untimed(path):
+  # every logger call of the step code sits inside `with step_time.untimed():` (its level guard
+  # and argument preparation with it); the frame logs between steps, outside any clock
+  tree = ast.parse((ROOT / path).read_text())
+  covered = set()
+  for node in ast.walk(tree):
+    if isinstance(node, ast.With) and any("untimed" in ast.unparse(i.context_expr) for i in node.items):
+      covered.update(id(child) for child in ast.walk(node))
+  bare = [f"{path}:{call.lineno}" for qualified, call, _ in _qualified_calls(tree)
+          if qualified and qualified.split(".")[-1] in LOG_CALLS and qualified.split(".")[0] == "log"
+          and id(call) not in covered]
+  assert not bare, bare
+
+
+@pytest.mark.parametrize("name", ["MADEA", "faas-macro"])
+def test_verbosity_and_slow_logging_do_not_change_decisions(tmp_path, monkeypatch, name):
+  import time
+  from compare_artifacts import normalize_termination
+  from utils import run_log
+  delay, records = 0.002, []
+
+  def slow(emit):
+    def wrapped(self, record):
+      records.append(record)
+      time.sleep(delay)                # a slow observer: disk, terminal, network
+      emit(self, record)
+    return wrapped
+
+  instance = capture_baseline.instances()[0]
+  folders = {}
+  for verbose in (0, 2):
+    if verbose == 2:
+      monkeypatch.setattr(run_log._FileHandler, "emit", slow(run_log._FileHandler.emit))
+    config = capture_baseline.capture_config(instance, tmp_path / str(verbose), name)
+    config["verbose"] = verbose
+    folders[verbose] = Path(capture_baseline.baseline_runners()[name](config, 0, log_on_file=True,
+                                                                      disable_plotting=True))
+  quiet, loud = folders[0], folders[2]
+  for f in ("obj.csv", "LSPc_solution.csv", "LSP_solution.csv"):
+    assert (quiet / f).read_bytes() == (loud / f).read_bytes(), f
+  assert (normalize_termination((quiet / "termination_condition.csv").read_text())
+          == normalize_termination((loud / "termination_condition.csv").read_text()))
+  runtime = pd.read_csv(loud / "runtime.csv")
+  in_steps = len(records) - 2 * len(runtime) - 1   # outside the clock: t = and TOTAL per step, saved
+  assert in_steps > 0
+  assert (runtime.wall_s - runtime.algorithm_s).sum() >= 0.9 * delay * in_steps

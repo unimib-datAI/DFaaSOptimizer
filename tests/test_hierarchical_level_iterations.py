@@ -162,6 +162,7 @@ def test_runner_enters_iterative_engine_only_after_complete_madea_phase(tmp_path
   import networkx as nx
   import pandas as pd
   import run_faasmadea as madea
+  import run_centralized_model  # the frame's problem loading
   from hierarchical_auction import madea_cycles_runner as shared
   from hierarchical_auction import madea_level_cycles_runner as runner
   from hierarchical_auction.iterative_engine import IterativeHierarchicalAuctionEngine
@@ -182,10 +183,10 @@ def test_runner_enters_iterative_engine_only_after_complete_madea_phase(tmp_path
     "delta": {(i, 1): 0. for i in nodes},
     "beta": {(i, j, 1): 1. for i in nodes for j in nodes},
   }}
-  monkeypatch.setattr(shared, "init_problem", lambda *a: (
+  monkeypatch.setattr(run_centralized_model, "init_problem", lambda *a: (
     data, {}, list(range(n)), nx.from_numpy_array(neighborhood),
   ))
-  monkeypatch.setattr(shared, "get_current_load", lambda *a: data[None]["incoming_load"])
+  monkeypatch.setattr(run_centralized_model, "get_current_load", lambda *a: data[None]["incoming_load"])
   monkeypatch.setattr(shared, "solve_subproblem", lambda *a: (
     data, np.zeros((n, 1)), None, None, inputs["omega"].copy(),
     inputs["residual_capacity"].copy(), np.zeros(n), None,

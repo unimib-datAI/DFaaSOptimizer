@@ -230,28 +230,6 @@ def test_timed_iteration_left_by_an_exception_stays_in_its_phase(now):
   assert later.tasks == {}
 
 
-def test_verbose_output_of_harmonized_runners_is_untimed():
-  # Verbose logging is observer code: every `if verbose ...` block runs untimed.
-  import ast
-  from pathlib import Path
-  files = ["run_faasmadea.py", "run_faasmacro.py", "decentralized_auction.py", "madea2.py",
-           "decentralized_diffusion.py", "decentralized_dual.py", "decentralized_frankwolfe.py",
-           "decentralized_gcaa.py", "decentralized_powerd.py", "hierarchical_frankwolfe.py",
-           *map(str, Path("hierarchical_auction").glob("*.py")), *map(str, Path("plasma").rglob("*.py"))]
-  bare = []
-  for name in files:
-    tree = ast.parse(Path(name).read_text())
-    guarded = set()
-    for node in ast.walk(tree):
-      if isinstance(node, ast.With) and "untimed" in ast.unparse(node.items[0].context_expr):
-        guarded.update(id(child) for child in ast.walk(node))
-    for node in ast.walk(tree):
-      if (isinstance(node, ast.If) and "verbose" in ast.unparse(node.test)
-          and id(node) not in guarded):
-        bare.append(f"{name}:{node.lineno}")
-  assert not bare, bare
-
-
 def test_nested_untimed_counts_union(now):
   clock = step_time.start_step()
   now.t = 1.0                       # 1 s of work

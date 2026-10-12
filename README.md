@@ -529,6 +529,36 @@ options:
 > The `loop_over` key must match the key for which multiple values are 
 > provided in the configuration file (e.g., `Nn` or `Nf`).
 
+## Runtime and logging
+
+Every runner, decentralized and centralized, writes `runtime.csv` with the five
+columns of `utils/step_time.py`, one row per simulated step:
+
+| column | meaning |
+| --- | --- |
+| `step` | simulated step |
+| `algorithm_s` | modelled time of the step: wall time minus observer code (checks, logging, output), with each parallel phase counted as its longest node task; for the centralized model, the solver call |
+| `wall_s` | wall time of the step |
+| `parallel_phases` | parallel phases of the step (0 for sequential methods and the centralized model) |
+| `workers` | pool workers used (0 without a pool); for the centralized model, the solver threads (an explicit setting, 1 for GLPK, 0 when automatic) |
+
+Time budgets (`algorithm_time_limit`, the PG refinement budget, `TimeLimit` of the
+sequential sweeps) are compared with `algorithm_s`, so slower logging or checks never
+change a decision. Results written before this format stay readable: the readers
+(`run.py`, `postprocessing.py`, `benchmark_summary.py`,
+`remote_experiments/results_reader.py`) prefer `algorithm_s` and fall back to the
+historical `tot` column or to the centralized model-name column, also within one
+campaign that mixes both.
+
+Logs go through the `dfaas.*` loggers of `utils/run_log.py`: each run attaches one
+handler (`out.log` with `log_on_file`, otherwise stdout) with the level of its
+`verbose`, and a batch script's own stdout handler is restored after each nested run.
+Log calls inside a step run in `step_time.untimed()`.
+
+The lifecycle shared by the runners (folder, `config.json`, log, problem data, step
+loop, checkpoints, outputs) lives in `utils/run_frame.py`; a runner supplies the
+decision of one step.
+
 ## How to configure experiments
 
 Each experiment can be configured by defining an appropriate configuration 
@@ -536,11 +566,12 @@ file (in JSON format). The file includes the following fields:
 - `base_solution_folder`: path to the folder where experiments data and 
 results should be stored (preferably, this should be a subfolder of 
 [`solutions`](solutions) or provided as a complete path).
-- `verbose`: verbosity level (integer). Expected values are 0 (no logging), 1 
-(limited logging) or 2 (extended logging). If the provided value is greater 
-than 0 when executing the 
-[`run.py` script](#run-a-series-of-experiments-with-the-two-approaches), logs 
+- `verbose`: verbosity level (integer): 0 logs warnings only, 1 adds progress
+(INFO), 2 or more adds the per-iteration details (DEBUG); 3 also dumps the bids.
+Runners log through `utils/run_log.py`; when executing the
+[`run.py` script](#run-a-series-of-experiments-with-the-two-approaches), logs
 are saved on a file `<base_solution_folder>/<experiment directory>/out.log`
+(see [Runtime and logging](#runtime-and-logging))
 - `seed` for random number generation (integer).
 - `max_steps`: how many workload samples to generate (integer).
 - (optional) `min_run_time`: first workload sample to consider 

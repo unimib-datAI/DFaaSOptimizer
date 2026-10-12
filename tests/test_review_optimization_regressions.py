@@ -230,7 +230,9 @@ def test_overloaded_runners_reach_stopping_check_with_correct_argument_types(
   })
 
   module = importlib.import_module(module_name)
-  stopping_check = module.check_stopping_criteria
+  # powerd's step is the shared diffusion step: observe the check where the step calls it
+  owner = importlib.import_module({"decentralized_powerd": "decentralized_diffusion"}.get(module_name, module_name))
+  stopping_check = owner.check_stopping_criteria
 
   def checked_stopping(*args, **kwargs):
     # Observe the actual API boundary, then run the real decision. Incorrect
@@ -241,7 +243,7 @@ def test_overloaded_runners_reach_stopping_check_with_correct_argument_types(
     assert bound.arguments["time_limit"] == 15
     return stopping_check(*args, **kwargs)
 
-  monkeypatch.setattr(module, "check_stopping_criteria", checked_stopping)
+  monkeypatch.setattr(owner, "check_stopping_criteria", checked_stopping)
   folder = getattr(module, entry)(
     config, parallelism=0, disable_plotting=True,
   )

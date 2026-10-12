@@ -145,3 +145,18 @@ def test_benchmark_summary_missing_and_empty_runtime(tmp_path):
   assert math.isnan(benchmark_summary._single_column_sum(str(tmp_path / "runtime.csv")))
   (tmp_path / "runtime.csv").write_text("step,algorithm_s,wall_s,parallel_phases,workers\n")
   assert math.isnan(benchmark_summary._single_column_sum(str(tmp_path / "runtime.csv")))
+
+
+@pytest.mark.parametrize("name", sorted(methods.EXCLUDED) + ["centralized"])
+def test_runtime_contract_of_excluded_and_centralized_runners(name, tmp_path):
+  from capture_baseline import baseline_runners, capture_config
+  config = capture_config(INSTANCES[0], tmp_path, name)
+  config["verbose"] = 0
+  frame = pd.read_csv(Path(baseline_runners()[name](config, 2, log_on_file=True, disable_plotting=True))
+                      / "runtime.csv")
+  assert tuple(frame.columns) == step_time.COLUMNS and frame["step"].tolist() == [0, 1]
+  assert (frame.algorithm_s >= 0).all() and (frame.algorithm_s <= frame.wall_s + 1e-3).all()
+  if name == "centralized":   # one solver call: no phases, the solver's own threads
+    assert (frame.parallel_phases == 0).all() and (frame.workers == 1).all()
+  else:                       # sequential sweeps may add no phase; a pool is not required
+    assert (frame.parallel_phases >= 0).all() and frame.workers.isin([0, 2]).all()
