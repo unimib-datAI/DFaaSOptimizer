@@ -19,11 +19,12 @@ from run_faasmacro import (
 from run_faasmadea import (
   check_stopping_criteria,
   compute_residual_capacity,
-  define_bids,
-  evaluate_bids,
+  define_bids,  # noqa: F401 (default rules, resolved at call time)
+  evaluate_bids,  # noqa: F401 (default rules, resolved at call time)
   neigh_dict_to_matrix,
+  RULE_NAMES,
   relative_objective_gap,
-  start_additional_replicas
+  start_additional_replicas,  # noqa: F401 (default rules, resolved at call time)
 )
 from utils.common import checkpoint_due, run_steps
 from utils.common import load_configuration
@@ -80,8 +81,10 @@ def run(
     parallelism: int,
     log_on_file: bool = False,
     disable_plotting: bool = False,
-    *, refine_welfare: bool = False,
+    *, refine_welfare: bool = False, rules: dict | None = None,
   ):
+  # local rules (define_bids, evaluate_bids, start_additional_replicas): MADEA's by default
+  rules = rules if rules is not None else {name: globals()[name] for name in RULE_NAMES}
   base_solution_folder = config["base_solution_folder"]
   seed = config["seed"]
   limits = config["limits"]
@@ -205,7 +208,7 @@ def run(
           )
       # buyers define their bids
       s = datetime.now()
-      bids, memory_bids, n_auctions = define_bids(
+      bids, memory_bids, n_auctions = rules["define_bids"](
         omega,
         blackboard,
         p,
@@ -233,7 +236,7 @@ def run(
       a = np.zeros((Nn,Nf))
       if len(bids) > 0:
         s = datetime.now()
-        auction_y, p, _, _ = evaluate_bids(
+        auction_y, p, _, _ = rules["evaluate_bids"](
           bids,
           blackboard,
           data,
@@ -301,7 +304,7 @@ def run(
       else:
         # tentatively start additional replicas
         s = datetime.now()
-        a, sp_rho = start_additional_replicas(
+        a, sp_rho = rules["start_additional_replicas"](
           memory_bids, sp_r, sp_data, sp_rho
         )
         sp_r += a

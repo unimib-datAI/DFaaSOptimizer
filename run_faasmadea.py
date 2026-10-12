@@ -253,8 +253,11 @@ def define_bids(
     auction_options: dict,
     latency: np.array,
     fairness: np.array,
-    force_memory_bids: bool
+    force_memory_bids: bool,
+    memory_bid_value=None,
   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
+  """Bids of the buyers. ``memory_bid_value(i, j, f)`` (MADEA2): memory bids
+  also carry the uncovered quantity "d" and that value "v"."""
   use_internal_value = auction_options.get("use_internal_value", False)
   # loop over agents and functions
   potential_buyers, functions_to_share = np.nonzero(omega)
@@ -264,6 +267,8 @@ def define_bids(
   memory_bids = {
     "i": [], "j": [], "f": []
   }
+  if memory_bid_value is not None:
+    memory_bids.update(d=[], v=[])
   for i,f in step_time.timed(zip(potential_buyers, functions_to_share), key=lambda item: item[0]):
     # identify potential sellers
     potential_sellers = set(np.nonzero(neighborhood[i,:])[0])
@@ -344,12 +349,18 @@ def define_bids(
             memory_bids["i"].append(i)
             memory_bids["j"].append(j)
             memory_bids["f"].append(f)
+            if memory_bid_value is not None:
+              memory_bids["d"].append(float(omega[i,f] - assigned))
+              memory_bids["v"].append(memory_bid_value(i, j, f))
     # if you could not bid for all, ask for new replicas
     if assigned < omega[i,f] or force_memory_bids:
       for j in potential_memory_sellers - potential_capacity_sellers:
         memory_bids["i"].append(i)
         memory_bids["j"].append(j)
         memory_bids["f"].append(f)
+        if memory_bid_value is not None:
+          memory_bids["d"].append(float(max(omega[i,f] - assigned, 0.0)))
+          memory_bids["v"].append(memory_bid_value(i, j, f))
   return pd.DataFrame(bids), pd.DataFrame(memory_bids), len(potential_buyers)
 
 
@@ -381,8 +392,13 @@ def evaluate_bids(
     tentatively_start_replicas: bool = False,
     it: int = 0,
     may_replace_existing_assignments: bool = True,
-    residual_capacity: np.array = None
+    residual_capacity: np.array = None,
+    replica_value_per_mb: bool = False,
+    congestion_weight: float = 0.0,
   ) -> np.array:
+  """Seller-side evaluation. MADEA2 rules: ``replica_value_per_mb`` serves the
+  pending bids by value per MB of a new replica when replicas start here;
+  ``congestion_weight`` raises the price by the offered demand left unserved."""
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
   last_y = np.zeros((Nn,Nn,Nf)) if previous_y is None else previous_y.copy()
@@ -453,6 +469,12 @@ def evaluate_bids(
       if bid["d"] > q:
         pending_bids.append((i, f, bid["d"] - q, bid["b"]))
 
+    if tentatively_start_replicas and replica_value_per_mb:
+      # replicas started here compete for the same memory: serve first the
+      # pending bids that bring the most value per MB of a new replica
+      pending_bids.sort(key=lambda t: -t[3] * (
+        data[None]["max_utilization"][t[1]+1] / data[None]["demand"][(j+1,t[1]+1)]
+      ) / data[None]["memory_requirement"][t[1]+1])
     for i, f, remaining_d, b in pending_bids:
       if receiving[i,f] or sending[j,f]:
         continue
@@ -502,6 +524,12 @@ def evaluate_bids(
     for f,b in all_min_b.items():
       u = (ell[j,f] + y[:,j,f].sum()) / total_capacity[j,f]
       p[j,f] = b + eta * (u - u0[j,f])
+      if congestion_weight > 0:
+        # demand the seller saw but could not serve, relative to its
+        # capacity: local information, no extra message
+        requested = all_bids_for_j.loc[all_bids_for_j["f"] == f, "d"].sum()
+        excess = max(0.0, float(requested - y[:,j,f].sum()))
+        p[j,f] += congestion_weight * excess / max(float(total_capacity[j,f]), 1.0)
     for f in set(functions_to_share) - set(all_min_b.index):
       p[j,f] *= (1 - auction_options["zeta"])
   return y, p, additional_replicas, len(unique_potential_sellers)
@@ -589,17 +617,28 @@ def compute_offloaded_demand(y: np.ndarray) -> np.ndarray:
   return y.sum(axis=1)
 
 
+RULE_NAMES = ("define_bids", "evaluate_bids", "start_additional_replicas")
+
+
+def madea_rules(rules: dict | None = None) -> dict:
+  """The local rules of a MADEA cycle; None: this module's, read at call time."""
+  return rules if rules is not None else {name: globals()[name] for name in RULE_NAMES}
+
+
 def run_madea_cycle(
     state: MadeaState, *, sp_x, sp_omega, sp_data, data, agents, loadt,
     neighborhood, latency, config, auction_options, parallelism,
     log_stream, started_at, wall_started_at=None, auction_time_limit=None,
+    rules: dict | None = None,
   ) -> MadeaState:
   """Run the production MADEA loop to its actual stopping criterion.
 
   This phase never invokes the hierarchy. The caller may update the returned
   state and start another cycle, with fresh local convergence history.
   PG callers may cap elapsed auction time without changing local solver options.
+  ``rules`` (define_bids, evaluate_bids, start_additional_replicas): MADEA's by default.
   """
+  rules = madea_rules(rules)
   Nn, Nf = sp_x.shape
   solver_name = config["solver_name"]
   general_solver_options = config.get("solver_options", {}).get("general", {})
@@ -653,7 +692,7 @@ def run_madea_cycle(
         )
     # buyers define their bids
     s = datetime.now()
-    bids, memory_bids, n_auctions = define_bids(
+    bids, memory_bids, n_auctions = rules["define_bids"](
       omega,
       blackboard,
       p,
@@ -686,7 +725,7 @@ def run_madea_cycle(
     additional_replicas = np.zeros((Nn,Nf))
     if len(bids) > 0:
       s = datetime.now()
-      auction_y, p, additional_replicas, n_auctions = evaluate_bids(
+      auction_y, p, additional_replicas, n_auctions = rules["evaluate_bids"](
         bids,
         blackboard,
         data,
@@ -773,7 +812,7 @@ def run_madea_cycle(
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
       # tentatively start additional replicas
       s = datetime.now()
-      additional_replicas, sp_rho = start_additional_replicas(
+      additional_replicas, sp_rho = rules["start_additional_replicas"](
         memory_bids, sp_r, sp_data, sp_rho
       )
       sp_r += additional_replicas
@@ -893,7 +932,7 @@ def run(
     parallelism: int,
     log_on_file: bool = False, 
     disable_plotting: bool = False,
-    *, refine_welfare: bool = False,
+    *, refine_welfare: bool = False, rules: dict | None = None,
   ):
   refinement_history = []
   base_solution_folder = config["base_solution_folder"]
@@ -1002,7 +1041,7 @@ def run(
       state, sp_x=sp_x, sp_omega=sp_omega, sp_data=sp_data, data=data,
       agents=agents, loadt=loadt, neighborhood=neighborhood, latency=latency,
       config=config, auction_options=auction_options, parallelism=parallelism,
-      log_stream=log_stream, started_at=ss,
+      log_stream=log_stream, started_at=ss, rules=rules,
     )
     total_runtime = state.total_runtime
     with step_time.untimed():
