@@ -54,7 +54,7 @@ def solve(path, time_limit, threads=1, gap=1e-6, selfish=False):
   result = opt.solve(instance)
   wall = time.perf_counter() - started
   row = dict(model=model.name, nodes=Nn, functions=Nf, termination=str(result.termination_condition),
-             build_seconds=build, local_reference_seconds=local, wall_seconds=wall,
+             mip_rel_gap=gap, build_seconds=build, local_reference_seconds=local, wall_seconds=wall,
              bound=result.best_objective_bound, solver_objective=result.best_feasible_objective,
              input_hash=hashlib.sha256((Path(path) / 'metadata.json').read_bytes()).hexdigest())
   if result.best_feasible_objective is None:

@@ -25,3 +25,8 @@ def test_selfish_keeps_local_gains_and_never_beats_the_unconstrained_optimum():
   assert selfish["local_reference_seconds"] >= 0
   # the local floors only remove solutions: never more welfare than the unconstrained optimum
   assert 0 < selfish["welfare"] <= rows["centralized"]["welfare"] + 1e-6
+  assert selfish["mip_rel_gap"] == 1e-6  # the default
+
+
+def test_the_gap_is_handed_to_highs_and_recorded():
+  assert solve(INSTANCE, 120, gap=0.25)["mip_rel_gap"] == 0.25
