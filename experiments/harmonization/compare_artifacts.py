@@ -5,7 +5,8 @@
 Solutions, checkpoints, objectives and materialized inputs must be byte-identical. Only timing
 values are normalized: runtime.csv is compared by contract, termination reasons without their
 durations, diagnostic CSVs without their timing columns, MACrO/MADEA logs through their parsers
-without parsed times, config.json without its output root. Exit code 1 on any difference or
+without parsed times, config.json without its output root and with the instance by name
+(the checkout location is not a decision). Exit code 1 on any difference or
 missing coverage. The captures are never modified.
 """
 import argparse
@@ -68,8 +69,12 @@ def _without_columns(path: Path, columns: set) -> list[list[str]]:
 
 
 def _config(path: Path) -> dict:
+  """Without the output root, and with the instance by name: the checkout location is not a decision."""
   config = json.loads(path.read_text())
   config.pop(OUTPUT_ROOT, None)
+  limits = config.get("limits")
+  if isinstance(limits, dict) and "path" in limits:
+    limits["path"] = Path(limits["path"]).name
   return config
 
 

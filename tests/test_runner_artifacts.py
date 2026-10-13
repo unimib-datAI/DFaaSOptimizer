@@ -206,3 +206,15 @@ def test_cli_reports_on_stdout(pair):
                          str(before), str(after)], capture_output=True, text=True,
                         cwd=str(before.parent))   # outside the repository: the script finds its root
   assert done.returncode == 0 and done.stdout == "artifacts match\n"
+
+
+def test_instance_location_is_not_a_decision(tmp_path):
+  files = {**FILES, "config.json": json.dumps({"base_solution_folder": "/tmp/a", "seed": 1,
+                                                "limits": {"path": "/checkout-a/tests/data/inst-1"}})}
+  before = write_capture(tmp_path / "before", files)
+  after = write_capture(tmp_path / "after", {**files, "config.json": files["config.json"].replace(
+    "/checkout-a/", "/elsewhere/checkout-b/")})
+  assert compare_artifacts.compare_artifacts(before, after) == []      # same instance, other checkout
+  other = write_capture(tmp_path / "other", {**files, "config.json": files["config.json"].replace(
+    "inst-1", "inst-2")})
+  assert compare_artifacts.compare_artifacts(before, other)            # another instance still differs

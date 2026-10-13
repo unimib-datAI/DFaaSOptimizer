@@ -104,6 +104,8 @@ The comparison requires solutions, checkpoints, objectives and inputs to be
 byte-identical; it ignores only timing values (`runtime.csv` by contract,
 durations in termination reasons, `refinement.csv` `seconds`) and compares
 MACrO/MADEA logs through `logs_postprocessing` without their timing fields.
+`config.json` is compared without its output root and with the instance folder by name,
+so captures from different checkouts compare.
 
 | Contract | Tests |
 | --- | --- |
