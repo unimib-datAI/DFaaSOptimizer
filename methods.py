@@ -5,6 +5,8 @@ on the shared worker pool and report the modelled algorithm time in
 runtime.csv. Every runner has the signature
 run(config, parallelism, log_on_file=False, disable_plotting=False).
 EXCLUDED: methods kept in the code base but not offered to campaigns, with the reason.
+CENTRALIZED: the centralized references offered to campaigns, as keyword arguments of
+experiments/madea_pg_compact/catalog_centralized.solve (HiGHS under a wall-clock limit).
 """
 from functools import partial
 
@@ -49,4 +51,9 @@ EXCLUDED = {
   "one-shot2-b-pg": PG_REFINED, "MAFW-PG": PG_REFINED, "MAFW-b-PG": PG_REFINED,
   "hierarchical-MAFW-PG": PG_REFINED, "hierarchical-madea-pg": PG_REFINED,
   "hierarchical-one-shot-pg": PG_REFINED, "hierarchical-madea-level-cycles-pg": PG_REFINED,
+}
+
+CENTRALIZED = {
+  "centralized": {},  # LoadManagementModel
+  "selfish-centralized": {"selfish": True},  # docs/selfish-centralized.md: each node keeps its local optimum's gain
 }
