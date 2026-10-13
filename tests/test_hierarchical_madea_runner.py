@@ -3,7 +3,7 @@ import pandas as pd
 
 import run_faasmadea as madea
 import run
-from hierarchical_auction import madea_runner
+from hierarchical_auction import madea_runner, madea_level_cycles_runner
 
 
 def test_reuses_production_madea_helpers_without_wrapping_them():
@@ -52,8 +52,12 @@ def test_run_py_accepts_and_exposes_hierarchical_madea(monkeypatch):
     "sys.argv", ["run.py", "--methods", "hierarchical-madea"],
   )
   assert run.parse_arguments().methods == ["hierarchical-madea"]
-  assert run.run_hierarchical_madea is madea_runner.run
+  assert run.run_hierarchical_madea is madea_level_cycles_runner.run
+  assert run.run_hierarchical_madea_legacy is madea_runner.run
   assert run.METHOD_RESULT_MODELS["hierarchical-madea"] == (
+    "LSPc", "HierarchicalMADeALevelCycles",
+  )
+  assert run.METHOD_RESULT_MODELS["hierarchical-madea-legacy"] == (
     "LSPc", "HierarchicalMADeA",
   )
 

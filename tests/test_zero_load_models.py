@@ -6,20 +6,20 @@ import pytest
 from pyomo.repn import generate_standard_repn
 
 from heuristic_coordinator import GreedyCoordinator
-from models.model import LoadManagementModel, SortOfKnapsack, TightLoadManagementModel
-from models.rmp import LRMP, LRMP_freeMemory
+from models.model import LoadManagementModel, TightLoadManagementModel
+from models.rmp import LRMP
 from models.sp import (
   LSP, LSP_v0, LSP_fixedr, LSP_fixedr_v0, LSP_capped, LSP_capped_fixedr,
   LSP_pg, LSP_pg_fixedr, LSPr, LSPr_v0, LSPr_x, LSPr_fixedr,
 )
 
 
-CENTRAL = [LoadManagementModel, SortOfKnapsack, TightLoadManagementModel]
+CENTRAL = [LoadManagementModel, TightLoadManagementModel]
 LOCAL = [
   LSP, LSP_v0, LSP_fixedr, LSP_fixedr_v0, LSP_capped, LSP_capped_fixedr,
   LSP_pg, LSP_pg_fixedr, LSPr, LSPr_v0, LSPr_x, LSPr_fixedr,
 ]
-MASTER = [LRMP, LRMP_freeMemory]
+MASTER = [LRMP]
 
 
 def _data(load=0):
@@ -88,7 +88,6 @@ def test_idle_source_can_receive_traffic_without_losing_sender_utility(model_cla
 
 @pytest.mark.parametrize("model_class,variable,expected", [
   (LoadManagementModel, "x[1,1]", 4),
-  (SortOfKnapsack, "x[1,1]", 4),
   (TightLoadManagementModel, "x[1,1]", 4),
   (LSP_v0, "omega[1]", -8),
   (LSP, "omega[1]", -8),
@@ -112,14 +111,6 @@ def test_positive_fractional_load_retains_original_objective_coefficient(
   assert coefficients[variable] == pytest.approx(expected)
 
 
-@pytest.mark.parametrize("load,expected", [(0, 0), (0.5, 6)])
-def test_free_memory_objective_handles_zero_and_fractional_load(load, expected):
-  instance = LRMP_freeMemory().generate_instance(_data(load))
-  _zero_variables(instance)
-  if load:
-    instance.y[1, 2, 1].set_value(1)
-
-  assert pyo.value(LRMP_freeMemory.maximize_processing(instance)) == pytest.approx(expected)
 
 
 @pytest.mark.parametrize("load,forwarded,expected", [(0, 0, 0), (2, 2, 3), (0.5, 0.5, 3)])

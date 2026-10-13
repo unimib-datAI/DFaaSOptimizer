@@ -2,7 +2,6 @@
 from copy import deepcopy
 import argparse
 
-from decentralized_auction import parse_arguments
 from madea_pg import refinement_options
 from utils.common import load_configuration
 

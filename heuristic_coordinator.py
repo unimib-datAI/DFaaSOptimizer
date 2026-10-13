@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
-from datetime import datetime
 from typing import Tuple
 import pandas as pd
 import numpy as np
+from utils import step_time
 
 
 class HeuristicCoordinator(ABC):
@@ -142,44 +142,36 @@ class GreedyCoordinator(HeuristicCoordinator):
     demand = instance[None]["demand"]
     i_sends_f = np.zeros((Nn,Nf))
     i_receives_f = np.zeros((Nn,Nf))
-    s = datetime.now()
+    s = step_time.now()
     for (n1,f), data in profit.groupby(["n1","f"]):
       omega = data.iloc[0]["omega"]
       idx = 0
       while idx < len(data) and omega > 0:
         n2 = int(data.iloc[idx]["n2"])
-        if not i_sends_f[n2,f]:
+        if not i_sends_f[n2,f] and not i_receives_f[n1,f]:
           # compute the maximum acceptable requests rate
           max_a = int(residual_capacity[n2] / ram[f+1])
           max_acceptable = max(
             0,
             (
               (
-                instance[None]["r_bar"][(n2+1,f+1)] + max_a
+                instance[None]["r_bar"][(n2+1,f+1)] + r[n2,f] + max_a
               ) * instance[None]["max_utilization"][f+1] / demand[(n2+1,f+1)]
             ) - instance[None]["x_bar"][(n2+1,f+1)] - y[:,n2,f].sum()
           )
           # determine actual offloading and additional number of replicas
-          if omega <= max_acceptable:
-            y[n1,n2,f] += omega
-            req_a = int(
-              int(np.ceil((
-                (
-                  y[:,n2,f].sum() + instance[None]["x_bar"][(n2+1,f+1)]
-                ) * demand[(n2+1,f+1)] / instance[None]["max_utilization"][f+1]
-              ) - instance[None]["r_bar"][(n2+1,f+1)])) - r[n2,f]
+          accepted = min(omega, max_acceptable)
+          if accepted > 0:
+            y[n1,n2,f] += accepted
+            required_r = np.ceil(
+              (y[:,n2,f].sum() + instance[None]["x_bar"][(n2+1,f+1)])
+              * demand[(n2+1,f+1)] / instance[None]["max_utilization"][f+1]
             )
+            req_a = max(0, int(required_r - instance[None]["r_bar"][(n2+1,f+1)] - r[n2,f]))
             used_a = min(max_a, req_a)
             r[n2,f] += used_a
             residual_capacity[n2] -= (used_a * ram[f+1])
-            omega = 0
-            i_sends_f[n1,f] = 1
-            i_receives_f[n2,f] = 1
-          else:
-            y[n1,n2,f] += max_acceptable
-            r[n2,f] += max_a
-            residual_capacity[n2] = 0
-            omega -= max_acceptable
+            omega -= accepted
             i_sends_f[n1,f] = 1
             i_receives_f[n2,f] = 1
         idx += 1
@@ -189,7 +181,7 @@ class GreedyCoordinator(HeuristicCoordinator):
     # -- for isolated nodes, no required offloading can be accepted
     for (n,f,omega) in isolated_nodes:
       z[n,f] += omega
-    e = datetime.now()
+    e = step_time.now()
     # check feasibility
     feasible, message = self._check_feasibility(instance, y, z, r)
     if not (feasible):
@@ -200,7 +192,7 @@ class GreedyCoordinator(HeuristicCoordinator):
       "r": r.flatten(),
       "z": z.flatten(),
       "termination_condition": "done",
-      "runtime": (e - s).total_seconds(),
+      "runtime": e - s,
       "obj": self._objective_function(
         y, 
         instance[None]["incoming_load"],

@@ -1,6 +1,7 @@
 """Centralized welfare maximization with each node's local x-gain guarantee."""
 
 import pyomo.environ as pyo
+from utils import step_time
 
 from models.model import LoadManagementModel
 from models.local_sp import solve_agent_problem
@@ -45,7 +46,7 @@ class SelfishLoadManagementModel(LoadManagementModel):
     return model.local_processing_gain[n] >= model.minimum_local_gain[n]
 
   def compute_local_gain_floors(
-      self, instance, solver_options, solver_name = "glpk"
+      self, instance, solver_options, solver_name = "glpk", *, deadline = None
     ):
     """Populate per-node floors and return the total local solver runtime."""
     local = LSP_detailed()
@@ -58,8 +59,20 @@ class SelfishLoadManagementModel(LoadManagementModel):
     }}
     local_runtime = 0.0
     for n in instance.N:
+      options = dict(solver_options)
+      if deadline is not None:
+        remaining = deadline - step_time.now()
+        if remaining <= 0 or (solver_name in {"glpk", "glpsol"} and remaining < 1):
+          raise TimeoutError("Local reference deadline exhausted")
+        if solver_name in {"glpk", "glpsol"}:
+          remaining = int(remaining)
+        options["TimeLimit"] = min(options.get("TimeLimit", remaining), remaining)
       data[None]["whoami"] = {None: n}
-      result = solve_agent_problem(local, data, solver_options, solver_name)
+      result = solve_agent_problem(local, data, options, solver_name)
+      if deadline is not None and (
+          step_time.now() >= deadline or result["termination_condition"] == "maxTimeLimit"
+        ):
+        raise TimeoutError("Local reference deadline exhausted")
       if (
           not result["solution_exists"] or 
           result["termination_condition"] != "optimal"

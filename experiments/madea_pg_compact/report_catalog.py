@@ -56,7 +56,6 @@ def main(folder, output):
     gap = (W.drop(columns='centralized').rsub(ref, axis=0)).div(ref.abs(), axis=0) * 100
     bound = cent['bound'].reindex(W.index)
     gapb = (W.rsub(bound, axis=0)).div(bound.abs(), axis=0) * 100
-    common = gap.dropna(axis=0, how='any', subset=[c for c in gap.columns if gap[c].notna().sum() >= 0.5 * len(gap)])
     summ = pd.DataFrame({'casi': gap.notna().sum(), 'distanza media dal centralizzato %': gap.mean(),
                          'mediana %': gap.median(), 'max %': gap.max(),
                          'distanza media dal bound %': gapb.drop(columns='centralized', errors='ignore').mean()})

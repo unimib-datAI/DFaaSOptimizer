@@ -15,7 +15,6 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from networkx import adjacency_matrix as nx_adjacency_matrix
 
 from decentralized_auction import (
   check_stopping_criteria,
@@ -92,10 +91,6 @@ def bids_for_stopping(
   if len(bids) > 0 or hierarchical_allocations_count <= 0:
     return bids
   return pd.DataFrame({"hierarchical_progress": [hierarchical_allocations_count]})
-
-
-def _extract_latency(graph: Any) -> FloatArray:
-  return nx_adjacency_matrix(graph, weight="network_latency").toarray()
 
 
 @parallel_solver_run

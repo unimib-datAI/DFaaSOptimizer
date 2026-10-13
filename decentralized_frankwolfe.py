@@ -122,7 +122,7 @@ def fw_gains_and_mask(
   is not already a sender of f (no ping-pong), i still has residual demand for
   f, and the advantage is strictly positive.
   """
-  Nn, Nf = params["Nn"], params["Nf"]
+  Nn = params["Nn"]
   a = (
     params["beta"]
     - options["latency_weight"] * np.asarray(latency)[:, :, None]

@@ -7,7 +7,6 @@ import numpy as np
 from utils import run_frame, step_time
 import pandas as pd
 
-from generators.generate_data import update_data
 from utils.faasmacro import compute_centralized_objective
 from run_faasmacro import parallel_solver_run
 
@@ -91,16 +90,21 @@ def _solve_step(ctx, t: int, data: dict, *, opts, welfare: bool, state: dict) ->
     engine = state["engine"]
     d = ctx.base_data[None]
     loadt = data[None]["incoming_load"]
-    arrivals = np.array([
-      [int(round(loadt[(n + 1, f + 1)] * opts.W)) for f in range(Nf)]
+    load = np.array([
+      [loadt[(n + 1, f + 1)] for f in range(Nf)]
       for n in range(Nn)
     ])
-    window = update_data(ctx.base_data, {"incoming_load": {
-      (n + 1, f + 1): arrivals[n, f] for n in range(Nn) for f in range(Nf)
-    }})
+    # The engine admits whole requests. Reject the fractional remainder rather
+    # than invent traffic when a short window rounds above the original load.
+    arrivals = np.floor(load * opts.W).astype(int)
     msgs_before, hb_before = engine.msg_count, engine.hb_count
   res = engine.run_rounds(opts.rounds_per_step, arrivals)
   with step_time.untimed():  # outputs of the step
+    # Shared artifacts and objective use requests/second, like the other models.
+    x, y, z, xi = res.x, res.y, res.z, res.xi
+    if opts.W != 1. or not np.array_equal(load, arrivals):
+      x, y, xi = res.x / opts.W, res.y / opts.W, res.xi / opts.W
+      z = np.maximum(0., load - x - y.sum(axis=1))
     if welfare:
       state["trades"].append({'time': t, 'rounds': opts.rounds_per_step,
                               'accepted_trades': engine.accepted_trades})
@@ -112,7 +116,7 @@ def _solve_step(ctx, t: int, data: dict, *, opts, welfare: bool, state: dict) ->
     with np.errstate(divide="ignore", invalid="ignore"):
       U = np.where(
         res.r > 0,
-        demand * (res.x + res.xi.sum(axis=1)) / np.maximum(res.r, 1) / opts.W,
+        demand * (x + xi.sum(axis=1)) / np.maximum(res.r, 1),
         0.0,
       )
     rho = ram_cap - (res.r * ram_req[None, :]).sum(axis=1)
@@ -122,15 +126,15 @@ def _solve_step(ctx, t: int, data: dict, *, opts, welfare: bool, state: dict) ->
       "msgs_per_node_s": (engine.msg_count - msgs_before) / (Nn * seconds),
       "hb_per_node_s": (engine.hb_count - hb_before) / (Nn * seconds),
     })
-    objective = compute_centralized_objective(window, res.x, res.y, res.z)
+    objective = compute_centralized_objective(data, x, y, z)
   # format matches results_postprocessing's shared parser (run.py
   # load_termination_condition): "{criterion} (it: {iteration}; obj.
   # deviation: {deviation})" -- PLASMA always runs the full rounds_per_step
   # budget each step, there is no separate convergence criterion
   criterion = "round budget exhausted" if welfare else "converged"
   return run_frame.StepResult(
-    solutions={"LSPc": dict(x=res.x, y=res.y, z=res.z, r=res.r, xi=res.xi, rho=rho, U=U)},
+    solutions={"LSPc": dict(x=x, y=y, z=z, r=res.r, xi=xi, rho=rho, U=U)},
     objective=objective,
     termination=f"{criterion} (it: {opts.rounds_per_step}; obj. deviation: {None})",
-    data=window,
+    data=data,
   )

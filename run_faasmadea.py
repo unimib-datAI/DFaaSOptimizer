@@ -190,44 +190,6 @@ def compute_residual_capacity(
   return cap, residual_capacity, ell
 
 
-def data_dict_to_matrix(data_dict: dict, Nn: int, Nf: int = 0) -> np.array:
-  data_mat = np.zeros((Nn,Nn))
-  if Nf > 0:
-    data_mat = np.zeros((Nn,Nn,Nf))
-  for n1 in range(Nn):
-    for n2 in range(Nn):
-      if n1 != n2:
-        if Nf == 0:
-          data_mat[n1,n2] = data_dict[(n1+1,n2+1)]
-        else:
-          for f in range(Nf):
-            data_mat[n1,n2,f] = data_dict[(n1+1,n2+1,f+1)]
-  return data_mat
-
-
-def compute_utility(
-    p: np.array, 
-    data: dict,
-    auction_options: dict,
-    latency: np.array,
-    fairness: np.array
-  ) -> np.array:
-  Nn = data[None]["Nn"][None]
-  Nf = data[None]["Nf"][None]
-  utility = np.zeros((Nn,Nn,Nf))
-  for i in range(Nn):
-    for j in range(Nn):
-      for f in range(Nf):
-        price = p[j,f] if p.ndim == 2 else p[i,j,f]
-        utility[i,j,f] = (
-          data[None]["beta"][(i+1,j+1,f+1)] - 
-          price - 
-          auction_options["latency_weight"] * latency[i,j] - 
-          auction_options["fairness_weight"] * fairness[i,f]
-        )
-  return utility
-
-
 @step_time.parallel
 def define_bids(
     omega: np.array,

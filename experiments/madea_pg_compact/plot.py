@@ -3,7 +3,6 @@ from pathlib import Path
 import sys
 
 import matplotlib.pyplot as plt
-import numpy as np
 import pandas as pd
 
 root = Path(sys.argv[1])

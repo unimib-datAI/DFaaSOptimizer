@@ -67,15 +67,6 @@ def test_faasmadea_stopping_capacity_utility_and_bid_helpers():
   assert residual[1, 0] == 8.0
   assert ell[1, 0] == 2.0
 
-  utility = run_faasmadea.compute_utility(
-    p = np.zeros((2, 2, 2)),
-    data = data,
-    auction_options = {"latency_weight": 0.5, "fairness_weight": 0.25},
-    latency = np.array([[0.0, 1.0], [1.0, 0.0]]),
-    fairness = np.ones((2, 2)),
-  )
-  assert utility[0, 1, 0] == pytest.approx(4.25)
-
   bids = pd.DataFrame({
     "i": [0, 0],
     "j": [1, 1],
@@ -98,8 +89,6 @@ def test_faasmadea_stopping_capacity_utility_and_bid_helpers():
   assert y_eval[0, 1, 0] == 4.0
   assert p_eval[1, 0] > 3.0
 
-  matrix = run_faasmadea.data_dict_to_matrix(data[None]["beta"], 2, 2)
-  assert matrix[0, 1, 0] == 5.0
   additional, rho = run_faasmadea.start_additional_replicas(
     pd.DataFrame({"j": [1, 1, 1], "f": [0, 0, 1]}),
     np.zeros((2, 2)),

@@ -242,7 +242,7 @@ def _solve_step(ctx, t: int, data: dict, *, options: dict, order: str, response:
   """One step: sequential sweeps run on the step clock (wall time minus observers);
   the local initialization is a parallel phase."""
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
-  time_limit = ctx.general_options.get("TimeLimit", np.inf)
+  time_limit = ctx.time_limit
   loadt = data[None]["incoming_load"]
   fixed = ctx.reference is not None
   sp_data = ctx.step_data(data, t)
@@ -298,9 +298,10 @@ def _solve_step(ctx, t: int, data: dict, *, options: dict, order: str, response:
       rmp_omega = y.sum(axis=1)
       fairness += (rmp_omega > tolerance)
       n_accepted_queue.append(rmp_omega.sum())
-      bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
-      if bad_nodes:
-        raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
+      with step_time.untimed():
+        bad_nodes = check_ls_pr_feasibility_from_fixed_y(sp_data, y)
+        if bad_nodes:
+          raise RuntimeError(f"LSPr infeasible from fixed y assignments: {bad_nodes}")
       spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
         spr, sp_data, ctx.agents, ctx.solver_name, ctx.general_options,
         y, rmp_omega, ctx.parallelism

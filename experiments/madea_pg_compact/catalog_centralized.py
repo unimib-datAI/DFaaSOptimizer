@@ -41,23 +41,37 @@ def solve(path, time_limit, threads=1, gap=1e-6, selfish=False):
   data = update_data(data, {'incoming_load': get_current_load(traces, list(agents), 0)})
   Nn, Nf = data[None]['Nn'][None], data[None]['Nf'][None]
   started = time.perf_counter()
+  deadline = started + time_limit
   model = SelfishLoadManagementModel() if selfish else LoadManagementModel()
   instance = model.generate_instance(data)
-  local = (model.compute_local_gain_floors(instance, {'use_dp': True}, 'appsi_highs')
-           if selfish else 0.0)  # the floors: one local solve per node
+  local = 0.0
+  timed_out = False
+  if selfish:
+    local_started = time.perf_counter()
+    try:
+      model.compute_local_gain_floors(
+        instance, {'use_dp': True}, 'appsi_highs', deadline=deadline,
+      )
+    except TimeoutError:
+      timed_out = True
+    local = time.perf_counter() - local_started
   build = time.perf_counter() - started
-  opt = Highs()
-  opt.config.time_limit = max(1.0, time_limit - build)
-  opt.config.load_solution = False
-  opt.config.stream_solver = False
-  opt.highs_options.update({'threads': threads, 'mip_rel_gap': gap, 'random_seed': 0})
-  result = opt.solve(instance)
+  result = None
+  if not timed_out and build < time_limit:
+    opt = Highs()
+    opt.config.time_limit = max(0.0, deadline - time.perf_counter())
+    opt.config.load_solution = False
+    opt.config.stream_solver = False
+    opt.highs_options.update({'threads': threads, 'mip_rel_gap': gap, 'random_seed': 0})
+    result = opt.solve(instance)
   wall = time.perf_counter() - started
-  row = dict(model=model.name, nodes=Nn, functions=Nf, termination=str(result.termination_condition),
+  row = dict(model=model.name, nodes=Nn, functions=Nf,
+             termination=str(result.termination_condition) if result else 'TerminationCondition.maxTimeLimit',
              mip_rel_gap=gap, build_seconds=build, local_reference_seconds=local, wall_seconds=wall,
-             bound=result.best_objective_bound, solver_objective=result.best_feasible_objective,
+             bound=result.best_objective_bound if result else None,
+             solver_objective=result.best_feasible_objective if result else None,
              input_hash=hashlib.sha256((Path(path) / 'metadata.json').read_bytes()).hexdigest())
-  if result.best_feasible_objective is None:
+  if result is None or result.best_feasible_objective is None:
     return dict(row, status='no_solution', welfare=None, feasible=False)
   result.solution_loader.load_vars()
   x = np.rint(_array(instance.x, (Nn, Nf)))

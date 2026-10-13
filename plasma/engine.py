@@ -87,9 +87,12 @@ class PlasmaEngine:
         if self.rng.random() < self.opts.hb_loss:
           continue
         target = self.nodes[j]
+        # Heartbeats are sent after routing. Even zero wire delay reaches the
+        # next decision barrier; stamp that actual delivery round for freshness.
+        delivery_round = round_ + max(1, self.opts.hb_latency_rounds)
         self.clock.schedule(
-          round_ + self.opts.hb_latency_rounds,
-          lambda t=target, w=wire, r=round_ + self.opts.hb_latency_rounds:
+          delivery_round,
+          lambda t=target, w=wire, r=delivery_round:
             t.on_heartbeat(decode_heartbeat(w), r),
         )
 
@@ -100,23 +103,26 @@ class PlasmaEngine:
 
     def on_round(round_: int) -> None:
       self._route_all(round_, arrivals)
-      x = np.zeros((Nn, Nf))
-      z = np.zeros((Nn, Nf))
-      y = np.zeros((Nn, Nn, Nf))
+      with step_time.untimed():
+        x = np.zeros((Nn, Nf))
+        z = np.zeros((Nn, Nf))
+        y = np.zeros((Nn, Nn, Nf))
       with step_time.parallel_phase():
         for i, node in step_time.timed(enumerate(self.nodes), key=lambda item: item[0]):
           if not node.alive:
             continue
           counts = node.end_window()
-          x[i] = counts.x
-          z[i] = counts.z
-          for k, j in enumerate(node.params.nbrs):
-            y[i, j, :] = counts.y[k]
+          with step_time.untimed():
+            x[i] = counts.x
+            z[i] = counts.z
+            for k, j in enumerate(node.params.nbrs):
+              y[i, j, :] = counts.y[k]
       # snapshot r as it stood WHILE this window's traffic was admitted,
       # before any sb_pass below changes it -- utilization is x/xi over the
       # replicas that actually gated admission, not the post-sb_pass count
-      last["x"], last["z"], last["y"] = x, z, y
-      last["r"] = np.array([node.r for node in self.nodes])
+      with step_time.untimed():
+        last["x"], last["z"], last["y"] = x, z, y
+        last["r"] = np.array([node.r for node in self.nodes])
       self._send_heartbeats(round_)
       if self.opts.k_sb > 0 and (round_ + 1) % self.opts.k_sb == 0:
         with step_time.parallel_phase():
@@ -124,7 +130,8 @@ class PlasmaEngine:
             node.sb_pass(round_)
 
     self.clock.run(n_rounds, on_round)
-    xi = np.transpose(last["y"], (1, 0, 2))
-    return StepResult(
-      x=last["x"], z=last["z"], y=last["y"], xi=xi, r=last["r"]
-    )
+    with step_time.untimed():
+      xi = np.transpose(last["y"], (1, 0, 2))
+      return StepResult(
+        x=last["x"], z=last["z"], y=last["y"], xi=xi, r=last["r"]
+      )

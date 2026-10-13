@@ -1,8 +1,7 @@
 """Contract of the runners migrated to the shared frame (utils/run_frame.py).
 
 Each case: exact obj.csv label, five-column runtime.csv, artifacts equal to the captured baseline
-(experiments/harmonization/capture_baseline.py --artifacts; RUNNER_BASELINE, default
-/tmp/runner-logging-timing/before, compared when present), no step clock or log handler left
+(experiments/harmonization/capture_baseline.py --artifacts; explicit RUNNER_BASELINE), no step clock or log handler left
 after a return or a failure, the frame and the logger instead of print/log_stream, run() <= 80 lines.
 """
 import ast
@@ -21,7 +20,7 @@ import capture_baseline  # noqa: E402
 from compare_artifacts import compare_run  # noqa: E402
 from utils import step_time  # noqa: E402
 
-BASELINE = Path(os.environ.get("RUNNER_BASELINE", "/tmp/runner-logging-timing/before"))
+BASELINE = Path(os.environ["RUNNER_BASELINE"]) if "RUNNER_BASELINE" in os.environ else None
 # registry name, module, obj.csv label, a module-level callable of the step (failure injection)
 CASES = [
   ("faas-diffuse", "decentralized_diffusion", "FaaS-MADiG", "solve_subproblem"),
@@ -78,10 +77,12 @@ def test_runner_outputs_match_the_baseline(tmp_path, name, module, label, _):
   assert tuple(pd.read_csv(folder / "runtime.csv").columns) == step_time.COLUMNS
   assert {"config.json", "out.log", "LSPc_solution.csv"} <= {p.name for p in folder.iterdir()}
   assert not step_time.active()
-  runs = BASELINE / name / capture_baseline.instances()[0].name
-  baseline = next(runs.iterdir(), None) if runs.is_dir() else None
-  if baseline is not None:
-    assert compare_run(baseline, folder, name) == []
+  if BASELINE is not None:
+    runs = BASELINE / name / capture_baseline.instances()[0].name
+    assert runs.is_dir(), f"missing explicit baseline: {runs}"
+    baselines = list(runs.iterdir())
+    assert len(baselines) == 1, f"expected one baseline run in {runs}"
+    assert compare_run(baselines[0], folder, name) == []
 
 
 @pytest.mark.parametrize("name, module, label, step_call", CASES)

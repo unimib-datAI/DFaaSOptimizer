@@ -205,7 +205,6 @@ def node_move(
   The move is committed iff the TRUE utility (per-pair beta) improves by
   more than epsilon; x, y, r are mutated in place only on acceptance.
   Moves also respect the FRALB no-ping-pong constraint (see inline note)."""
-  Nn = sp_data[None]["Nn"][None]
   Nf = sp_data[None]["Nf"][None]
   memory_bids = {"i": [], "j": [], "f": []}
   neighbours = set(int(j) for j in np.nonzero(neighborhood[i, :])[0])
@@ -329,7 +328,8 @@ def check_pg_stopping(
   if total_runtime >= time_limit:
     return True, f"reached time limit: {total_runtime} >= {time_limit}"
   if n_accepted == 0 and n_new_replicas == 0:
-    return True, "epsilon-Nash equilibrium certified"
+    # Proposals optimize delta, not the beta-aware utility used for acceptance.
+    return True, "no improving proposal"
   return False, None
 
 
@@ -383,7 +383,7 @@ def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng) -> 
   """One step: sequential sweeps run on the step clock (wall time minus observers);
   the local initialization is a parallel phase."""
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
-  time_limit = ctx.general_options.get("TimeLimit", np.inf)
+  time_limit = ctx.time_limit
   loadt = data[None]["incoming_load"]
   fixed = ctx.reference is not None
   sp_data = ctx.step_data(data, t)

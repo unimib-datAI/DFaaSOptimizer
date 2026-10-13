@@ -29,7 +29,7 @@ def test_merge_tolerates_missing_timestep():
   }
   out = merge_sol_dict([a, b], ["A", "B"])
   assert set(out["time"]) == {"tot", 0, 1}
-  # shared timestep keeps both methods (B joins without suffix, no name clash)
-  assert "t = 0_A" in out.columns and "t = 0" in out.columns
+  # Shared timestep keeps both methods with consistent, unambiguous suffixes.
+  assert "t = 0_A" in out.columns and "t = 0_B" in out.columns
   # the baseline-only timestep survives with just method A, no crash
   assert "t = 1_A" in out.columns

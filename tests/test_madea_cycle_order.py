@@ -288,11 +288,11 @@ def test_three_algorithms_are_selectable_and_resume_independently(tmp_path, monk
   from hierarchical_auction import madea_level_cycles_runner as level_cycles
 
   monkeypatch.setattr("sys.argv", [
-    "run.py", "--methods", "hierarchical-madea", "hierarchical-madea-cycles",
+    "run.py", "--methods", "hierarchical-madea-legacy", "hierarchical-madea-cycles",
     "hierarchical-madea-level-cycles",
   ])
   methods = run.parse_arguments().methods
-  assert run.run_hierarchical_madea is original.run
+  assert run.run_hierarchical_madea_legacy is original.run
   assert run.run_hierarchical_madea_cycles is madea_runner.run
   assert run.run_hierarchical_madea_level_cycles is level_cycles.run
   assert run.METHOD_RESULT_MODELS["hierarchical-madea-cycles"] == (
@@ -300,7 +300,7 @@ def test_three_algorithms_are_selectable_and_resume_independently(tmp_path, monk
   )
   if resume:
     (tmp_path / "experiments.json").write_text(json.dumps({
-      "experiments_list": [[2, 123]], "hierarchical-madea": ["old-result"],
+      "experiments_list": [[2, 123]], "hierarchical-madea-legacy": ["old-result"],
     }))
   calls = []
 
@@ -317,18 +317,18 @@ def test_three_algorithms_are_selectable_and_resume_independently(tmp_path, monk
     return "levels-result"
 
   monkeypatch.setattr(run, "run_hierarchical_madea_level_cycles", levels)
-  monkeypatch.setattr(run, "run_hierarchical_madea", old)
+  monkeypatch.setattr(run, "run_hierarchical_madea_legacy", old)
   monkeypatch.setattr(run, "run_hierarchical_madea_cycles", new)
   monkeypatch.setattr(run, "results_postprocessing", lambda *a, **kw: None)
   run.run(
     {"seed": 123, "verbose": 0, "limits": {"Nn": {"values": [2]}}},
     str(tmp_path), n_experiments=1, methods=methods,
-    reference_method="hierarchical-madea", fix_r=False, sp_parallelism=0,
+    reference_method="hierarchical-madea-legacy", fix_r=False, sp_parallelism=0,
     enable_plotting=False, loop_over="Nn",
   )
-  assert calls == (["cycles", "levels"] if resume else ["old", "cycles", "levels"])
+  assert calls == (["cycles", "levels"] if resume else ["cycles", "levels", "old"])
   results = json.loads((tmp_path / "experiments.json").read_text())
-  assert results["hierarchical-madea"] == ["old-result"]
+  assert results["hierarchical-madea-legacy"] == ["old-result"]
   assert results["hierarchical-madea-cycles"] == ["cycles-result"]
   assert results["hierarchical-madea-level-cycles"] == ["levels-result"]
 

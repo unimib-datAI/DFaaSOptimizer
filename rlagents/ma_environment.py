@@ -374,7 +374,7 @@ class FaaSMARLEnvironment(BaseMultiAgentEnvironment):
         ) / input_rate
         self.info[agent]["cloud_penalty"] = - float(cloud_penalty)
       # reward
-      reward[agent] = loc_utility + fwd_utility + cloud_penalty
+      reward[agent] = loc_utility + fwd_utility - cloud_penalty
     return reward
   
   def simulate_action(self, action_dict):
@@ -709,7 +709,7 @@ class FaaSMARLEnvironment2(FaaSMARLEnvironment):
                 ][f-1]
               ) / input_rate
           # -- offloading to cloud
-          cloud_penalty = (
+          cloud_penalty += (
             self.instance_data["gamma"][(n,f)] * self.info[agent][
               "rej"
             ][f-1]
@@ -718,7 +718,7 @@ class FaaSMARLEnvironment2(FaaSMARLEnvironment):
       self.info[agent]["fwd_utility"] = float(fwd_utility)
       self.info[agent]["cloud_penalty"] = - float(cloud_penalty)
       # reward
-      reward[agent] = loc_utility + fwd_utility + cloud_penalty
+      reward[agent] = loc_utility + fwd_utility - cloud_penalty
     return reward
   
   def simulate_action(self, action_dict):
@@ -752,7 +752,11 @@ class FaaSMARLEnvironment2(FaaSMARLEnvironment):
           ][n]
         ) // self.instance_data["memory_requirement"][f]
       self.info[agent]["loc"] = x[n-1,:].tolist()
-      self.info[agent]["fwd"] = y[n-1,:,:].tolist()
+      self.info[agent]["fwd"] = [
+        y[n-1, int(neighbor)-1, :].tolist() for neighbor in self.agent_neighbors[agent]
+      ]
+      for neighbor in self.agent_neighbors[agent]:
+        self.info[agent][f"fwd_to_{neighbor}"] = y[n-1, int(neighbor)-1, :].tolist()
       self.info[agent]["total_fwd"] = omega[n-1,:].tolist()
       self.info[agent]["rej"] = z[n-1,:].tolist()
       self.info[agent]["n_replicas"] = r[n-1,:].tolist()

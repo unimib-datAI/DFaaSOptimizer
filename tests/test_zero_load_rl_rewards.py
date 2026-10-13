@@ -88,7 +88,7 @@ def _receiver(loads, per_node):
 
 @pytest.mark.parametrize("per_node", [False, True], ids=["node-function", "node"])
 @pytest.mark.parametrize("loads,expected", [
-  ([0.0], 0.0), ([0.0, 0.5], 2.75), ([0.5], 2.75),
+  ([0.0], 0.0), ([0.0, 0.5], 0.75), ([0.5], 0.75),
 ], ids=["zero", "mixed-functions", "positive-fraction"])
 def test_rewards_are_zero_safe_and_keep_positive_normalization(environments, per_node, loads, expected):
   receiver = _receiver(loads, per_node)
@@ -97,8 +97,7 @@ def test_rewards_are_zero_safe_and_keep_positive_normalization(environments, per
     rewards = environment.compute_reward(receiver)
 
   assert receiver.info["__common__"]["feasible"]
-  # Existing centralized objective subtracts cloud cost, while these MA reward
-  # methods add it. Preserve both conventions; this change only handles zeros.
+  # Local rewards and the centralized objective both subtract cloud cost.
   assert receiver.info["__common__"]["cobj"] == pytest.approx(0.75 if expected else 0)
   assert sum(rewards.values()) == pytest.approx(expected)
   assert all(np.isfinite(value) for value in rewards.values())

@@ -1,5 +1,6 @@
 import pyomo.environ as pyo
 import logging
+from types import SimpleNamespace
 from models.model import (
   BaseAbstractModel,
   BaseLoadManagementModel,
@@ -23,12 +24,6 @@ from models.rmp import (
   RMPAbstractModel,
   RMPCentralized,
   LRMP,
-  LRMP_freeMemory,
-)
-from models.auction_models import (
-  BuyerNodeModel,
-  SellerNodeModel,
-  BuyerNodeModel_fixedr,
 )
 import models.model as model_module
 
@@ -43,11 +38,14 @@ class FakeSolveResults:
         "termination_condition": model_module.TerminationCondition.optimal,
       },
     )()
-    self.solution = []
+    self.solution = [SimpleNamespace(
+      status=model_module.SolutionStatus.optimal, variable={}, objective={'OBJ': {'Value': 0}},
+    )]
 
 
 class FakeInstance:
   OBJ = 0
+  solutions = SimpleNamespace(load_from=lambda _result: None)
 
   def component_objects(self, *_args, **_kwargs):
     return []
@@ -180,7 +178,7 @@ def test_solve_does_not_pass_disabled_warmstart(monkeypatch):
   solution = BaseAbstractModel().solve(FakeInstance(), {}, solver_name="glpk")
 
   assert solution["solution_exists"] is True
-  assert solver.solve_kwargs == [{}]
+  assert solver.solve_kwargs == [{"load_solutions": False}]
 
 
 def test_solve_maps_glpk_time_limit_option(monkeypatch):
@@ -206,7 +204,7 @@ def test_solve_passes_enabled_warmstart_for_initial_solution(monkeypatch):
   solution = WarmstartModel().solve(FakeInstance(), {}, initial_solution={}, solver_name="gurobi")
 
   assert solution["solution_exists"] is True
-  assert solver.solve_kwargs == [{"warmstart": True}]
+  assert solver.solve_kwargs == [{"load_solutions": False, "warmstart": True}]
 
 
 def test_solve_retries_without_warmstart_when_solver_rejects_it(monkeypatch):
@@ -217,7 +215,9 @@ def test_solve_retries_without_warmstart_when_solver_rejects_it(monkeypatch):
   solution = WarmstartModel().solve(FakeInstance(), {}, initial_solution={}, solver_name="glpk")
 
   assert solution["solution_exists"] is True
-  assert solver.solve_kwargs == [{"warmstart": True}, {}]
+  assert solver.solve_kwargs == [
+    {"load_solutions": False, "warmstart": True}, {"load_solutions": False},
+  ]
 
 
 def test_base_load_management_model_inherits_from_base_abstract():
@@ -390,56 +390,15 @@ def test_lrmp_model_has_full_formulation():
   assert model.OBJ is not None
 
 
-def test_lrmp_free_memory_model_has_capacity_constraints2():
-  m = LRMP_freeMemory()
-  assert m.name == "LRMP_freeMemory"
-  model = m.model
-  assert model.omega_bar is not None
-  assert model.r is not None
-  assert model.capacity_constraints is not None
-  assert model.capacity_constraints2 is not None
-  assert model.no_traffic_loss is not None
 
 
 # ---- Auction models ----
 
 
-def test_buyer_node_model_has_demand_and_bids():
-  m = BuyerNodeModel()
-  assert m.name == "BuyerNodeModel"
-  model = m.model
-  assert model.neighborhood is not None
-  assert model.beta is not None
-  assert model.gamma is not None
-  assert model.c is not None
-  assert model.d is not None
-  assert model.z is not None
-  assert model.offload_only_to_neighbors is not None
-  assert model.no_traffic_loss is not None
-  assert model.OBJ is not None
 
 
-def test_seller_node_model_has_d_bar_and_whoami():
-  m = SellerNodeModel()
-  assert m.name == "SellerNodeModel"
-  model = m.model
-  assert model.whoami is not None
-  assert model.d_bar is not None
-  assert model.r is not None
-  assert model.d is not None
-  assert model.no_traffic_loss is not None
-  assert model.utilization_equilibrium is not None
-  assert model.utilization_equilibrium2 is not None
-  assert model.residual_capacity is not None
-  assert model.OBJ is not None
 
 
-def test_buyer_node_model_fixedr_fixes_replicas():
-  m = BuyerNodeModel_fixedr()
-  assert m.name == "BuyerNodeModel_fixedr"
-  model = m.model
-  assert model.r_bar is not None
-  assert model.fix_r is not None
 
 
 def test_pyo_var_type_is_non_negative_integers():

@@ -1,6 +1,6 @@
 % =====================================================================
 % FaaS-MAPG: sequential better-response dynamics of an exact potential
-% game, with an epsilon-Nash certificate.
+% game, with monotone welfare and a proposal-stalling stopping condition.
 % Meant to be \input{} (or pasted) into the paper. Assumes the paper's
 % notation (N, F, C_i^f, rho_i, omega_i^f, beta_{ij}^f, gamma_i^f, ...).
 % Cross-references are plain text; convert to \ref{} in the host paper.
@@ -23,9 +23,11 @@ lowering the objective, and it offers no equilibrium notion. \textsc{FaaS-MAPG}
 instead accepts a move only when it strictly improves the mover's own utility
 by more than a tolerance $\varepsilon>0$, which (Proposition~\ref{prop:mapg-potential})
 makes the welfare function $\Phi=\sum_i u_i$ increase by exactly the same
-amount, is monotonically non-decreasing, and yields a finite-time certificate
-(Theorem~\ref{thm:mapg-termination}) that the terminal state is an
-$\varepsilon$-Nash equilibrium with respect to the implemented move class.
+amount and remain monotonically non-decreasing. Theorem~\ref{thm:mapg-termination}
+bounds the number of accepted moves and establishes finite termination.
+The terminal sweep can certify that its proposals did not improve utility;
+it cannot certify an $\varepsilon$-Nash equilibrium, because the aggregate-priced
+proposal can miss feasible deviations that improve the true utility.
 
 % =====================================================================
 % BEGIN self-contained notation recap.
@@ -79,7 +81,7 @@ Service demand & $D_i^f$ & average execution time of $f$ at $i$ [s].\\
 Max utilization & $U^f_{\max}$ & stability threshold, $U^f_{\max}\in[0,1)$.\\
 Local / offload / Cloud profit & $\alpha_i^f$, $\beta_{ij}^f$, $\gamma_i^f$ & profit of local exec.; profit of offloading $i\!\to\! j$; Cloud-offloading penalty (per req/s).\\
 Acceptance tolerance & $\varepsilon>0$ & minimum utility gain required to commit a move.\\
-Max iterations / time limit & $H_{\max}$, $T_{\max}$ & sweep and wall-clock stop guards.\\
+Max iterations / time limit & $H_{\max}$, $T_{\max}$ & sweep and modelled algorithm-time stop guards.\\
 \midrule
 \multicolumn{3}{@{}l}{\textit{Strategy and state at sweep $h$}}\\
 Node strategy & $s_i=(r_i,x_i,\omega_i,y_{i\cdot})$ & replicas, local load, offloading target, and outbound routing row.\\
@@ -258,10 +260,10 @@ of \texttt{decentralized\_potentialgame.py}) repeats the sweep, starts
 replicas from any collected memory bids (\S\ref{sec:mapg-memory}), and checks
 the stopping condition (\texttt{check\_pg\_stopping}) after each sweep.
 
-\subsection{Finite termination and $\varepsilon$-Nash certificate}
+\subsection{Finite termination and proposal stalling}
 \label{sec:mapg-termination}
 
-\begin{theorem}[Finite termination at an $\varepsilon$-Nash equilibrium]
+\begin{theorem}[Finite termination of the proposal dynamics]
 \label{thm:mapg-termination}
 Let $\Phi_0$ be the potential of the initial state and let
 $\Phi_{\max}<\infty$ be any finite upper bound on $\Phi$ over the run's
@@ -271,15 +273,16 @@ the acceptance rule of \S\ref{sec:mapg-move}:
 \begin{enumerate}
 \item the number of \emph{accepted} moves over the whole run is at most
   $(\Phi_{\max}-\Phi_0)/\varepsilon$;
-\item the number of replica-expansion events (\S\ref{sec:mapg-memory}) is
-  finite, bounded by $\sum_i\lfloor \mathrm{RAM}_i/\min_f\mathrm{RAM}^f\rfloor$
-  total replicas system-wide;
+\item assuming strictly positive replica memory requirements, let
+  $R_{\max}=\sum_i\lfloor \mathrm{RAM}_i/\min_f\mathrm{RAM}^f\rfloor$.
+  Between two accepted moves, at most $R_{\max}$ replicas can be added;
+  thus, if $A$ moves are accepted, at most $(A+1)R_{\max}$ replicas can
+  be added over the run;
 \item hence, absent the max-iterations or time-limit guards, the algorithm
   terminates after finitely many sweeps at a sweep with zero accepted moves
-  and zero new replicas, and the terminal state $s^\star$ is an
-  $\varepsilon$-Nash equilibrium with respect to the implemented move class:
-  for every node $i$, the move that \emph{stage 1--2 of \S\ref{sec:mapg-move}
-  would propose} from $s^\star$ satisfies $u_i(s_i',s_{-i}^\star)-u_i(s^\star)\le\varepsilon$.
+  and zero new replicas. For every node $i$, the proposal tested in that
+  terminal sweep satisfies
+  $u_i(s_i',s_{-i}^\star)-u_i(s^\star)\le\varepsilon$.
 \end{enumerate}
 \end{theorem}
 \begin{proof}
@@ -293,10 +296,12 @@ occur before $\Phi$ would have to exceed $\Phi_{\max}$; the count is hence
 finite and bounded by that quantity.
 (2) Each replica-expansion event (\texttt{start\_additional\_replicas},
 reused unchanged from \textsc{FaaS-MADeA}) consumes strictly positive memory
-slack $\rho_j$ at some node $j$ and never removes a replica, so the total
-number of replicas placed system-wide is monotonically non-decreasing and
-bounded above by the total memory divided by the smallest per-function
-memory footprint; expansion events are therefore finite in number. Because
+slack $\rho_j$ at some node $j$ and never removes a replica. Accepted local
+moves can release replicas, so the total replica count need not be monotone
+across the entire run. Between accepted moves, however, only expansion can
+change replicas, and the count is bounded by $R_{\max}$. The $A$ accepted
+moves divide the run into at most $A+1$ such intervals, proving the stated
+bound and finiteness of expansion events. Because
 $\Phi$ is the centralized objective and replicas only ever relax capacity
 constraints for subsequent moves (they do not change $x,y,z$ of the sweep
 that placed them), an expansion event does not decrease $\Phi$.
@@ -308,27 +313,23 @@ non-fixed-point sweep strictly advances one of the two finite counters). At
 that terminal state $s^\star$, sweep~\S\ref{sec:mapg-move} was run for every
 node and rejected the proposed move, i.e.\ $u_i(s_i',s_{-i}^\star)-u_i(s^\star)\le\varepsilon$
 for the specific $s_i'$ that stages 1--2 constructed from $s^\star$ for every
-$i$; this is the definition of an $\varepsilon$-Nash equilibrium restricted
-to deviations reachable by that move class.
+$i$. This statement concerns only the proposals actually tested.
 \end{proof}
 
-\paragraph{Scope of the certificate.} The certificate in part~3 is honest
-about what it does \emph{not} claim: it is not an $\varepsilon$-Nash
-equilibrium of the unrestricted game (arbitrary $s_i'$), only with respect to
-the specific move class implemented --- the MILP proposal of stage~1 (which
-prices aggregate offloading, not per-pair $\beta$) composed with the greedy
-split of stage~2. A node might in principle find a strategy outside this
-move class (e.g. a split that is not the descending-$\beta$ knapsack applied
-to the MILP's own $\omega_i$, or a jointly different $(x_i,\omega_i)$ pair
-that the aggregate-priced MILP does not surface) with a strictly larger
-utility gain. The greedy split (stage~2) is exact given the proposed
-$\omega_i$, so the residual freedom is entirely in whether the proposal MILP
-explores the same $(x_i,\omega_i)$ vertex a per-pair-$\beta$-aware
-formulation would; this is the same aggregation gap discussed for the
-\textsc{FaaS-MADiG}/\textsc{FaaS-MABR} local problem~(P2) elsewhere in the
-paper. In practice, when the max-iterations or time-limit guard fires first,
-\texttt{check\_pg\_stopping} reports that reason instead and the run carries
-no equilibrium certificate for that timestep.
+\paragraph{Why stalling is not a Nash certificate.}
+Stage~1 optimizes the aggregate coefficient $\delta_i^f$, rather than the
+true destination rewards $\beta_{ij}^f$. Even an optimal proposal solve can
+therefore miss a profitable feasible deviation. For example, consider two
+neighbours with one function, each initially processing one request locally
+on a replica with capacity two and no free memory. Set $\alpha=1$,
+$\delta=0.1$, $\beta=2$, and $\gamma=0.1$. Both local proposals retain local
+processing, so the sweep accepts no moves and requests no replicas.
+Nevertheless, one node can move its request to the other's spare capacity,
+increasing its utility from one to two without violating capacity or
+no-ping-pong. Thus even the capacity-restricted game need not be at an
+$\varepsilon$-Nash equilibrium. The implemented stopping reason is
+\texttt{"no improving proposal"}; it preserves the monotonicity guarantee
+without claiming that all unilateral deviations have been ruled out.
 
 \subsection{Memory market}
 \label{sec:mapg-memory}
@@ -348,8 +349,8 @@ $\beta_{ij}^f>-\gamma_i^f$; \texttt{start\_additional\_replicas} allocates new
 replicas at bid-receiving sellers proportionally to demand fraction, subject
 to $\rho_j$. Two properties transfer unchanged from \textsc{FaaS-MADeA} and
 matter for Theorem~\ref{thm:mapg-termination}: (i) the market is
-\emph{memory-bounded} — replicas are only ever added within $\rho_j\ge0$, so
-the process cannot run indefinitely; and (ii) the market is
+\emph{memory-bounded} — replicas are only ever added within $\rho_j\ge0$,
+and only finitely many accepted moves can release memory; and (ii) the market is
 \emph{$\Phi$-invariant} in the sense of never decreasing $\Phi$ — a seller
 who opens a new replica does so purely to relax a capacity constraint seen by
 some other node's future proposal MILP, and the transaction has no direct
@@ -368,9 +369,8 @@ to $\varepsilon$-acceptance.
 reproducible). \textsc{FaaS-MAPG-R} draws a fresh random node permutation
 each sweep from a per-run generator seeded once. Both variants share the same
 move rule, acceptance test, and termination guarantee: the order only affects
-\emph{which} sequence of moves is realized and hence the specific
-$\varepsilon$-Nash equilibrium reached (potential games can have multiple
-equilibria), not whether termination and the certificate hold.
+\emph{which} sequence of moves is realized and hence the final allocation,
+not the monotonicity and finite-termination properties.
 
 \subsection{Stopping conditions}
 \label{sec:mapg-stopping}
@@ -378,13 +378,13 @@ equilibria), not whether termination and the certificate hold.
 \texttt{check\_pg\_stopping} reports exactly one of three reasons per
 timestep, checked in order: (i) \texttt{"max iterations reached"} if the
 sweep count reaches the configured cap; (ii) \texttt{"reached time limit"} if
-accumulated wall-clock/solver runtime exceeds the configured limit; (iii)
-\texttt{"epsilon-Nash equilibrium certified"} if a sweep accepts zero moves
-and starts zero new replicas — the fixed point of
-Theorem~\ref{thm:mapg-termination}. Only reason (iii) carries the equilibrium
-certificate of \S\ref{sec:mapg-termination}; (i) and (ii) are runtime guards
-that may fire before the certificate is reached, in which case the run's
-terminal state carries no such guarantee.
+modelled algorithm time reaches \texttt{algorithm\_time\_limit}; (iii)
+\texttt{"no improving proposal"} if a sweep accepts zero moves and starts
+zero new replicas. Sequential work counts on the shared step clock, parallel
+initialization uses the longest node task, and observers are excluded.
+The external solver's \texttt{TimeLimit} is a separate per-solve option.
+Reason (iii) states that the proposals stalled; none of the three reasons
+certifies Nash equilibrium or global optimality.
 
 \subsection{Positioning with respect to the literature and the paper's other coordination families}
 \label{sec:mapg-related}
@@ -397,20 +397,18 @@ proposed move unconditionally (score-greedy, commit-always), which offers no
 monotonicity guarantee on the objective; \textsc{FaaS-MAPG} gates commitment
 on a strict, true-utility improvement, which (Proposition~\ref{prop:mapg-potential},
 Theorem~\ref{thm:mapg-termination}) makes $\Phi$ monotone non-decreasing and
-yields a finite-time, certified stopping condition that \textsc{FaaS-MABR}
+yields a finite bound on accepted moves that \textsc{FaaS-MABR}
 does not have.
 
-Against \textsc{FaaS-MALD}, the certificates answer different questions.
+Against \textsc{FaaS-MALD}, the guarantees answer different questions.
 \textsc{FaaS-MALD}'s $LB$/$UB$ pair (see the companion \texttt{faas-mald-note},
 \S\S~``Coordination transportation LP''--``Positioning with respect to the
 literature'') certifies optimality of one fixed-capacity inner
 transportation LP, re-derived every outer iteration as capacities change; it
 says nothing about the joint replica-and-routing strategy across the outer
-loop. \textsc{FaaS-MAPG}'s certificate is a game-theoretic equilibrium
-statement on exactly that joint strategy $(r_i,x_i,\omega_i,y_{i\cdot})_i$,
-persisting across sweeps rather than being re-certified per inner solve, at
-the cost of being restricted to the implemented move class rather than to
-all deviations.
+loop. \textsc{FaaS-MAPG} guarantees monotone welfare across its accepted
+joint replica-and-routing moves and finite termination, but supplies no
+optimality bound or equilibrium certificate for the terminal strategy.
 
 The exact-potential-game construction is standard once payoffs are chosen as
 each player's contribution to a shared, additively separable objective
@@ -423,6 +421,6 @@ The auction-based literature underlying \textsc{FaaS-MADeA}
 \citep{bertsekas1988} and the dual-decomposition literature underlying
 \textsc{FaaS-MALD} \citep{bertsekas1989,nedic2009} both target a different
 certificate (price-based optimality of an inner allocation problem) rather
-than a Nash-equilibrium notion on the full decentralized game; \textsc{FaaS-MAPG}
-is, to our knowledge, the only family in this paper whose stopping condition
-is an explicit game-theoretic equilibrium certificate.
+than the monotone true-utility improvement guaranteed by \textsc{FaaS-MAPG}.
+The exact-potential formulation alone does not turn its surrogate proposals
+into best responses or its stopping condition into a Nash certificate.

@@ -1,7 +1,6 @@
 """Overall table of all methods plus FaaS-MAFW on the two shared 12-case campaigns of 2026-10-09."""
 from argparse import ArgumentParser
 from pathlib import Path
-import json
 
 import pandas as pd
 import sys

@@ -1,7 +1,6 @@
 """Add one one-shot-PG variant using the completed shared inputs of a benchmark."""
 from argparse import ArgumentParser
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import hashlib
 import json
 

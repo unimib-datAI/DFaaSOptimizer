@@ -94,7 +94,7 @@ def update_functions_info(base_spec_dict: dict, instance_data: dict) -> dict:
       "name": f"f{f+1}",
       "memory": int(memory[f+1]),
       "duration_mean": float(demand_avg[f]),
-      "duration_scv": float(max(0.00001, demand_std[f]))
+      "duration_scv": float(max(0.00001, (demand_std[f] / demand_avg[f])**2))
     }
     spec_dict["functions"].append(funct)
   # compute threshold
@@ -144,7 +144,7 @@ def load_and_convert(instance_folder: str, dest_folder: str) -> dict:
 
 def main(instance_folder: str, dest_folder: str):
   # build base dictionary
-  base_spec_dict = load_and_convert(instance_folder, "spec")
+  base_spec_dict = load_and_convert(instance_folder, dest_folder)
   # load requests traces
   requests, mt, Mt, ts = load_requests_traces(instance_folder)
   # loop over time

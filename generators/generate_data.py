@@ -381,7 +381,9 @@ def generate_weights(
           ) for f in range(Nf)
         ]
         delta[n1,:] = d
-      gamma[Nn-1,:] = g
+      gamma[Nn-1,:] = [
+        weights_generator(rng, limits["weights"]["gamma"]) for _ in range(Nf)
+      ]
       delta[Nn-1,:] = [
         beta[Nn-1,:,f].mean() * generate_random_float(
           rng, limits["weights"]["delta_multiplier"]

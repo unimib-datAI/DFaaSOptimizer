@@ -92,17 +92,18 @@ def run_scenario(
     loadt = _zero_dead_row(loadt, Nf, currently_dead)
 
     # -- plasma: drive the engine directly, mirroring plasma.runner.run --
-    arrivals = np.array([
-      [int(round(loadt[(n + 1, f + 1)] * opts.W)) for f in range(Nf)]
+    lam = np.array([
+      [loadt[(n + 1, f + 1)] for f in range(Nf)]
       for n in range(Nn)
     ])
+    arrivals = np.floor(lam * opts.W).astype(int)
     msgs_before = engine.msg_count
     res = engine.run_rounds(opts.rounds_per_step, arrivals)
-    plasma_data = update_data(base_instance_data, {"incoming_load": {
-      (n + 1, f + 1): arrivals[n, f] for n in range(Nn) for f in range(Nf)
-    }})
+    plasma_data = update_data(base_instance_data, {"incoming_load": loadt})
+    x, y = res.x / opts.W, res.y / opts.W
+    z = np.maximum(0., lam - x - y.sum(axis=1))
     plasma_obj = compute_centralized_objective(
-      plasma_data, res.x, res.y, res.z
+      plasma_data, x, y, z
     )
 
     # -- shared true load for the MILP-side methods --
@@ -113,10 +114,6 @@ def run_scenario(
       for edge in milp_data[None]["neighborhood"]:
         if failed in edge:
           milp_data[None]["neighborhood"][edge] = 0
-    lam = np.array([
-      [loadt[(n + 1, f + 1)] for f in range(Nf)] for n in range(Nn)
-    ])
-
     # -- dynamic oracle: fresh MILP solve every step on the true load --
     x_o, y_o, z_o, _, _ = solve_snapshot(milp_data, solver_name, solver_options)
     oracle_obj = compute_centralized_objective(milp_data, x_o, y_o, z_o)

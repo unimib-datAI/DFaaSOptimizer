@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from plasma.core.types import LOCAL, REJ, PlasmaOptions
+from plasma.core.types import LOCAL, PlasmaOptions
 
 
 def target_weights(
@@ -15,17 +15,6 @@ def target_weights(
   gates = np.where(nbr_spare > 0.0, 1.0, eps_explore)
   w[2:] = w[2:] * gates
   return w
-
-
-def choose_target(
-    rng: np.random.Generator, weights: np.ndarray, unsplittable: bool
-  ) -> int:
-  if unsplittable:
-    return int(np.argmax(weights))
-  total = weights.sum()
-  if total <= 0.0:
-    return REJ
-  return int(rng.choice(len(weights), p=weights / total))
 
 
 def update_conductance(

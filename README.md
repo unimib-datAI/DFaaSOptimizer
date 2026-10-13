@@ -181,7 +181,12 @@ for the normalized value scale. The option does not guarantee improved welfare.
 
 Three separate algorithms are available:
 
-- `hierarchical-madea` retains the existing interleaved auction implementation.
+- `hierarchical-madea-legacy` retains the existing interleaved auction implementation.
+- `hierarchical-madea` selects the level-cycles implementation in campaigns,
+  `run.py`, and remote jobs. Before the October 2026 audit fix, `run.py` and
+  remote jobs used this same name for the legacy variant; historical results
+  must be distinguished by their `obj.csv` model header (`HierarchicalMADeA`
+  versus `HierarchicalMADeALevelCycles`). Do not merge those variants by alias alone.
 - `hierarchical-madea-cycles` completes the production MADEA loop before invoking
   higher-level auctions. If the actual stopping reason is `all load assigned`,
   it terminates immediately. Other convergence reasons invoke the hierarchy,
@@ -542,9 +547,25 @@ columns of `utils/step_time.py`, one row per simulated step:
 | `parallel_phases` | parallel phases of the step (0 for sequential methods and the centralized model) |
 | `workers` | pool workers used (0 without a pool); for the centralized model, the solver threads (an explicit setting, 1 for GLPK, 0 when automatic) |
 
-Time budgets (`algorithm_time_limit`, the PG refinement budget, `TimeLimit` of the
-sequential sweeps) are compared with `algorithm_s`, so slower logging or checks never
-change a decision. Results written before this format stay readable: the readers
+The shared `general.algorithm_time_limit` (unlimited when omitted)
+and the PG refinement budget are compared with modelled algorithm time. BR and
+PG use this same budget. Old BR/PG configs that used only `TimeLimit` for their
+sweeps must set `algorithm_time_limit` explicitly. `TimeLimit` sets the native solver limit, including
+HiGHS; these are separate controls. Limits are checked at algorithm boundaries:
+an in-flight local solve or round can finish after the budget. PLASMA deliberately
+uses its configured number of rounds, rather than the iterative time budget.
+
+The centralized runner reports the solver call as `algorithm_s`; model construction
+remains in `wall_s`. Distributed runners count their decision and coordination
+work, with each parallel phase counted as its longest node task. Thus the clock
+and exclusions are shared, but centralized solver time is not an end-to-end
+latency measurement. The catalog centralized/selfish helper instead uses a wall
+budget covering model construction, local gain-floor solves, and the final solve.
+Observers (checks, logging, export) never consume the distributed algorithm budget.
+
+Solution and runtime readers preserve physical steps from `runtime.csv`, or infer
+them from `config.json` for historical runs; comparisons align on these steps,
+including nonzero starts and strides. Results written before this format stay readable: the readers
 (`run.py`, `postprocessing.py`, `benchmark_summary.py`,
 `remote_experiments/results_reader.py`) prefer `algorithm_s` and fall back to the
 historical `tot` column or to the centralized model-name column, also within one
@@ -1081,3 +1102,17 @@ uv run compare_results.py -i solutions/centralized \
                           --folder_parse_format 3classes-0_10-centralized-{}_{}` \
                           --single_model_baseline 5
 ```
+
+### Flow units and model domains
+
+All common solution CSVs contain request **rates**. PLASMA internally routes integer
+arrivals in a window of `W` seconds, then divides accepted local/forwarded counts
+by `W` for export. It floors input counts (`rate * W`) and records the fractional
+remainder as rejection, preserving the original traffic and replica capacity.
+
+The flow domains are deliberate algorithm differences: centralized, MADEA, FW,
+and standalone PG use integer flows, while diffusion, dual, and BR permit
+continuous forwarding. On fractional-capacity inputs their feasible sets can
+differ; equal timing and output units do not make their mathematical models
+identical. Integer `fixed_sum` traces conserve the total rounded once to the
+nearest request; real-valued traces conserve it to the nearest thousandth.

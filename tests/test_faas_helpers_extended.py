@@ -8,10 +8,8 @@ from run_faasmacro import (
   combine_solutions,
 )
 from run_faasmadea import (
-  data_dict_to_matrix,
   check_stopping_criteria as madea_check_stopping,
   compute_residual_capacity as madea_compute_residual,
-  compute_utility,
 )
 from postprocessing import (
   add_node_function_info,
@@ -158,17 +156,6 @@ def test_combine_solutions_tightens_over_allocated_replicas():
 
 # --- run_faasmadea helper tests ---
 
-def test_data_dict_to_matrix_3d():
-  data_dict = {
-    (1, 1, 1): 0.0, (1, 2, 1): 5.0,
-    (2, 1, 1): 3.0, (2, 2, 1): 0.0,
-  }
-  mat = data_dict_to_matrix(data_dict, 2, 1)
-  assert mat.shape == (2, 2, 1)
-  assert mat[0, 1, 0] == 5.0
-  assert mat[1, 0, 0] == 3.0
-
-
 def test_madea_check_stopping_criteria_reached_time_limit():
   stop, why = madea_check_stopping(
     it=0, max_iterations=10,
@@ -217,25 +204,6 @@ def test_madea_compute_residual_capacity_zero_replicas():
   assert cap[0, 0] == 0.0
   assert residual[0, 0] == 0.0
   assert ell[0, 0] == 0.0
-
-
-def test_compute_utility_all_positive():
-  data = _sp_data()
-  data[None]["beta"] = {
-    (1, 1, 1): 0.0, (1, 2, 1): 5.0,
-    (2, 1, 1): 3.0, (2, 2, 1): 0.0,
-  }
-
-  utility = compute_utility(
-    p=np.zeros((2, 2, 1)),
-    data=data,
-    auction_options={"latency_weight": 0.1, "fairness_weight": 0.2},
-    latency=np.array([[0.0, 1.0], [1.0, 0.0]]),
-    fairness=np.ones((2, 2)),
-  )
-
-  assert utility.shape == (2, 2, 1)
-  assert utility[0, 1, 0] > 0
 
 
 # --- postprocessing helpers ---

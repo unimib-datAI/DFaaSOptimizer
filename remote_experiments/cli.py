@@ -8,7 +8,6 @@ from pathlib import Path
 
 from ray_dispatcher import Dispatcher, Inventory, Project, SecretFile
 
-from . import definitions  # imports register all suites as a side effect
 from .batch import Batch
 from .definitions import get_suite, list_suites
 from .jobs import experiment_to_job

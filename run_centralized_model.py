@@ -249,7 +249,7 @@ def init_problem(
   os.makedirs(os.path.join(solution_folder, "graph"), exist_ok = True)
   planar = is_planar(graph)
   if planar:
-    with open(os.path.join(solution_folder, "graph/PLANAR"), "wb") as ost:
+    with open(os.path.join(solution_folder, "graph/PLANAR"), "wb"):
       pass
   draw_networkx(
     graph, 

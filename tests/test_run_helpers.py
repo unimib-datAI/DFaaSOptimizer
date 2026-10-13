@@ -98,9 +98,9 @@ def test_merge_sol_dict_merges_total_and_time_rows():
   }
   merged = merge_sol_dict([a, b], ["A", "B"])
   assert "tot_A" in merged.columns
-  assert "tot" in merged.columns
+  assert "tot_B" in merged.columns
   assert "it 0_A" in merged.columns
-  assert "it 0" in merged.columns
+  assert "it 0_B" in merged.columns
   assert set(merged["time"].astype(str)) == {"tot", "0"}
 
 

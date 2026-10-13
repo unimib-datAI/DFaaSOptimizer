@@ -1,14 +1,11 @@
 import math
 from pyomo.opt.results import SolverStatus
-from pyomo.opt import TerminationCondition
+from pyomo.opt import TerminationCondition, SolutionStatus
 from pyomo.contrib.iis import write_iis
 import pyomo.environ as pyo
 
 from utils import step_time
 from utils.common import run_timestamp
-
-from abc import ABC, abstractmethod
-
 
 # PYO_VAR_TYPE = pyo.NonNegativeReals
 PYO_VAR_TYPE = pyo.NonNegativeIntegers
@@ -22,6 +19,8 @@ APPLICATION_OPTIONS = {"use_dp", "algorithm_time_limit"}
 def _solver_option_name(solver_name: str, option_name: str) -> str:
   if solver_name in {"glpk", "glpsol"} and option_name == "TimeLimit":
     return "tmlim"
+  if solver_name in {"highs", "appsi_highs"} and option_name == "TimeLimit":
+    return "time_limit"
   return option_name
 
 
@@ -37,7 +36,6 @@ class BaseAbstractModel():
     self.model = pyo.AbstractModel()
     self.name = "BaseAbstractModel"
   
-  # @abstractmethod
   def _provide_initial_solution(self, instance, initial_solution):
     pass
   
@@ -63,7 +61,8 @@ class BaseAbstractModel():
     if solver is None:
       solver = pyo.SolverFactory(solver_name)
       _SOLVER_CACHE[solver_name] = solver
-    solver.options.clear()
+    for key in list(solver.options):
+      del solver.options[key]
     for k, v in solver_options.items():
       if k not in APPLICATION_OPTIONS:  # never external solver parameters
         solver.options[_solver_option_name(solver_name, k)] = (
@@ -76,22 +75,27 @@ class BaseAbstractModel():
       warmstart = True
     # solve
     s = step_time.now()  # the solver call only
-    solve_kwargs = {"warmstart": True} if warmstart else {}
+    solve_kwargs = {"load_solutions": False}
+    if warmstart:
+      solve_kwargs["warmstart"] = True
     try:
       results = solver.solve(instance, **solve_kwargs)
     except ValueError as exc:
       if not warmstart or "warmstart" not in str(exc):
         raise
-      results = solver.solve(instance)
+      results = solver.solve(instance, load_solutions=False)
+    # A successful solver invocation may still be infeasible or have no
+    # incumbent. Inspect the returned solution before loading any variables.
+    get_solution_ok = results.solver.status in {
+      SolverStatus.ok, SolverStatus.warning, SolverStatus.aborted,
+    } and bool(len(results.solution)) and results.solution[0].status in {
+      SolutionStatus.feasible, SolutionStatus.optimal,
+      SolutionStatus.globallyOptimal, SolutionStatus.locallyOptimal,
+      SolutionStatus.bestSoFar, SolutionStatus.stoppedByLimit,
+    } and bool(results.solution[0].variable or results.solution[0].objective)
+    if get_solution_ok:
+      instance.solutions.load_from(results)
     e = step_time.now()
-    # check solver status
-    get_solution_ok = results.solver.status == SolverStatus.ok
-    if not get_solution_ok:
-      if (results.solver.status == SolverStatus.aborted
-        ) and (
-          len(results.solution) > 0
-        ):
-        get_solution_ok = True
     solution = {
       "solver_status": str(results.solver.status),
       "solution_exists": get_solution_ok,
@@ -107,7 +111,7 @@ class BaseAbstractModel():
           solution[v.name].append(pyo.value(v[idx]))
       # get objective function value
       solution["obj"] = pyo.value(instance.OBJ)
-    else:
+    elif results.solver.termination_condition == TerminationCondition.infeasible:
       now = run_timestamp()
       try:
         _ = write_iis(instance, f"infeas_{now}.ilp", "gurobi")
@@ -288,107 +292,6 @@ class LoadManagementModel(BaseCentralizedModel):
   def residual_capacity(model, n):
     return sum(
       model.r[n,f] * model.memory_requirement[f] for f in model.F
-    ) <= model.memory_capacity[n]
-  
-  @staticmethod
-  def no_ping_pong1(model, n, f):
-    return sum(
-      model.y[n,m,f] for m in model.N
-    ) <= model.incoming_load[n,f] * model.i_sends_f[n,f]
-  
-  @staticmethod
-  def no_ping_pong2(model, n, f):
-    return sum(
-      model.y[m,n,f] for m in model.N
-    ) <= sum(
-      model.incoming_load[m,f] for m in model.N
-    ) * model.i_receives_f[n,f]
-  
-  @staticmethod
-  def no_ping_pong3(model, n, f):
-    return model.i_sends_f[n,f] + model.i_receives_f[n,f] <= 1
-  
-  @staticmethod
-  def maximize_processing(model):
-    return sum(
-      sum(
-        model.alpha[n,f] * model.x[n,f] / (model.incoming_load[n,f] or 1) + sum(
-          model.beta[n,m,f] * model.y[n,m,f] for m in model.N
-        ) / (model.incoming_load[n,f] or 1) - (
-          model.gamma[n,f] * model.z[n,f]
-        ) / (model.incoming_load[n,f] or 1) for f in model.F
-      ) for n in model.N
-    )
-
-
-class SortOfKnapsack(BaseCentralizedModel):
-  """
-  max sum(alpha * x + sum(beta * y) - gamma * z)
-  """
-  def __init__(self):
-    super().__init__()
-    self.name = "SortOfKnapsack"
-    ###########################################################################
-    # Problem variables
-    ###########################################################################
-    # 1 if node i is fowarding any request of function f
-    self.model.i_sends_f = pyo.Var(
-      self.model.N, self.model.F, domain = pyo.Binary
-    )
-    # 1 if node i receives any request of function f
-    self.model.i_receives_f = pyo.Var(
-      self.model.N, self.model.F, domain = pyo.Binary
-    )
-    ###########################################################################
-    # Constraints
-    ###########################################################################
-    self.model.utilization_equilibrium = pyo.Constraint(
-      self.model.N, self.model.F, rule = self.utilization_equilibrium
-    )
-    self.model.utilization_equilibrium2 = pyo.Constraint(
-      self.model.N, self.model.F, rule = self.utilization_equilibrium2
-    )
-    self.model.residual_capacity = pyo.Constraint(
-      self.model.N, rule = self.residual_capacity
-    )
-    self.model.no_ping_pong1 = pyo.Constraint(
-      self.model.N, self.model.F, rule = self.no_ping_pong1
-    )
-    self.model.no_ping_pong2 = pyo.Constraint(
-      self.model.N, self.model.F, rule = self.no_ping_pong2
-    )
-    self.model.no_ping_pong3 = pyo.Constraint(
-      self.model.N, self.model.F, rule = self.no_ping_pong3
-    )
-    ###########################################################################
-    # Objective function
-    ###########################################################################
-    self.model.OBJ = pyo.Objective(
-      rule = self.maximize_processing, sense = pyo.maximize
-    )
-  
-  @staticmethod
-  def utilization_equilibrium(model, n, f):
-    return model.demand[n,f] * (
-      model.x[n,f] + sum(
-        model.y[m,n,f] for m in model.N
-      )
-    ) <= model.r[n,f] * model.max_utilization[f]
-  
-  @staticmethod
-  def utilization_equilibrium2(model, n, f):
-    return model.demand[n,f] * (
-      model.x[n,f] + sum(
-        model.y[m,n,f] for m in model.N
-      )
-    ) >= (model.r[n,f] - 1) * model.max_utilization[f]
-  
-  @staticmethod
-  def residual_capacity(model, n):
-    return sum(
-      model.memory_requirement[f] * model.demand[n,f] * (
-        model.x[n,f] + sum(model.y[m,n,f] for m in model.N)
-      ) / model.max_utilization[f] + model.memory_requirement[f] for f in model.F
     ) <= model.memory_capacity[n]
   
   @staticmethod

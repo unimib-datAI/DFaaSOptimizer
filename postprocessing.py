@@ -1,4 +1,4 @@
-from utils.common import load_requests_traces
+from utils.common import load_requests_traces, run_steps
 
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -156,7 +156,7 @@ def load_models_results(
                 )[0]
                 for t in times_fwd:
                   if t in times_bwd:
-                    all_models_ping_pong[model_name].append((n1,f,n2,t))
+                    all_models_ping_pong[model_name].append((n1,f,n2,detailed_fwd_sol.index[t]))
   return (
     all_models_local_count, 
     all_models_fwd_count, 
@@ -164,6 +164,31 @@ def load_models_results(
     all_models_replicas,
     all_models_ping_pong
   )
+
+
+def result_steps(solution_folder: str, count: int):
+  """Recover physical steps, including legacy CSVs whose rows omit the step.
+
+  Modern runtime.csv is authoritative. Historical folders use config.json;
+  folders without either retain the original positional indexing.
+  """
+  runtime_path = os.path.join(solution_folder, "runtime.csv")
+  if os.path.exists(runtime_path):
+    runtime = pd.read_csv(runtime_path)
+    if "step" in runtime:
+      if len(runtime) < count:
+        raise ValueError("runtime.csv has fewer steps than the solution")
+      return runtime["step"].iloc[:count].to_numpy()
+  config_path = os.path.join(solution_folder, "config.json")
+  if os.path.exists(config_path):
+    with open(config_path) as stream:
+      config = json.load(stream)
+    if "max_steps" in config:
+      steps = run_steps(config)
+      if len(steps) < count:
+        raise ValueError("config.json has fewer steps than the solution")
+      return steps[:count]
+  return range(count)
 
 
 def load_solution(
@@ -189,6 +214,10 @@ def load_solution(
     for key in ["LSP", "SP/coord"]:
       if key in obj:
         obj.rename(columns = {key: "FaaS-MACrO"}, inplace = True)
+  steps = result_steps(solution_folder, len(solution))
+  for frame in (solution, replicas, detailed_fwd_solution, utilization, obj):
+    if len(frame):
+      frame.index = steps
   return solution, replicas, detailed_fwd_solution, utilization, obj
 
 
@@ -288,6 +317,10 @@ def plot_history(
     obj_values: list,
     plot_filename: str = None
   ):
+  # Bars use row positions; align line plots to those positions as well.
+  solution, utilization, replicas, offloaded = (
+    frame.reset_index(drop=True) for frame in (solution, utilization, replicas, offloaded)
+  )
   Nf = len(input_requests_traces)
   Nn = len(input_requests_traces[0])
   max_workload = {
@@ -390,7 +423,7 @@ def process_results(
     all_models_rej_count, 
     all_models_replicas,
     all_models_ping_pong
-  ) = load_models_results(solution_folder, models, plot_all_history)
+  ) = load_models_results(solution_folder, models, models, plot_all_history)
   # create folder to store plots
   plot_folder = os.path.join(solution_folder, "postprocessing")
   os.makedirs(plot_folder, exist_ok = True)
@@ -551,6 +584,7 @@ def load_runtime(solution_folder: str) -> pd.DataFrame:
   label = pd.read_csv(obj_path, nrows = 0).columns[0] if os.path.exists(obj_path) else colname
   values = runtime["algorithm_s"] if "algorithm_s" in runtime else runtime[colname]
   runtime = pd.DataFrame({"runtime": values, "method": label})
+  runtime.index = result_steps(solution_folder, len(runtime))
   # -- termination condition
   tc_path = os.path.join(solution_folder, "termination_condition.csv")
   if os.path.exists(tc_path):
@@ -561,7 +595,7 @@ def load_runtime(solution_folder: str) -> pd.DataFrame:
           else mcolors.TABLEAU_COLORS["tab:red"] 
             for c in tc[label]
       ]
-      runtime["termination_condition"] = tc[label]
+      runtime["termination_condition"] = tc[label].to_numpy()
   return runtime
 
 
@@ -667,6 +701,7 @@ if __name__ == "__main__":
         obj = pd.read_csv(
           os.path.join(solution_folder, "obj.csv")
         )
+        obj.index = result_steps(solution_folder, len(obj))
         for key in ["LSP", "SP/coord"]:
           if key in obj:
             obj.rename(columns = {key: "FaaS-MACrO"}, inplace = True)

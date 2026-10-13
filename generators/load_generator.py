@@ -36,30 +36,28 @@ class LoadGenerator:
   def _impose_system_workload(
       self, total_workload, input_requests: dict
     ) -> dict:
-    # convert base input requests dict into a matrix
-    base_signals = np.array([
-      input_requests[agent] for agent in input_requests
-    ])
+    # Allocate whole requests (or thousandths for real-valued traces) by largest
+    # remainder. Clip the source before normalizing so the later nonnegative
+    # clamp cannot change the requested system total.
+    base_signals = np.array(list(input_requests.values()))
+    integer = np.issubdtype(base_signals.dtype, np.integer)
+    base_signals = np.maximum(base_signals, 0)
     num_agents, num_timesteps = base_signals.shape
-    # if a single value of total_workload is provided, it is the same at all
-    # time steps
-    if isinstance(total_workload, (int, float)):
-      total_workload = np.full(num_timesteps, round(total_workload, 3))
-    # normalize so that at each timestep, sum of all agents' 
-    # workloads == total_workload[t]
-    workloads = np.zeros_like(base_signals)
-    for t in range(num_timesteps):
-      total = np.sum(base_signals[:, t])
-      if total == 0:
-        workloads[:, t] = round(total_workload[t] / num_agents, 3)
-      else:
-        workloads[:, t] = [
-          round(w, 3) for w in base_signals[:, t] / total * total_workload[t]
-        ]
-    # extract dictionary
-    workloads_dict = {agent: workloads[agent] for agent in input_requests}
-    return workloads_dict
-  
+    totals = np.broadcast_to(total_workload, (num_timesteps,))
+    scale = 1 if integer else 1000
+    workloads = np.zeros(base_signals.shape, dtype=int if integer else float)
+    for t, requested in enumerate(totals):
+      target = int(round(max(0, requested) * scale))
+      total = base_signals[:, t].sum()
+      shares = base_signals[:, t] / total if total else np.full(num_agents, 1 / num_agents)
+      quotas = shares * target
+      units = np.floor(quotas).astype(int)
+      remainder = target - units.sum()
+      order = np.argsort(-(quotas - units), kind="stable")
+      units[order[:remainder]] += 1
+      workloads[:, t] = units if integer else units / scale
+    return dict(zip(input_requests, workloads))
+
   def _synthetic_sinusoidal_input_requests(
       self, 
       max_steps: int, 

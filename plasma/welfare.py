@@ -373,14 +373,15 @@ class WelfareEngine(PlasmaEngine):
 
     self.clock.run(n_rounds, on_round)
     # Observer/export only. No global arrays are used to select transactions.
-    x = np.array([node.x for node in self.nodes])
-    z = np.array([node.z for node in self.nodes])
-    r = np.array([node.r for node in self.nodes])
-    y = np.zeros((len(self.nodes), len(self.nodes), self.nodes[0].Nf))
-    for i, node in enumerate(self.nodes):
-      for k, j in enumerate(node.params.nbrs):
-        y[i, j] = node.y[k]
-    return StepResult(x, z, y, np.transpose(y, (1, 0, 2)), r)
+    with step_time.untimed():
+      x = np.array([node.x for node in self.nodes])
+      z = np.array([node.z for node in self.nodes])
+      r = np.array([node.r for node in self.nodes])
+      y = np.zeros((len(self.nodes), len(self.nodes), self.nodes[0].Nf))
+      for i, node in enumerate(self.nodes):
+        for k, j in enumerate(node.params.nbrs):
+          y[i, j] = node.y[k]
+      return StepResult(x, z, y, np.transpose(y, (1, 0, 2)), r)
 
 
 def run(config, parallelism=0, log_on_file=False, disable_plotting=False):

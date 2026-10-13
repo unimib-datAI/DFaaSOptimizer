@@ -5,7 +5,8 @@ from run_faasmacro import run as run_iterations
 from run_faasmadea import run as run_auction
 from decentralized_auction import run as run_auction_one_shot
 from hierarchical_auction.runner import run as run_hierarchical
-from hierarchical_auction.madea_runner import run as run_hierarchical_madea
+from hierarchical_auction.madea_runner import run as run_hierarchical_madea_legacy
+from hierarchical_auction.madea_level_cycles_runner import run as run_hierarchical_madea
 from hierarchical_auction.madea_cycles_runner import run as run_hierarchical_madea_cycles
 from hierarchical_auction.madea_level_cycles_runner import run as run_hierarchical_madea_level_cycles
 from decentralized_diffusion import run as run_diffusion
@@ -18,7 +19,7 @@ from one_shot_pg import run as run_one_shot_pg, run_hierarchical as run_hierarch
 from decentralized_gcaa import run as run_gcaa
 from plasma.runner import run as run_plasma
 from plasma.welfare import run as run_plasma_welfare
-from postprocessing import load_models_results
+from postprocessing import load_models_results, result_steps
 from utils.common import reconcile_paths
 
 import matplotlib.colors as mcolors
@@ -51,7 +52,8 @@ METHOD_RESULT_MODELS = {
   "hierarchical-one-shot-pg": ("LSPc", "HierarchicalOneShotPG"),
   "hierarchical-madea-level-cycles-pg": ("LSPc", "HierarchicalMADeALevelCyclesPG"),
   "hierarchical": ("LSPc", "HierarchicalAuction"),
-  "hierarchical-madea": ("LSPc", "HierarchicalMADeA"),
+  "hierarchical-madea": ("LSPc", "HierarchicalMADeALevelCycles"),
+  "hierarchical-madea-legacy": ("LSPc", "HierarchicalMADeA"),
   "hierarchical-madea-cycles": ("LSPc", "HierarchicalMADeACycles"),
   "hierarchical-madea-level-cycles": ("LSPc", "HierarchicalMADeALevelCycles"),
   "faas-diffuse": ("LSPc", "FaaS-MADiG"),
@@ -87,7 +89,7 @@ def runtime_series(frame, method_name):
   writing utils/step_time.COLUMNS (centralized included); historical files:
   the centralized model column or 'tot'."""
   if "algorithm_s" in frame:
-    return frame["algorithm_s"]
+    return frame.set_index("step")["algorithm_s"] if "step" in frame else frame["algorithm_s"]
   return frame[method_name] if method_name in frame else frame["tot"]
 
 def resolve_centralized_model_key(folder: str, default: str) -> str:
@@ -95,6 +97,20 @@ def resolve_centralized_model_key(folder: str, default: str) -> str:
     if os.path.exists(os.path.join(folder, f"{key}_solution.csv")):
       return key
   return default
+
+
+def resolve_result_model(folder: str, method: str) -> tuple[str, str]:
+  """Keep old hierarchical-madea runs distinct from the current level-cycles alias."""
+  key, label = METHOD_RESULT_MODELS[method]
+  if method == "centralized":
+    key = resolve_centralized_model_key(folder, key)
+  elif method == "hierarchical-madea":
+    path = os.path.join(folder, "obj.csv")
+    if os.path.exists(path):
+      columns = pd.read_csv(path, nrows=0).columns
+      if "HierarchicalMADeA" in columns:
+        label = "HierarchicalMADeA"
+  return key, label
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -134,6 +150,7 @@ def parse_arguments() -> argparse.Namespace:
       "hierarchical-madea-level-cycles-pg",
       "hierarchical",
       "hierarchical-madea",
+      "hierarchical-madea-legacy",
       "hierarchical-madea-cycles",
       "hierarchical-madea-level-cycles",
       "faas-diffuse",
@@ -254,6 +271,7 @@ def load_obj_value(solution_folder: str) -> pd.DataFrame:
     for key in ["FaaS-MACrO", "SP/coord"]:
       if key in obj:
         obj.rename(columns = {key: "FaaS-MACrO"}, inplace = True)
+    obj.index = result_steps(solution_folder, len(obj))
   return obj
 
 
@@ -314,34 +332,22 @@ def load_termination_condition(
       tc["iteration"] = iteration
       tc["deviation"] = deviation
       tc["best_iteration"] = best_it
-    else:
-      tc["time"] = tc.index
+    tc["time"] = result_steps(solution_folder, len(tc))
   return tc
 
 
 def merge_sol_dict(results_list: list, methods_names: list) -> pd.DataFrame:
-  res = results_list[0]["tot"].rename(
-    columns = {"tot": f"tot_{methods_names[0]}"}
-  )
-  for r,m in zip(results_list[1:], methods_names[1:]):
-    if "tot" in r:
-      res = res.join(r["tot"], rsuffix = f"_{m}")
-  res["time"] = "tot"
-  for key in results_list[0]:
-    if key != "tot":
-      time = int(key.split(" ")[-1])
-      df = results_list[0][key].rename(
-        columns = {key: f"{key}_{methods_names[0]}"}
-      )
-      for r,m in zip(results_list[1:], methods_names[1:]):
-        # methods may cover different timestep ranges (e.g. a baseline folder
-        # from an earlier run with a different horizon); skip a method that has
-        # no data for this timestep instead of crashing the postprocessing
-        if key in r:
-          df = df.join(r[key], rsuffix = f"_{m}")
-      df["time"] = time
-      res = pd.concat([res, df])
-  return res
+  keys = set().union(*(result.keys() for result in results_list))
+  keys = sorted(keys, key=lambda key: (key != "tot", int(key.split()[-1]) if key != "tot" else 0))
+  frames = []
+  for key in keys:
+    frame = pd.concat([
+      result[key].rename(columns={key: f"{key}_{method}"})
+      for result, method in zip(results_list, methods_names) if key in result
+    ], axis=1)
+    frame["time"] = "tot" if key == "tot" else int(key.split()[-1])
+    frames.append(frame)
+  return pd.concat(frames)
 
 
 def plot_total_count(df: pd.DataFrame, plot_filename: str):
@@ -408,9 +414,9 @@ def results_postprocessing(
         )
         # -- load results
         # ---- local_count, fwd_count, rej_count, replicas, ping_pong
-        mkey, mname = METHOD_RESULT_MODELS[method]
-        if method == "centralized":
-          mkey = resolve_centralized_model_key(abs_folders[-1], mkey)
+        mkey, mname = resolve_result_model(abs_folders[-1], method)
+        if method == reference_method:
+          reference_method_name = mname
         results.append(load_models_results(abs_folders[-1], [mkey], [mname]))
         # -- check ping-pong problems
         if len(results[-1][-1][mname]) > 0:
@@ -442,9 +448,9 @@ def results_postprocessing(
       fwd_count.to_csv(os.path.join(exp_plot_folder, "fwd_by_function.csv"))
       rej_count.to_csv(os.path.join(exp_plot_folder, "rej_by_function.csv"))
       # total rejections
-      all_rej = rej_count.groupby("time").sum()
+      all_rej = rej_count.groupby("time").sum(min_count=1)
       all_req = (
-        local_count.groupby("time").sum() + fwd_count.groupby("time").sum()
+        local_count.groupby("time").sum(min_count=1) + fwd_count.groupby("time").sum(min_count=1)
       ) + all_rej
       all_rej = all_rej / all_req * 100
       # objective function value
@@ -453,7 +459,7 @@ def results_postprocessing(
       for af, mname in zip(abs_folders[1:], found_methods[1:]):
         temp = load_obj_value(af)
         temp.columns = [mname]
-        obj = obj.join(temp)
+        obj = obj.join(temp, how="outer")
       # plot
       _, axs = plt.subplots(nrows = 1, ncols = 2, figsize = (16,6))
       obj.plot(marker = ".", grid = True, ax = axs[0])
@@ -580,6 +586,7 @@ def results_postprocessing(
     for mname, af in zip(found_methods, abs_folders):
       if os.path.exists(os.path.join(af, "runtime.csv")):
         runtimes[mname] = pd.read_csv(os.path.join(af, "runtime.csv"))
+        runtimes[mname].index = result_steps(af, len(runtimes[mname]))
         if (
             mname == "LoadManagementModel"
             and mname not in runtimes[mname].columns
@@ -613,7 +620,7 @@ def results_postprocessing(
     if reference_method_name in found_methods and len(runtimes) > 1:
       runtime_comparison = {}
       for mname in found_methods:
-        runtime_comparison[mname] = runtime_series(runtimes[mname], mname).tolist()
+        runtime_comparison[mname] = runtime_series(runtimes[mname], mname)
         if mname != "LoadManagementModel":
           runtime_comparison[f"iteration_{mname}"] = all_tc[
             (
@@ -623,7 +630,7 @@ def results_postprocessing(
             ) & (
               all_tc["seed"] == exp_description_tuple[1]
             )
-          ]["iteration"].tolist()
+          ].set_index("time")["iteration"]
           runtime_comparison[f"best_iteration_{mname}"] = all_tc[
             (
               all_tc["method"] == mname
@@ -632,7 +639,7 @@ def results_postprocessing(
             ) & (
               all_tc["seed"] == exp_description_tuple[1]
             )
-          ]["best_iteration"].tolist()
+          ].set_index("time")["best_iteration"]
       runtime_comparison = pd.DataFrame(runtime_comparison)
       # -- compute deviation
       for mname in found_methods:
@@ -1224,6 +1231,7 @@ def run(
         ("hierarchical-one-shot-pg", run_hierarchical_one_shot_pg),
         ("hierarchical-madea-level-cycles-pg", run_hierarchical_madea_pg),
         ("plasma-welfare", run_plasma_welfare),
+        ("hierarchical-madea-legacy", run_hierarchical_madea_legacy),
       )
       if not generate_only and method in methods and (experiment_idx is None
         or len(solution_folders.get(method, [])) <= experiment_idx

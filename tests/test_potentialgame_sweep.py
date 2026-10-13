@@ -92,7 +92,7 @@ def test_sweep_raises_potential_then_certifies_equilibrium():
   assert n_acc == 1
   assert delta_phi > 0
   assert np.isclose(phi1 - phi0, delta_phi)
-  # second sweep: same proposal is no longer an improvement -> equilibrium
+  # Second sweep: this proposal no longer improves utility; others may still do so.
   n_acc2, delta_phi2, _, _ = potential_game_sweep(
     x, y, r, data, neighborhood, np.zeros(2), 1e-6, 1e-9,
     "fixed", rng, _offload_all_proposal,
@@ -100,7 +100,7 @@ def test_sweep_raises_potential_then_certifies_equilibrium():
   assert n_acc2 == 0
   assert np.isclose(delta_phi2, 0.0)
   stop, why = check_pg_stopping(1, 100, n_acc2, 0, 0.0, np.inf)
-  assert stop and why == "epsilon-Nash equilibrium certified"
+  assert stop and why == "no improving proposal"
   # ledger conservation: residual capacity consistent with committed flows
   _, residual, ell = compute_residual_capacity(x, y, r, data)
   assert np.isclose(ell[1, 0], 4.001)

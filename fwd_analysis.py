@@ -34,7 +34,7 @@ def count_requests(
   all_local = pd.DataFrame()
   all_sentrecv = pd.DataFrame()
   all_rej = pd.DataFrame()
-  for t in range(len(detailed_fwd_solution)):
+  for t in detailed_fwd_solution.index:
     x, y, z, _, _ = encode_solution(
       Nn, Nf, solution, detailed_fwd_solution, replicas, t
     )
@@ -106,9 +106,7 @@ def plot_filtered_traces(
     solution_folder, only_local, with_offloading, with_reject
   ):
   traces, mt, Mt, ts  = load_requests_traces(solution_folder)
-  onlylocal_times = mt + np.asarray(only_local) * ts
-  offloading_times = mt + np.asarray(with_offloading) * ts
-  reject_times = mt + np.asarray(with_reject) * ts
+  offloading_times = np.asarray(with_offloading)
   for f, f_traces in traces.items():
     # f_traces_array = {
     #   a: np.array(tr)[with_offloading] for a, tr in f_traces.items()
@@ -159,7 +157,7 @@ def main(solution_folder: str, model_name: str):
     #   solution_folder, only_local, with_offloading, with_reject
     # )
     # plot all
-    t = 0
+    t = all_sentrecv["t"].iloc[0]
     all_sentrecv[all_sentrecv["t"] == t][["sent","recv"]].plot.bar(
       logy = True
     )
@@ -175,11 +173,11 @@ def main(solution_folder: str, model_name: str):
   for f, f_traces in input_load.items():
     norej_traces[f] = {}
     for n, n_trace in f_traces.items():
-      norej_traces[f][n] = n_trace.copy()
-      for idx, t in enumerate(range(mt, Mt, ts)):
-        norej_traces[f][n][t] -= int(
+      norej_traces[f][n] = np.array(n_trace, dtype=float, copy=True)
+      for t in all_rej["t"].unique():
+        norej_traces[f][n][t] -= float(
           all_rej[
-            (all_rej["t"] == idx) & (all_rej["node"] == n)
+            (all_rej["t"] == t) & (all_rej["node"] == n)
           ][f"f{f}"].iloc[0]
         )
     if len(f_traces) <= 10:

@@ -1,7 +1,6 @@
 """Small paired planar comparison using the existing validated family harness."""
 from argparse import ArgumentParser
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 import hashlib
 import json
 

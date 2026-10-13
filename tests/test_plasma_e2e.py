@@ -118,14 +118,12 @@ def test_runner_supports_w_not_one(tmp_path):
   folder2 = run_plasma(cfg2, parallelism=0)  # must not trip check_feasibility
   obj = pd.read_csv(os.path.join(folder2, "obj.csv"))["Plasma"]
   assert np.isfinite(obj).all()
-  # same seed => identical per-second load traces, so a W=2 window handles
-  # ~2x the requests of a W=1 window (every LSPc_solution column is a
-  # per-window request count)
+  # The shared solution artifacts retain requests/second, independently of W.
   def _total(folder):
     sol = pd.read_csv(os.path.join(folder, "LSPc_solution.csv"))
     return sol.select_dtypes(include=[np.number]).to_numpy().sum()
   ratio = _total(folder2) / _total(folder1)
-  assert 1.8 <= ratio <= 2.2, ratio
+  assert ratio == pytest.approx(1.0)
 
 
 from utils.faasmacro import compute_centralized_objective

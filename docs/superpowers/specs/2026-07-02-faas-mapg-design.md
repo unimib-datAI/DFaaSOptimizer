@@ -7,8 +7,10 @@ Design spec, 2026-07-02. Approved by Michele in brainstorming session.
 A new decentralized algorithm, **FaaS-MAPG** (Multi-Agent Potential Game),
 for the DiFRALB problem: joint replica allocation and horizontal offloading
 formulated as an **exact potential game**, with better-response dynamics that
-provably terminate at an ε-Nash equilibrium while the social welfare
-(centralized objective) increases monotonically.
+terminate after finitely many accepted moves while social welfare
+(centralized objective) increases monotonically. Audit correction (2026-10-13):
+the aggregate-priced proposal is not a true best response, so a stalled sweep
+does not certify ε-Nash equilibrium; the technical note includes a counterexample.
 
 Hard constraint: **no modification to any existing function** of other
 algorithms. Reuse is allowed and encouraged; only new functions, methods,
@@ -40,7 +42,7 @@ classes, and files may be added.
 - **Acceptance (better-response)**: a proposed move is committed iff it
   improves *i*'s true utility (evaluated after the β-aware split) by more
   than `ε`. Every accepted move raises Φ by ≥ ε; Φ is bounded above ⇒
-  finitely many accepted moves ⇒ termination at an ε-Nash equilibrium.
+  finitely many accepted moves. A stalled sweep reports `no improving proposal`.
   Welfare monotonicity is asserted at runtime.
 
 ## Node move (proposal + exact evaluation)
@@ -74,8 +76,8 @@ so monotonicity and finite termination are preserved.
 - Gauss-Seidel sweeps. Variants: **MAPG-S** (fixed ascending order) and
   **MAPG-R** (per-sweep random permutation, seeded rng) — mirrors MABR-S/R.
 - Stop when a full sweep produces zero accepted moves and zero replica
-  additions ⇒ certified ε-Nash. Standard guards (max_iterations,
-  time_limit) as in MABR.
+  additions ⇒ no improving proposal was found. Standard guards (`max_iterations`,
+  `algorithm_time_limit`) as in MABR; solver `TimeLimit` remains separate.
 - Per control period `t`: initial local solve P2 (`LSP` via
   `solve_subproblem`, reused) → sweeps until stop →
   `compute_social_welfare`, `combine_solutions`,
@@ -92,7 +94,7 @@ so monotonicity and finite termination are preserved.
 | `run.py` | ADD imports + map entries `faas-pg-s` / `faas-pg-r` → ("LSPc", "FaaS-MAPG-S"/"-R"). Additive lines only. |
 | `config_files/*.json` (smoke/eval) | ADD `solver_options.pg_s` / `pg_r` with `epsilon` (default 1e-6) |
 | `tests/test_potentialgame_*.py` | NEW: unit (knapsack split, ε-acceptance, `LSP_pg` constraints), property (welfare monotone non-decreasing across iterations; feasibility at every commit), e2e smoke vs centralized on a small instance |
-| `faas-mapg-note/` | NEW: LaTeX note (`faas-mapg.tex` + `main.tex` wrapper + `references.bib` + `README.md`) following the `faas-bestresponse-note` pattern: game formulation, exact-potential proof, better-response algorithm, ε-Nash termination proof, positioning vs MABR/MADeA/MALD |
+| `faas-mapg-note/` | LaTeX note (`faas-mapg.tex` + `main.tex` wrapper + `references.bib` + `README.md`): game formulation, exact-potential proof, better-response algorithm, finite-termination proof, counterexample to Nash certification, positioning vs MABR/MADeA/MALD |
 
 ## `LSP_pg` model detail
 
@@ -124,4 +126,4 @@ test in step 4, not from the proposal being optimal.
 3. Ledger conservation: `ledger[j,f] + Σ_i y[i,j,f] == C_j^f` after every
    move.
 4. Termination: every run ends with a recorded reason
-   (ε-Nash / max_iterations / time_limit).
+   (no improving proposal / max_iterations / algorithm_time_limit).

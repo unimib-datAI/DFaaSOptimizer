@@ -26,4 +26,4 @@ def list_suites() -> list[str]:
   return sorted(_REGISTRY)
 
 
-from . import paper, smoke  # imported for @register_suite side effects
+from . import paper, smoke  # noqa: F401 - @register_suite side effects

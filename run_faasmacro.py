@@ -4,9 +4,7 @@ from run_centralized_model import (
   join_complete_solution
 )
 from utils.centralized import (
-  check_feasibility, 
   validate_centralized_solution, 
-  decode_solution, 
   encode_solution, 
 )
 from utils.faasmacro import (
@@ -288,9 +286,6 @@ def compute_deviation(
 def compute_lower_bound(
     sp_obj: float, pi: dict, Nfthr: list, loadt: dict, Nn: int, sp_omega: np.array
   ) -> float:
-  tot_workload = {
-    f: sum([loadt[(n+1,f)] for n in range(Nn)]) for f in pi.keys()
-  }
   highest_cost = 0
   for f, pi_f in pi.items():
     highest_cost += pi_f# * tot_workload[f]#sp_omega[:,f-1].sum()#Nfthr[f-1]#
@@ -383,10 +378,19 @@ def combine_solutions(
     spr_r = np.ceil(demand * served / max_utilization - 1e-9).astype(int)
   spr_r = np.maximum(spr_r, 0)
   # -- compute utilization
-  spr_U = compute_utilization(
-    sp_data,
-    {"x": sp_x, "xi": sp_xi, "r": spr_r, "obj": None}
+  # These are total replicas, even when sp_data contains fixed r_bar inputs.
+  spr_U = np.divide(
+    demand * served, spr_r, out=np.zeros_like(served, dtype=float), where=spr_r > 0,
   )
+  memory = np.array([sp_data[None]["memory_requirement"][f + 1] for f in range(Nf)])
+  capacity = np.array([sp_data[None]["memory_capacity"][n + 1] for n in range(Nn)])
+  sp_rho = capacity - spr_r @ memory
+  rmp_U = None
+  if rmp_x is not None and rmp_r is not None:
+    rmp_U = np.divide(
+      demand * (rmp_x + sp_y.sum(axis=0)), rmp_r,
+      out=np.zeros_like(served, dtype=float), where=rmp_r > 0,
+    )
   # -- compute rejections
   sp_z = np.zeros((Nn,Nf))
   for (n,f), l in loadt.items():
@@ -410,7 +414,7 @@ def combine_solutions(
       "r":    rmp_r,
       "xi":   rmp_xi,
       "rho":  rmp_rho,
-      "U":    spr_U
+      "U":    rmp_U
     }
   }
   validate_centralized_solution(
@@ -418,41 +422,6 @@ def combine_solutions(
     solution["sp"]["r"], sp_data,
   )
   return solution
-
-
-def decode_solutions(
-    sp_data: dict, solution: dict, sp_complete_solution, rmp_complete_solution
-  ):
-  # -- SP
-  sp_x = solution["sp"]["x"]
-  sp_y = solution["sp"]["y"]
-  sp_z = solution["sp"]["z"]
-  sp_xi = solution["sp"]["xi"]
-  sp_rho = solution["sp"]["rho"]
-  sp_U = solution["sp"]["U"]
-  sp_r = solution["sp"]["r"]
-  sp_complete_solution = decode_solution(
-    sp_x, sp_y, sp_z, sp_r, sp_xi, sp_rho, sp_U, sp_complete_solution
-  )
-  feas = check_feasibility(sp_x,sp_y.sum(axis=1),sp_z,sp_r,sp_U,sp_data)
-  if not (feas[0]):
-    raise RuntimeError(feas[1])
-  # -- RMP
-  if "rmp" in solution and rmp_complete_solution is not None:
-    rmp_x = solution["rmp"]["x"]
-    rmp_y = solution["rmp"]["y"]
-    rmp_z = solution["rmp"]["z"]
-    rmp_xi = solution["rmp"]["xi"]
-    rmp_rho = solution["rmp"]["rho"]
-    rmp_U = solution["rmp"]["U"]
-    rmp_r = solution["rmp"]["r"]
-    rmp_complete_solution = decode_solution(
-      rmp_x, rmp_y, rmp_z, rmp_r, rmp_xi, rmp_rho, rmp_U, 
-      rmp_complete_solution
-    )
-  # centralized objective
-  obj = compute_centralized_objective(sp_data, sp_x, sp_y, sp_z)
-  return sp_complete_solution, rmp_complete_solution, obj
 
 
 def init_parallel_worker(
@@ -629,7 +598,6 @@ def solve_subproblem(
     pi: dict = None,
     detailed_pi: np.array = None
   ):
-  Nn = base_instance_data[None]["Nn"][None]
   Nf = base_instance_data[None]["Nf"][None]
   # update data
   sp_data = deepcopy(base_instance_data)

@@ -4,7 +4,7 @@ import pytest
 from plasma.baselines.milp_baseline import routing_lp
 from plasma.engine import PlasmaEngine
 from plasma.core.types import LOCAL, REJ, PlasmaOptions
-from plasma.core.routing import choose_target, target_weights, update_conductance
+from plasma.core.routing import target_weights, update_conductance
 
 
 def test_local_gate_closes_local_column():
@@ -20,18 +20,6 @@ def test_neighbor_without_spare_gets_exploration_floor():
   w = target_weights(D_f, local_open=True, nbr_spare=np.array([0.0]),
                      eps_explore=0.01)
   assert w[2] == pytest.approx(4.0 * 0.01)
-
-
-def test_choose_target_unsplittable_is_argmax():
-  rng = np.random.default_rng(0)
-  w = np.array([1.0, 0.5, 7.0])
-  assert choose_target(rng, w, unsplittable=True) == 2
-
-
-def test_choose_target_sampled_follows_weights():
-  rng = np.random.default_rng(0)
-  w = np.array([0.0, 0.0, 1.0])
-  assert choose_target(rng, w, unsplittable=False) == 2
 
 
 def test_conductance_reinforces_accepted_traffic():

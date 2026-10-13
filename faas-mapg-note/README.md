@@ -2,16 +2,16 @@
 
 A paper-ready LaTeX section describing **FaaS-MAPG** (Multi-Agent Potential
 Game) --- the sequential better-response coordination scheme in
-`decentralized_potentialgame.py` --- as an exact potential game with a
-certified $\varepsilon$-Nash equilibrium stopping condition, in the notation
+`decentralized_potentialgame.py` --- as an exact potential game with monotone
+welfare and a proposal-stalling stopping condition, in the notation
 of `Decentralized_FaaS_coordination.pdf`.
 
 ## Files
 - `faas-mapg.tex` --- the `\section{}` to `\input{}` (or paste) into the
   paper. Covers the game formulation, the exact-potential proposition, the
   proposal-MILP + greedy-split + $\varepsilon$-acceptance move rule, the
-  finite-termination / equilibrium-certificate theorem (explicitly scoped to
-  the implemented move class), the reused memory market, the S/R variants,
+  finite-termination theorem and a counterexample to Nash certification,
+  the reused memory market, the S/R variants,
   the three stopping reasons, and positioning against FaaS-MABR, FaaS-MALD,
   and the potential-game literature. Remove the self-contained "Notation and
   capacity model" subsection on insertion.
