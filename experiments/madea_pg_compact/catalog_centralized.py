@@ -1,5 +1,9 @@
 """Centralized reference (LoadManagementModel) for one sampled instance, step 0.
 
+With ``selfish``, SelfishLoadManagementModel: every node first solves its own
+problem (DP, HiGHS where DP does not apply) and the central solve must leave
+it at least that local gain.
+
 Solved with HiGHS (appsi) under a wall-clock limit; records the incumbent
 welfare (same metric as the decentralized runs, ``compute_centralized_objective``
 on a solution checked by ``validate_centralized_solution``), the dual bound
@@ -19,6 +23,7 @@ from pyomo.contrib.appsi.solvers import Highs
 
 import families_extended as families
 from models.model import LoadManagementModel
+from models.selfish import SelfishLoadManagementModel
 from run_centralized_model import get_current_load, update_data
 from utils.centralized import validate_centralized_solution
 from utils.faasmacro import compute_centralized_objective
@@ -31,12 +36,15 @@ def _array(var, shape):
   return np.array([pyo.value(var[idx]) for idx in var], dtype=float).reshape(shape)
 
 
-def solve(path, time_limit, threads=1, gap=1e-6):
+def solve(path, time_limit, threads=1, gap=1e-6, selfish=False):
   data, traces, agents, graph = families.load_materialized_instance(path)
   data = update_data(data, {'incoming_load': get_current_load(traces, list(agents), 0)})
   Nn, Nf = data[None]['Nn'][None], data[None]['Nf'][None]
   started = time.perf_counter()
-  instance = LoadManagementModel().generate_instance(data)
+  model = SelfishLoadManagementModel() if selfish else LoadManagementModel()
+  instance = model.generate_instance(data)
+  local = (model.compute_local_gain_floors(instance, {'use_dp': True}, 'appsi_highs')
+           if selfish else 0.0)  # the floors: one local solve per node
   build = time.perf_counter() - started
   opt = Highs()
   opt.config.time_limit = max(1.0, time_limit - build)
@@ -45,8 +53,8 @@ def solve(path, time_limit, threads=1, gap=1e-6):
   opt.highs_options.update({'threads': threads, 'mip_rel_gap': gap, 'random_seed': 0})
   result = opt.solve(instance)
   wall = time.perf_counter() - started
-  row = dict(nodes=Nn, functions=Nf, termination=str(result.termination_condition),
-             build_seconds=build, wall_seconds=wall,
+  row = dict(model=model.name, nodes=Nn, functions=Nf, termination=str(result.termination_condition),
+             build_seconds=build, local_reference_seconds=local, wall_seconds=wall,
              bound=result.best_objective_bound, solver_objective=result.best_feasible_objective,
              input_hash=hashlib.sha256((Path(path) / 'metadata.json').read_bytes()).hexdigest())
   if result.best_feasible_objective is None:
