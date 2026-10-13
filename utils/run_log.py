@@ -7,6 +7,7 @@
 verbose 0 -> WARNING, 1 -> INFO, >= 2 -> DEBUG; format "%(message)s" (out.log keeps the text the
 log parsers read). Emission is observer code (step_time.untimed); keep the whole call site, with
 its level guard and argument preparation, inside ``step_time.untimed()`` during a step.
+Outside any run log, INFO and above go to stdout (status lines of library callers).
 """
 import logging
 import os
@@ -38,6 +39,33 @@ class _FileHandler(_Untimed, logging.FileHandler):
 
 class _StreamHandler(_Untimed, logging.StreamHandler):
   pass
+
+
+class _CurrentStdout(_Untimed, logging.StreamHandler):
+  """sys.stdout as it is when a record is emitted (callers and tests may replace it)."""
+
+  def __init__(self):
+    super().__init__(sys.stdout)
+
+  @property
+  def stream(self):
+    return sys.stdout
+
+  @stream.setter
+  def stream(self, value):
+    pass
+
+
+def _install_default() -> None:
+  root = logging.getLogger(ROOT)
+  if not root.handlers:
+    handler = _CurrentStdout()
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    root.handlers, root.propagate = [handler], False
+    root.setLevel(logging.INFO)
+
+
+_install_default()
 
 
 @contextmanager

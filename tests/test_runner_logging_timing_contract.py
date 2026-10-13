@@ -237,3 +237,10 @@ def test_verbosity_and_slow_logging_do_not_change_decisions(tmp_path, monkeypatc
   in_steps = len(records) - 2 * len(runtime) - 1   # outside the clock: t = and TOTAL per step, saved
   assert in_steps > 0
   assert (runtime.wall_s - runtime.algorithm_s).sum() >= 0.9 * delay * in_steps
+
+
+@pytest.mark.parametrize("path", ["plasma/eval/scenario.py"])
+def test_evaluation_tooling_uses_the_shared_clock_and_logger(path):
+  tree = ast.parse((ROOT / path).read_text())
+  calls = [(qualified, call.lineno) for qualified, call, _ in _qualified_calls(tree)]
+  assert not [c for c in calls if c[0] in CLOCKS or c[0] == "print"], calls

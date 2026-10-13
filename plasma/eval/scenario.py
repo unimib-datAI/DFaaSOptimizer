@@ -19,7 +19,6 @@ its objective series against this driver's oracle column offline.
 
 import argparse
 import os
-from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -33,8 +32,11 @@ from plasma.eval.regret import adaptation_lag, cumulative_regret
 from plasma.runner import build_nodes
 from run_centralized_model import init_problem
 from utils.centralized import get_current_load
-from utils.common import load_configuration
+from utils import run_log
+from utils.common import load_configuration, run_timestamp
 from utils.faasmacro import compute_centralized_objective
+
+log = run_log.logger(__name__)
 
 
 def _zero_dead_row(loadt: dict, Nf: int, dead_node: int | None) -> dict:
@@ -63,8 +65,7 @@ def run_scenario(
   run_time_step = config.get("run_time_step", 1)
   opts = PlasmaOptions.from_config(config)
   base_solution_folder = config["base_solution_folder"]
-  now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S.%f")
-  solution_folder = f"{base_solution_folder}/{now}"
+  solution_folder = f"{base_solution_folder}/{run_timestamp()}"
   os.makedirs(solution_folder, exist_ok=True)
   base_instance_data, traces, agents, _ = init_problem(
     limits, trace_type, max_steps, seed, solution_folder
@@ -177,8 +178,7 @@ def main() -> None:
       df["t"].to_numpy(), df[method].to_numpy(), df["oracle"].to_numpy(),
       change_points=change_points,
     ) if change_points else []
-    print(f"{method}: cumulative_regret={regret[-1]:.4f} "
-          f"adaptation_lag={lag}")
+    log.info("%s: cumulative_regret=%.4f adaptation_lag=%s", method, regret[-1], lag)
 
 
 if __name__ == "__main__":

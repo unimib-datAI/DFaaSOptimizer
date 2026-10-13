@@ -65,8 +65,6 @@ class RunContext:
   general_options: dict
   time_limit: float
   tolerance: float
-  max_iterations: int | None
-  patience: int | None
   checkpoint_interval: int
   steps: range
   base_data: dict
@@ -79,6 +77,15 @@ class RunContext:
   latency: object           # sparse network_latency adjacency of the graph
   complete: dict = field(default_factory=dict)    # output name -> complete solution
   objectives: list = field(default_factory=list)  # obj.csv series
+
+  @property
+  def max_iterations(self) -> int:
+    """Required by the iterative runners only: a missing key fails with its name."""
+    return self.config["max_iterations"]
+
+  @property
+  def patience(self) -> int:
+    return self.config["patience"]
 
   @cached_property
   def reference(self) -> tuple | None:
@@ -130,7 +137,6 @@ def open_context(config: dict, parallelism: int, *, log_on_file: bool):
       solver_name=config["solver_name"], solver_options=solver_options,
       general_options=solver_options.get("general", {}),
       time_limit=step_time.algorithm_time_limit(config), tolerance=config.get("tolerance", 1e-6),
-      max_iterations=config.get("max_iterations"), patience=config.get("patience"),
       checkpoint_interval=config["checkpoint_interval"], steps=run_steps(config),
       base_data=base_data, traces=traces, agents=agents, graph=graph, Nn=Nn, Nf=Nf,
       neighborhood=neigh_dict_to_matrix(base_data[None]["neighborhood"], Nn),

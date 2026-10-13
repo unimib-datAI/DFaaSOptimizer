@@ -248,3 +248,16 @@ def test_centralized_results_keep_their_serialization(tmp_path):
   assert runtime["algorithm_s"].tolist() == [0.25] * 4 and runtime["workers"].tolist() == [1] * 4
   assert (folder / "Model.png").exists()
   assert sorted(p.name for p in (folder / "Model").iterdir() if p.name.endswith("_plot")) == ["1_plot", "2_plot"]
+
+
+@pytest.mark.parametrize("key", ["max_iterations", "patience"])
+def test_missing_iteration_settings_fail_with_their_name(tmp_path, key):
+  config = _config(tmp_path)
+  config.pop(key, None)
+
+  def step(ctx, t, data):
+    return getattr(ctx, key)
+
+  with pytest.raises(KeyError, match=key):
+    _run(config, step)
+  assert not step_time.active()

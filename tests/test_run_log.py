@@ -193,3 +193,10 @@ def test_quiet_nested_run_neither_suppresses_nor_leaks(capsys):
       log.warning("runner warning")
     log.info("report 2")
   assert capsys.readouterr().out == "report 1\nrunner warning\nreport 2\n"
+
+
+def test_messages_outside_a_run_log_reach_stdout_at_info(capsys):
+  # library callers of the batch/report functions keep seeing their status lines
+  log.debug("hidden detail")
+  log.info("status")
+  assert capsys.readouterr().out == "status\n"
