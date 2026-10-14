@@ -30,3 +30,21 @@ def test_selfish_keeps_local_gains_and_never_beats_the_unconstrained_optimum():
 
 def test_the_gap_is_handed_to_highs_and_recorded():
   assert solve(INSTANCE, 120, gap=0.25)["mip_rel_gap"] == 0.25
+
+
+def test_an_earlier_highs_solve_does_not_break_the_reference():
+  # HiGHS keeps one thread scheduler per process: a solve asking for another thread count failed
+  # ("global scheduler has already been initialized"), e.g. after a local floor fell back to HiGHS
+  import pyomo.environ as pyo
+  from models.model import BaseAbstractModel
+
+  class Tiny(BaseAbstractModel):
+    def __init__(self):
+      super().__init__()
+      self.model.x = pyo.Var([1], within=pyo.NonNegativeIntegers, bounds=(0, 5))
+      self.set_objective(lambda m: m.x[1], pyo.maximize)
+
+  tiny = Tiny()
+  tiny.solve(tiny.generate_instance({}), {}, "appsi_highs")
+  for threads in (1, 2):
+    assert solve(INSTANCE, 120, threads=threads)["status"] == "ok"

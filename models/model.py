@@ -17,10 +17,16 @@ APPLICATION_OPTIONS = {"use_dp", "algorithm_time_limit"}
 
 
 def _solver_option_name(solver_name: str, option_name: str) -> str:
+  """Solver-independent option names (Gurobi's) -> the solver's own. LogFile: the solver writes its
+  own log while it runs, so a killed process still leaves its progress (incumbents, bound)."""
   if solver_name in {"glpk", "glpsol"} and option_name == "TimeLimit":
     return "tmlim"
+  if solver_name in {"glpk", "glpsol"} and option_name == "LogFile":
+    return "log"  # glpsol --log
   if solver_name in {"highs", "appsi_highs"} and option_name == "TimeLimit":
     return "time_limit"
+  if solver_name in {"highs", "appsi_highs"} and option_name == "LogFile":
+    return "log_file"
   return option_name
 
 

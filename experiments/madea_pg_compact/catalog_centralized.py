@@ -16,13 +16,14 @@ import hashlib
 import json
 import time
 
+import highspy
 import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
 from pyomo.contrib.appsi.solvers import Highs
 
 import families_extended as families
-from models.model import LoadManagementModel
+from models.model import LoadManagementModel, _solver_option_name
 from models.selfish import SelfishLoadManagementModel
 from run_centralized_model import get_current_load, update_data
 from utils.centralized import validate_centralized_solution
@@ -36,7 +37,7 @@ def _array(var, shape):
   return np.array([pyo.value(var[idx]) for idx in var], dtype=float).reshape(shape)
 
 
-def solve(path, time_limit, threads=1, gap=1e-6, selfish=False):
+def solve(path, time_limit, threads=1, gap=1e-6, selfish=False, log_file=None):
   data, traces, agents, graph = families.load_materialized_instance(path)
   data = update_data(data, {'incoming_load': get_current_load(traces, list(agents), 0)})
   Nn, Nf = data[None]['Nn'][None], data[None]['Nf'][None]
@@ -58,16 +59,21 @@ def solve(path, time_limit, threads=1, gap=1e-6, selfish=False):
   build = time.perf_counter() - started
   result = None
   if not timed_out and build < time_limit:
+    # HiGHS keeps one thread scheduler per process: an earlier solve (e.g. a local floor that fell
+    # back to HiGHS) would make this one, with its own thread count, fail
+    highspy.Highs.resetGlobalScheduler(True)
     opt = Highs()
     opt.config.time_limit = max(0.0, deadline - time.perf_counter())
     opt.config.load_solution = False
     opt.config.stream_solver = False
     opt.highs_options.update({'threads': threads, 'mip_rel_gap': gap, 'random_seed': 0})
+    if log_file:  # the solver's own log, written as it runs: a killed solve keeps its incumbents
+      opt.highs_options[_solver_option_name('appsi_highs', 'LogFile')] = log_file
     result = opt.solve(instance)
   wall = time.perf_counter() - started
   row = dict(model=model.name, nodes=Nn, functions=Nf,
              termination=str(result.termination_condition) if result else 'TerminationCondition.maxTimeLimit',
-             mip_rel_gap=gap, build_seconds=build, local_reference_seconds=local, wall_seconds=wall,
+             mip_rel_gap=gap, solver_log=log_file, build_seconds=build, local_reference_seconds=local, wall_seconds=wall,
              bound=result.best_objective_bound if result else None,
              solver_objective=result.best_feasible_objective if result else None,
              input_hash=hashlib.sha256((Path(path) / 'metadata.json').read_bytes()).hexdigest())
