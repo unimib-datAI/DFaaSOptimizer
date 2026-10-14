@@ -295,6 +295,7 @@ def _solve_step(ctx, t: int, data: dict, *, auction_options: dict,
       tolerance=tolerance,
       total_runtime=total_runtime,
       time_limit=ctx.time_limit,
+      plateau_tolerance=ctx.config.get("plateau_tolerance"),
     )
     e = step_time.now()
     with step_time.untimed():

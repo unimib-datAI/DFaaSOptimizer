@@ -115,8 +115,12 @@ def check_stopping_criteria(
     total_runtime: float = 0.0,
     time_limit: float = float("inf"),
     sp_omega: np.array = None,
-    sp_y: np.array = None
+    sp_y: np.array = None,
+    plateau_tolerance: float = None
   ) -> Tuple[bool, str]:
+  """plateau_tolerance (config, optional): stop once the best objective improved less than it, in
+  all, over the patience window; without it every single iteration must improve less than tolerance
+  (one more request per iteration on a large instance resets that window)."""
   if omega is None:
     omega = sp_omega
   if a is None:
@@ -158,13 +162,13 @@ def check_stopping_criteria(
     stop = True
     why_stopping = "feasible solution found"
   if not stop and odev_queue is not None and len(odev_queue) >= odev_queue.maxlen:
-    stop = True
-    why_stopping = "UB/LB diff < tol"
-    for odev in odev_queue:
-      if odev >= tolerance:
-        stop = False
-        why_stopping = None
-        break
+    if plateau_tolerance is not None:
+      if sum(odev_queue) < plateau_tolerance:  # relative gains over the window, compounded ~ summed
+        stop = True
+        why_stopping = f"best improved < {plateau_tolerance} over {odev_queue.maxlen} iterations"
+    elif all(odev < tolerance for odev in odev_queue):
+      stop = True
+      why_stopping = "UB/LB diff < tol"
   return stop, why_stopping
 
 
@@ -801,7 +805,8 @@ def run_madea_cycle(
       memory_bids,
       tolerance,
       total_runtime,
-      time_limit
+      time_limit,
+      plateau_tolerance = config.get("plateau_tolerance")
     )
     e = step_time.now()
     with step_time.untimed():

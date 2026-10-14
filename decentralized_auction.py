@@ -268,7 +268,8 @@ def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_fram
       memory_bids = memory_bids,
       tolerance = tolerance,
       total_runtime = total_runtime,
-      time_limit = ctx.time_limit
+      time_limit = ctx.time_limit,
+      plateau_tolerance = ctx.config.get("plateau_tolerance")
     )
     e = step_time.now()
     with step_time.untimed():
