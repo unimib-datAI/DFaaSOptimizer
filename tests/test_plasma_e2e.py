@@ -206,9 +206,9 @@ def test_plasma_frame_preserves_engine_across_steps(tmp_path, monkeypatch, welfa
     init(self, *args, **kwargs)
 
   def recording(run_rounds):
-    def recording_run_rounds(self, rounds, arrivals):
+    def recording_run_rounds(self, rounds, arrivals, **kwargs):
       calls.append((id(self), self.msg_count, arrivals.copy()))
-      return run_rounds(self, rounds, arrivals)
+      return run_rounds(self, rounds, arrivals, **kwargs)
     return recording_run_rounds
 
   monkeypatch.setattr(PlasmaEngine, "__init__", counting_init)

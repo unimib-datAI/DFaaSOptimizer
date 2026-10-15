@@ -1,6 +1,25 @@
 from plasma.sim.clock import RoundClock
 
 
+def test_stop_after_completed_round():
+  clock, seen = RoundClock(), []
+  assert clock.run(5, seen.append, should_stop=lambda: len(seen) == 2) == 2
+  assert seen == [0, 1]
+  assert clock.round == 2
+
+
+def test_resume_keeps_scheduled_events():
+  clock, seen, events = RoundClock(), [], []
+  clock.schedule(3, lambda: events.append(3))
+  assert clock.run(5, seen.append, should_stop=lambda: clock.round == 2) == 2
+  assert events == []
+  assert clock.run(2, seen.append) == 2
+  assert events == [3]
+  assert seen == [0, 1, 2, 3]
+  assert clock.run(5, seen.append, should_stop=lambda: True) == 1
+  assert clock.round == 5
+
+
 def test_events_delivered_before_round_callback():
   clock = RoundClock()
   trace = []

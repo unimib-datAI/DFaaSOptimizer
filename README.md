@@ -388,6 +388,15 @@ The two methods also have distinct batch-resume slots and remote job mappings.
 
 ### PLASMA-Welfare: local allocation with marginal-value reservations
 
+Both PLASMA variants honor `solver_options.general.algorithm_time_limit`
+on CPU and GPU using the common modelled algorithm clock. `rounds_per_step`
+is a maximum. The limit is checked after complete rounds, including the
+initial Welfare plans in the budget. At least one round completes: initialization
+or the last indivisible round can overshoot the limit. Message rates and round
+counts use the rounds actually completed; scheduled events remain for the next
+step. An absent/infinite limit preserves the previous decisions. Finite CPU
+baselines must be regenerated: historical runs ignored this limit.
+
 `plasma-welfare` is a separate PLASMA-derived method, exported as
 `Plasma-Welfare`. It replaces conductance routing and the provisioning Hamiltonian
 with marginal-value offers and exact local RAM allocation. It reuses PLASMA's

@@ -336,7 +336,7 @@ class WelfareEngine(PlasmaEngine):
             self.accepted_trades += self.nodes[i].accept_plan(reservations, plan, send)
 
   @parallel_solver_run
-  def run_rounds(self, n_rounds, arrivals):
+  def run_rounds(self, n_rounds, arrivals, *, time_limit=float('inf')):
     if not isinstance(n_rounds, Integral) or n_rounds < 1:
       raise ValueError('n_rounds must be positive')
     for node, load in zip(self.nodes, arrivals):
@@ -371,7 +371,11 @@ class WelfareEngine(PlasmaEngine):
         self._negotiate_batch(round_, batch, pool)
       self._send_heartbeats(round_)
 
-    self.clock.run(n_rounds, on_round)
+    def should_stop():
+      return step_time.current_modelled() >= time_limit
+
+    completed = self.clock.run(n_rounds, on_round, should_stop=should_stop)
+    limit_reached = should_stop()
     # Observer/export only. No global arrays are used to select transactions.
     with step_time.untimed():
       x = np.array([node.x for node in self.nodes])
@@ -381,7 +385,8 @@ class WelfareEngine(PlasmaEngine):
       for i, node in enumerate(self.nodes):
         for k, j in enumerate(node.params.nbrs):
           y[i, j] = node.y[k]
-      return StepResult(x, z, y, np.transpose(y, (1, 0, 2)), r)
+      return StepResult(x, z, y, np.transpose(y, (1, 0, 2)), r,
+                        completed_rounds=completed, time_limit_reached=limit_reached)
 
 
 def run(config, parallelism=0, log_on_file=False, disable_plotting=False):

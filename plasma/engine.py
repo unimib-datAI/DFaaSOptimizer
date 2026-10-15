@@ -19,6 +19,8 @@ class StepResult:
   y: np.ndarray
   xi: np.ndarray
   r: np.ndarray
+  completed_rounds: int = 0
+  time_limit_reached: bool = False
 
 
 class PlasmaEngine:
@@ -96,7 +98,9 @@ class PlasmaEngine:
             t.on_heartbeat(decode_heartbeat(w), r),
         )
 
-  def run_rounds(self, n_rounds: int, arrivals: np.ndarray) -> StepResult:
+  def run_rounds(
+      self, n_rounds: int, arrivals: np.ndarray, *, time_limit=float("inf"),
+    ) -> StepResult:
     Nn = len(self.nodes)
     Nf = self.nodes[0].Nf
     last = {}
@@ -129,9 +133,14 @@ class PlasmaEngine:
           for node in step_time.timed(self.nodes, key=id):
             node.sb_pass(round_)
 
-    self.clock.run(n_rounds, on_round)
+    def should_stop():
+      return step_time.current_modelled() >= time_limit
+
+    completed = self.clock.run(n_rounds, on_round, should_stop=should_stop)
+    limit_reached = should_stop()
     with step_time.untimed():
       xi = np.transpose(last["y"], (1, 0, 2))
       return StepResult(
-        x=last["x"], z=last["z"], y=last["y"], xi=xi, r=last["r"]
+        x=last["x"], z=last["z"], y=last["y"], xi=xi, r=last["r"],
+        completed_rounds=completed, time_limit_reached=limit_reached,
       )
