@@ -13,7 +13,7 @@ PYO_PARAM_TYPE = pyo.NonNegativeReals
 
 
 _SOLVER_CACHE: dict = {}
-APPLICATION_OPTIONS = {"use_dp", "dp_device", "algorithm_time_limit"}
+APPLICATION_OPTIONS = {"use_dp", "dp_device", "compute_device", "algorithm_time_limit"}
 
 
 def _solver_option_name(solver_name: str, option_name: str) -> str:

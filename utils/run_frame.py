@@ -24,6 +24,7 @@ from functools import cached_property
 import pandas as pd
 
 from utils import run_log, step_time
+from utils.compute_backend import compute_session
 from utils.common import checkpoint_due, run_steps, run_timestamp
 
 log = run_log.logger(__name__)
@@ -125,14 +126,15 @@ def open_context(config: dict, parallelism: int, *, log_on_file: bool):
   os.makedirs(folder, exist_ok=True)
   with open(os.path.join(folder, "config.json"), "w") as ostream:
     ostream.write(json.dumps(config, indent=2))
-  with run_log.open_run_log(folder if log_on_file else None, config.get("verbose", 0)):
+  with compute_session(config.get("solver_options", {}).get("general", {})) as coverage, \
+      run_log.open_run_log(folder if log_on_file else None, config.get("verbose", 0)):
     limits = config["limits"]
     base_data, traces, agents, graph = init_problem(
       limits, limits["load"].get("trace_type", "fixed_sum"), config["max_steps"], config["seed"], folder,
     )
     Nn, Nf = base_data[None]["Nn"][None], base_data[None]["Nf"][None]
     solver_options = config.get("solver_options", {})
-    yield RunContext(
+    ctx = RunContext(
       config=config, parallelism=parallelism, folder=folder, log=log,
       solver_name=config["solver_name"], solver_options=solver_options,
       general_options=solver_options.get("general", {}),
@@ -142,6 +144,14 @@ def open_context(config: dict, parallelism: int, *, log_on_file: bool):
       neighborhood=neigh_dict_to_matrix(base_data[None]["neighborhood"], Nn),
       latency=adjacency_matrix(graph, weight="network_latency"),
     )
+    try:
+      yield ctx
+    finally:
+      if ctx.general_options.get('compute_device', 'cpu') == 'cuda':
+        with step_time.untimed():
+          with open(os.path.join(folder,'compute_coverage.json'),'w') as stream:
+            json.dump(dict(selected_device='cuda',operations=coverage,
+                           zero_coverage=not any(r['backend']=='cuda' for r in coverage)),stream,indent=2)
 
 
 def run(config: dict, parallelism: int, *, log_on_file: bool, disable_plotting: bool, method: str,

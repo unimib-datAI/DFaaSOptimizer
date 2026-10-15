@@ -1213,3 +1213,52 @@ full batch uses CPU although the numeric kernel is also measured with one DP.
 Step artifacts must match at nonbinding limits; the separate 30 ms budget runs
 report achieved welfare, which may change with available iterations. Physical
 occupancy requires profiler permissions and is not inferred from CUDA core count.
+
+### Shared numerical GPU (opt in)
+
+`solver_options.general.compute_device` accepts `"cpu"` (default) or `"cuda"`.
+It is independent of `dp_device` and is never forwarded to a mathematical solver.
+Opening a compute session does not import CUDA. CUDA work runs in the owning
+main process; CPU workers keep their original code paths.
+
+```json
+{
+  "solver_options": {
+    "general": {
+      "use_dp": true,
+      "dp_device": "cuda",
+      "compute_device": "cuda",
+      "algorithm_time_limit": 300
+    }
+  }
+}
+```
+
+| dp_device | compute_device | Shared numerical coverage |
+| --- | --- | --- |
+| cpu | cpu | CPU defaults, including the corrected PLASMA time budget |
+| cuda | cpu | Existing DP GPU batches, with host cost preparation |
+| cpu | cuda | Eligible residual-capacity phases; knapsack remains CPU |
+| cuda | cuda | Eligible residual-capacity phases and device local curves feeding the existing DP |
+
+The local curve chain requires at least 30 problems. Direct fixed-x/fixed-r
+adapters were checked for exact decisions but remain CPU in production: complete
+phase measurements did not show a stable benefit. Residual-capacity dispatch
+requires at least 100 nodes, 1000 node/function entries and at most 64 MiB of
+device arrays. These gates are fixed, never tuned during a run. Float64 source
+reductions reproduce NumPy 2.2.6's pairwise order. The curve chain retains the
+2,000,000 CPU state/level limit, int32 checks and the 64 MiB padded chunk limit,
+including its new buffers. Only selected alternatives are downloaded.
+
+A GPU phase counts its complete synchronized latency exactly once, including
+host preparation, first-use JIT, copies, decoding and CPU residues. CPU phases
+retain their logical parallel accounting. Explicit CUDA failures propagate;
+unsupported/small cases stay CPU with a coverage reason. Runs requesting compute
+CUDA write separate `compute_coverage.json` artifacts, including zero coverage;
+`runtime.csv` and the solution formats are unchanged.
+
+Install the existing optional group locally with
+`uv sync --locked --no-default-groups --group dev --group gpu`. CPU-only
+installations need no CUDA package. Measurements and the remaining roadmap
+coverage are recorded in the parent workspace under
+`docs/superpowers/reports/2026-10-15-shared-gpu-compute/`.

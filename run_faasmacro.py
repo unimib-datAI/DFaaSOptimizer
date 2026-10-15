@@ -323,7 +323,8 @@ def compute_social_welfare(
   # solve for all agents
   agents_sol = {}
   with step_time.parallel_phase():
-    if dp_device(solver_options) == 'cuda':
+    from models.local_sp import compute_batch_enabled
+    if dp_device(solver_options) == 'cuda' or compute_batch_enabled(spr, solver_options):
       agents_sol = solve_agent_batch(spr_data, agents, spr, solver_options, solver_name)
     elif parallelism != 0:
       agents_sol = _solve_agents_parallel(
@@ -610,7 +611,8 @@ def solve_subproblem(
   # solve for all agents
   agents_sol = {}
   with step_time.parallel_phase():
-    if dp_device(solver_options) == 'cuda':
+    from models.local_sp import compute_batch_enabled
+    if dp_device(solver_options) == 'cuda' or compute_batch_enabled(sp, solver_options):
       agents_sol = solve_agent_batch(
         sp_data, agents, sp, solver_options, solver_name, detailed_pi,
       )

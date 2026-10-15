@@ -166,3 +166,19 @@ def _minimize_batch(costs_batch, memory_batch, ram_caps, *, threads=128, profile
 def minimize_replica_costs_batch(costs_batch, memory_batch, ram_caps):
   """Return choices or per-problem None for infeasibility; CUDA errors propagate."""
   return _minimize_batch(costs_batch, memory_batch, ram_caps)
+
+
+def _launch_device_dp(costs, memory, lengths, budgets, nfs, count, nf, nb):
+  """Use the existing recurrence with curves already resident on the device.
+
+  The adapter owns chunk limits, synchronization, and the complete phase clock.
+  Returned allocations stay alive through their references until the launch ends.
+  """
+  cuda, kernel = _get_kernel()
+  best = cuda.device_array((count, nb), dtype=np.float64)
+  other = cuda.device_array_like(best)
+  choices = cuda.device_array((count, nf, nb), dtype=np.int32)
+  replicas = cuda.device_array((count, nf), dtype=np.int32)
+  valid = cuda.device_array(count, dtype=np.int32)
+  kernel[count,128](costs,memory,lengths,budgets,nfs,best,other,choices,replicas,valid)
+  return replicas, valid, (best,other,choices)

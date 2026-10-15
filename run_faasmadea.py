@@ -178,6 +178,18 @@ def compute_residual_capacity(
   ) -> Tuple[np.array, np.array, np.array]:
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
+  from utils.compute_backend import cuda_compute_enabled
+  if (cuda_compute_enabled() and Nn >= 100 and Nn * Nf >= 1000
+      and 8 * (Nn*Nn*Nf + 6*Nn*Nf + Nf) <= 64*1024*1024):
+    step_time.mark_shared_device()
+    from models.numeric_gpu import residual_capacity_cuda
+    demand = np.array([[data[None]['demand'][(n+1,f+1)] for f in range(Nf)] for n in range(Nn)])
+    utilization = np.array([data[None]['max_utilization'][f+1] for f in range(Nf)])
+    return residual_capacity_cuda(x, y, r, demand, utilization)
+  if cuda_compute_enabled():
+    from utils.compute_backend import record_operation
+    record_operation('residual_capacity','cpu',Nn,shape=[Nn,Nf],
+                     reason='below 100 nodes/1000 entries or above 64 MiB')
   # loop over nodes and functions
   cap = np.zeros((Nn,Nf))
   residual_capacity = np.zeros((Nn,Nf))

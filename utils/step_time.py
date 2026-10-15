@@ -34,6 +34,7 @@ class Phase:
     self.nodes = 0
     self.covered = 0.0  # wall time of in-process tasks and pool calls
     self.paused = 0.0   # untimed wall time inside the phase
+    self.shared_device = False
 
   def add(self, key, seconds: float) -> None:
     self.tasks[key] = self.tasks.get(key, 0.0) + seconds
@@ -44,6 +45,8 @@ class Phase:
 
   def longest(self, wall: float) -> float:
     wall -= self.paused
+    if self.shared_device:
+      return wall
     if self.nodes:
       return wall / self.nodes
     if not self.tasks:  # nothing recorded: count it all (a forgotten timed() errs high)
@@ -168,6 +171,13 @@ def timed(items, key=lambda item: item):
 def current_modelled() -> float:
   clock = _clock.get()
   return 0.0 if clock is None else clock.modelled()
+
+
+def mark_shared_device() -> None:
+  """Charge the current mixed GPU phase's complete latency once, without discounts."""
+  phase = _phase.get()
+  if phase is not None:
+    phase.shared_device = True
 
 
 @contextmanager

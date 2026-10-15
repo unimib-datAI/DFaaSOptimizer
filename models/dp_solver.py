@@ -38,8 +38,8 @@ class PreparedLocal:
   nn: int
 
 
-def prepare_local_problem(model, data):
-  """Prepare the original cost curves without solving or mutating inputs."""
+def _prepare_local_parameters(model, data):
+  """Validate and parse local inputs without building level curves."""
   if type(model) not in _SUPPORTED or sp_models.PYO_VAR_TYPE is not pyo.NonNegativeIntegers:
     return None
   name = model.name
@@ -82,7 +82,7 @@ def prepare_local_problem(model, data):
   if (not nf or not isfinite(ram) or ram < 0 or ram != int(ram)
       or any(not isfinite(m) or m <= 0 or m != int(m) for m in memory)):
     return None
-  levels, costs, destinations = [], [], []
+  parameters, destinations, levels_count = [], [], 0
   for f in range(1, nf + 1):
     load = v['incoming_load'][node, f]
     demand = v['demand'][node, f]
@@ -121,6 +121,41 @@ def prepare_local_problem(model, data):
         return None
       # coordination arithmetic leaves float noise (e.g. load + 4e-15)
       omega_fixed = min(max(omega_bar, 0.), load)
+    x_fixed = v['x_bar'][node, f] if fixed_x else 0.
+    if fixed_x and (not isfinite(x_fixed) or x_fixed < 0 or x_fixed != round(x_fixed)):
+      return None
+    max_x = load - omega_fixed if restricted else load
+    hi = (0 if fixed_x else min(int(ram // memory[f - 1]),
+                                ceil((max_x + inbound) / capacity) + 1))
+    pinned = v.get('r_bar', {}).get((node, f), 0) if fixed_r else None
+    if fixed_r and (not isfinite(pinned) or pinned < 0 or pinned != int(pinned)):
+      return None
+    hi = int(pinned) if fixed_r else hi
+    budget = int(ram) // reduce(gcd, map(int, memory))
+    if not fixed_r and not fixed_x and (budget + 1) * (levels_count + hi + 1) > 2_000_000:
+      return None
+    levels_count += 1 if fixed_r or fixed_x else hi + 1
+    parameters.append((load, capacity, alpha, delta, gamma, pi, inbound, ub,
+                       omega_fixed if restricted else 0., max_x, hi, x_fixed,
+                       lower_bound, fixed_x, fixed_r))
+  return (PreparedLocal([], [], memory, ram, fixed_x or fixed_r,
+                        detailed, restricted, reject, destinations, v['Nn'][None]), parameters)
+
+
+def prepare_local_problem(model, data):
+  """Prepare the original cost curves without solving or mutating inputs."""
+  parsed = _prepare_local_parameters(model, data)
+  if parsed is None:
+    return None
+  problem, parameters = parsed
+  levels, costs, memory, ram = problem.levels, problem.costs, problem.memory, problem.ram_cap
+  restricted, reject = problem.restricted, problem.reject
+  fixed_x = model.name == 'LSPr_x'
+  fixed_r = '_fixedr' in model.name
+  for f, row in enumerate(parameters, 1):
+    (load, capacity, alpha, delta, gamma, pi, inbound, ub, omega_fixed,
+     max_x, hi, x_fixed, lower_bound, _, _) = row
+    v, node = data[None], data[None]['whoami'][None]
     denominator = load or 1
 
     def allocation(x, r):
@@ -143,16 +178,6 @@ def prepare_local_problem(model, data):
       levels.append([candidate[1]])
       costs.append([candidate[0]])
       continue
-    max_x = load - omega_fixed if restricted else load
-    hi = min(int(ram // memory[f - 1]), ceil((max_x + inbound) / capacity) + 1)
-    pinned = v.get('r_bar', {}).get((node, f), 0) if fixed_r else None
-    if fixed_r and (not isfinite(pinned) or pinned < 0 or pinned != int(pinned)):
-      return None
-    hi = int(pinned) if fixed_r else hi
-    # ponytail: dense integer RAM DP; keep MILP for large state/level products.
-    budget = int(ram) // reduce(gcd, map(int, memory))
-    if not fixed_r and (budget + 1) * (sum(map(len, costs)) + hi + 1) > 2_000_000:
-      return None
     choices, curve = [], []
     for r in ([hi] if fixed_r else range(hi + 1)):
       lo_x = max(0, ceil((r - 1) * capacity - inbound - 1e-9)) if lower_bound else 0
@@ -175,8 +200,7 @@ def prepare_local_problem(model, data):
     if (any(a is None for a in chosen)
         or sum(a[3] * m for a, m in zip(chosen, memory)) > ram):
       return None
-  return PreparedLocal(costs, levels, memory, ram, fixed_x or fixed_r,
-                       detailed, restricted, reject, destinations, v['Nn'][None])
+  return problem
 
 
 def finish_local_solution(problem, choices, *, runtime):

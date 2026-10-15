@@ -32,6 +32,42 @@ def test_sequential_time_is_wall_time(now):
   assert clock.modelled() == 5.0 and clock.wall() == 5.0
 
 
+@pytest.mark.parametrize('uniform', [True, False])
+@pytest.mark.parametrize('paused', [0., 1.])
+def test_shared_device_counts_full_phase_once(now, uniform, paused):
+  clock = step_time.start_step()
+  step_time.mark_shared_device()  # outside a phase has no effect
+  with step_time.parallel_phase() as phase:
+    if uniform:
+      phase.uniform(5)
+    else:
+      with step_time.task(0):
+        now.t += 2.
+      with step_time.task(1):
+        now.t += 1.
+    step_time.mark_shared_device()
+    step_time.mark_shared_device()
+    with step_time.untimed():
+      now.t += paused
+    now.t = 10.
+  assert clock.modelled() == 10. - paused
+
+
+def test_shared_device_exception_and_outer_observer(now):
+  clock = step_time.start_step()
+  with step_time.untimed():
+    with step_time.parallel_phase():
+      step_time.mark_shared_device()
+      now.t += 3.
+  with pytest.raises(ValueError):
+    with step_time.parallel_phase() as phase:
+      phase.uniform(5)
+      step_time.mark_shared_device()
+      now.t += 10.
+      raise ValueError()
+  assert clock.modelled() == 10.
+
+
 def test_phase_counts_its_longest_task(now):
   clock = step_time.start_step()
   now.t = 1.0                       # 1 s sequential
