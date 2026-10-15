@@ -62,7 +62,7 @@ def test_gap_at_stopping_threshold(direction):
 
 def test_shared_dispatch_and_fresh_inputs():
   from utils.compute_backend import compute_session
-  args=list(fixture(100,5,17))
+  args=list(fixture(500,5,17))
   for shift in (0.,.3):
     args[1]=args[1]+shift;args[5]=args[5]+shift;args[6]=~args[6]
     expected=relaxed_flows(*args)
@@ -87,7 +87,9 @@ def test_gains_shared_kernel_and_clock(monkeypatch):
   with compute_session({'compute_device':'cuda'}) as coverage:
     clock=step_time.start_step()
     with step_time.parallel_phase() as phase:
-      phase.uniform(100);actual=fw_gains_and_mask(*args)
+      phase.uniform(100)
+      from models.frankwolfe_gpu import fw_gains_cuda
+      actual=fw_gains_cuda(*args)
     timing=step_time.end_step(clock)
   assert timing['algorithm_s']==2.
   assert any(r['operation']=='fw_gains' and r['backend']=='cuda' for r in coverage)
@@ -103,12 +105,12 @@ def test_iteration_clock_and_cuda_error_propagate(monkeypatch):
   def delayed():tick[0]+=3.;return kernels
   monkeypatch.setattr(gpu,'_kernels',delayed)
   with compute_session({'compute_device':'cuda'}):
-    clock=step_time.start_step();relaxed_flows(*fixture(100,5,2));timing=step_time.end_step(clock)
+    clock=step_time.start_step();relaxed_flows(*fixture(500,5,10));timing=step_time.end_step(clock)
   assert timing['algorithm_s']==3.
   def broken():raise RuntimeError('injected CUDA failure')
   monkeypatch.setattr(gpu,'_kernels',broken)
   with compute_session({'compute_device':'cuda'}),pytest.raises(RuntimeError,match='injected CUDA failure'):
-    relaxed_flows(*fixture(100,5,2))
+    relaxed_flows(*fixture(500,5,10))
 
 
 @pytest.mark.parametrize('repair_order',['price','gain'])
@@ -116,7 +118,7 @@ def test_iteration_clock_and_cuda_error_propagate(monkeypatch):
 def test_final_assignment_and_rng(repair_order,rounding):
   from decentralized_frankwolfe import frankwolfe_assignments
   from utils.compute_backend import compute_session
-  n,nf=100,5;p,omega,base,r,rho,_,_,options=fixture(n,nf,17,.1,1.03)
+  n,nf=500,5;p,omega,base,r,rho,_,_,options=fixture(n,nf,17,.1,1.03)
   options.update(repair_order=repair_order,rounding=rounding)
   omega[n//2:]=0.;prev=np.zeros((n,n,nf));neighbors=np.ones((n,n))-np.eye(n)
   args=omega,prev,base,r,rho,_data(n,nf),neighbors,np.zeros((n,n)),np.zeros((n,nf)),options
@@ -126,7 +128,7 @@ def test_final_assignment_and_rng(repair_order,rounding):
   np.testing.assert_array_equal(actual[0],expected[0]);assert a.bit_generator.state==b.bit_generator.state
   assert not ((actual[0].sum(axis=0)>0)&(actual[0].sum(axis=1)>0)).any()
   for key in expected[1]:np.testing.assert_allclose(actual[1][key],expected[1][key],rtol=1e-9,atol=1e-9,err_msg=key)
-  assert {'fw_gains','relaxed_flows'}<={r['operation'] for r in coverage if r['backend']=='cuda'}
+  assert {'relaxed_flows'}<={r['operation'] for r in coverage if r['backend']=='cuda'}
 
 
 def test_large_gap_tree_and_stopping_decisions():

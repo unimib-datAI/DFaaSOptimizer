@@ -1286,3 +1286,17 @@ Affinity is a benchmark setting, not an application pool policy.
 `compute_coverage.json` covers the new compute operators; legacy DP GPU usage
 is reported separately in the run log and merged by the benchmark harness.
 A zero compute coverage flag therefore does not imply zero legacy DP work.
+
+Frank–Wolfe shares an opt-in resident relaxation across FaaS-MAFW, FaaS-MAFW-b
+and hierarchical-MAFW. Its measured production domain requires at least500
+nodes,5functions,10configured iterations, finite canonical float64 arrays,
+positive demand/utilization and a64MiB buffer bound. It needs compute_device
+CUDA independently of use_dp; local knapsack selection still follows dp_device.
+Gap reductions preserve NumPy2.2.6 buffered pairwise order; no fastmath or
+unordered atomics. Setup, every synchronized iteration and final reconstruction
+are fully charged phases. The last advertised price retains its original
+pre-update meaning. Gains, random rounding and greedy repair remain CPU:
+complete scoring measurements lost, and repair preparation did not establish
+a stable complete-step benefit. Raw prototypes do not imply production coverage.
+See the parent report's `frankwolfe/` directory for cold/warm phase and whole-step
+measurements and all numerical/coverage limits.
