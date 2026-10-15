@@ -122,6 +122,14 @@ def fw_gains_and_mask(
   is not already a sender of f (no ping-pong), i still has residual demand for
   f, and the advantage is strictly positive.
   """
+  from utils.compute_backend import cuda_compute_enabled,record_operation
+  if cuda_compute_enabled():
+    from models.frankwolfe_gpu import fw_gains_cuda,buffer_bytes
+    eligible=(params['Nn']>=100 and params['Nf']>=5 and buffer_bytes(params['Nn'],params['Nf'])<=64*1024*1024
+              and params['beta'].dtype==np.float64 and params['gamma'].dtype==np.float64
+              and np.asarray(latency).dtype==np.float64 and np.asarray(fairness).dtype==np.float64)
+    if eligible:return fw_gains_cuda(params,omega,neighborhood,forbidden,latency,fairness,options)
+    record_operation('fw_gains','cpu',params['Nn'],reason='performance/buffer gate: >=100 nodes, >=5 functions, float64, <=64 MiB')
   Nn = params["Nn"]
   a = (
     params["beta"]
@@ -162,6 +170,13 @@ def relaxed_flows(
   (which are welfare per req/s).  The stopping test uses the Frank-Wolfe gap
   relative to the scale of the linear part, ``gap <= tol * max(1, sum a*omega)``.
   """
+  from utils.compute_backend import cuda_compute_enabled,record_operation
+  if cuda_compute_enabled():
+    from models.frankwolfe_gpu import eligible,relaxed_flows_cuda
+    valid,reason=eligible(params,omega,base_load,replicas,rho,gains,mask,options)
+    if valid and params['Nn']>=100 and params['Nf']>=5:
+      return relaxed_flows_cuda(params,omega,base_load,replicas,rho,gains,mask,options)
+    record_operation('relaxed_flows','cpu',params['Nn'],reason=reason if not valid else 'performance gate: >=100 nodes and >=5 functions')
   Nn, Nf = params["Nn"], params["Nf"]
   demand = params["demand"]
   umax = params["max_utilization"][None, :]
@@ -328,6 +343,12 @@ def repair_memory(
   cost / memory ratio.  Removed load stays with its sender.  Returns the
   repaired flows and the number of removed units.
   """
+  from utils.compute_backend import record_operation
+  record_operation('repair_memory','cpu',params['Nn'],reason='independent initial loads CUDA prototype under full-phase performance gate; greedy removals retain original host order')
+  return _repair_memory_host(y,params,gains,base_x,replicas,rho,integer,tol,protected)
+
+
+def _repair_memory_host(y,params,gains,base_x,replicas,rho,integer=True,tol=1e-9,protected=None,initial_loads=None):
   y = y.copy()
   if protected is None:
     protected = np.zeros_like(y)
@@ -343,7 +364,7 @@ def repair_memory(
       continue
     guard = 0
     while True:
-      load = base_x[n] + y[:, n, :].sum(axis=0)
+      load = initial_loads[n] if guard==0 and initial_loads is not None else base_x[n] + y[:, n, :].sum(axis=0)
       if _extra_memory(params, n, load, replicas, tol) <= rho[n] + tol:
         break
       guard += 1

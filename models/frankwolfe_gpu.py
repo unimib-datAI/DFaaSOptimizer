@@ -3,10 +3,61 @@ import numpy as np
 from utils import step_time
 
 
+def _repair_kernel():
+  global cuda,_repair_cached
+  if '_repair_cached' in globals():return _repair_cached
+  from numba import cuda
+  from numba.cuda import libdevice as ld
+  from models.numeric_gpu import _source_reducer
+  pairwise=_source_reducer()
+  @cuda.jit
+  def kernel(y,base,out):
+    k=cuda.grid(1);nf=base.shape[1];j,f=k//nf,k%nf
+    if j<base.shape[0]:
+      total=0.
+      if nf==1:total=pairwise(y,j,f)
+      else:
+        for i in range(y.shape[0]):total=ld.dadd_rn(total,y[i,j,f])
+      out[j,f]=ld.dadd_rn(base[j,f],total)
+  _repair_cached=kernel
+  return kernel
+
+
+def repair_memory_cuda(y,params,gains,base_x,replicas,rho,integer=True,tol=1e-9,protected=None):
+  """Independent receiver initial loads; original ordered greedy host repairs."""
+  step_time.mark_shared_device()
+  kernel=_repair_kernel()
+  d_y=cuda.to_device(np.array(y,order='C',copy=True));d_base=cuda.to_device(np.array(base_x,dtype=np.float64,order='C',copy=True))
+  loads=cuda.device_array(base_x.shape,dtype=np.float64)
+  kernel[(loads.size+127)//128,128](d_y,d_base,loads)
+  loads=loads.copy_to_host();cuda.synchronize()
+  from decentralized_frankwolfe import _repair_memory_host
+  return _repair_memory_host(y,params,gains,base_x,replicas,rho,integer,tol,protected,loads)
+
+
 def buffer_bytes(n,nf):
   # q, gains, mask, gap, reduction tree, input and receiver workspaces.
   # Python integers cannot overflow; bound includes all uploaded temporaries.
   return 48*int(n)*int(n)*int(nf)+256*int(n)*int(nf)+64*int(nf)+16*int(n)
+
+
+def fw_gains_cuda(params,omega,neighborhood,forbidden,latency,fairness,options):
+  """Reuse the shared edge score formula, then reconstruct the existing mask."""
+  step_time.mark_shared_device()
+  from models.bids_gpu import _kernels
+  from utils.compute_backend import record_operation
+  cuda,kernel,_=_kernels()
+  shape=params['beta'].shape
+  inputs=[cuda.to_device(np.array(a,order='C',copy=True)) for a in
+          (params['beta'],params['gamma'],latency,fairness,np.asarray(neighborhood)>0)]
+  scores=cuda.device_array(shape,dtype=np.float64);mask=cuda.device_array(shape,dtype=np.bool_)
+  kernel[(scores.size+127)//128,128](*inputs,options['latency_weight'],options['fairness_weight'],scores,mask)
+  scores=scores.copy_to_host();mask=mask.copy_to_host();cuda.synchronize()
+  mask &= (~forbidden)[None,:,:] & (np.asarray(omega)[:,None,:]>0)
+  mask &= ~np.eye(params['Nn'],dtype=bool)[:,:,None]
+  result=np.where(mask,scores,0.),mask
+  record_operation('fw_gains','cuda',params['Nn'],shape=list(shape))
+  return result
 
 
 def eligible(params,omega,base,replicas,rho,gains,mask,options):
@@ -23,7 +74,7 @@ def eligible(params,omega,base,replicas,rho,gains,mask,options):
 
 def _tree(size):
   """NumPy PW_BLOCKSIZE=128 split tree, grouped by dependency height."""
-  leaves=[];levels={};count=0
+  leaves=[];levels={};count=1;roots=[]
   def visit(start,size):
     nonlocal count
     index=count;count+=1
@@ -33,8 +84,11 @@ def _tree(size):
     left,lh=visit(start,half);right,rh=visit(start+half,size-half)
     height=max(lh,rh)+1;levels.setdefault(height,[]).append((index,left,right))
     return index,height
-  visit(0,size)
-  return np.asarray(leaves,dtype=np.int64),[np.asarray(levels[k],dtype=np.int64) for k in sorted(levels)],count
+  # NumPy's contiguous global reduce accumulates pairwise blocks in order.
+  # Follow its current buffer setting instead of assuming a single large tree.
+  block=np.getbufsize()
+  for begin in range(0,size,block):roots.append(visit(begin,min(block,size-begin))[0])
+  return np.asarray(leaves,dtype=np.int64),[np.asarray(levels[k],dtype=np.int64) for k in sorted(levels)],count,np.asarray(roots,dtype=np.int64)
 
 
 def _kernels():
@@ -106,12 +160,19 @@ def _kernels():
     if k<nodes.shape[0]:sums[nodes[k,0]]=ld.dadd_rn(sums[nodes[k,1]],sums[nodes[k,2]])
 
   @cuda.jit
+  def chunk_sum(roots,sums):
+    if cuda.grid(1)==0:
+      total=0.
+      for i in range(roots.size):total=ld.dadd_rn(total,sums[roots[i]])
+      sums[0]=total
+
+  @cuda.jit
   def update(q,omega,best,positive,step):
     k=cuda.grid(1);nf=q.shape[2];n=q.shape[0];i,j,f=k//(n*nf),(k//nf)%n,k%nf
     if i<n:
       s=omega[i,f] if positive[i,f] and best[i,f]==j else 0.
       q[i,j,f]=ld.dadd_rn(ld.dmul_rn(ld.dadd_rn(1.,-step),q[i,j,f]),ld.dmul_rn(step,s))
-  _cached=setup,loads,prices,best_dest,gap_values,leaf_sums,combine,update
+  _cached=setup,loads,prices,best_dest,gap_values,leaf_sums,combine,update,chunk_sum
   return _cached
 
 
@@ -122,7 +183,7 @@ def relaxed_flows_cuda(params,omega,base_load,replicas,rho,gains,mask,options):
   n,nf=params['Nn'],params['Nf'];size=n*n*nf
   with step_time.parallel_phase():
     step_time.mark_shared_device()
-    setup,loads,prices,best_dest,gap_values,leaf_sums,combine,update=_kernels()
+    setup,loads,prices,best_dest,gap_values,leaf_sums,combine,update,chunk_sum=_kernels()
     mref=float(np.mean(params['memory_requirement'])) or 1.
     scale=max(1.,float((gains.max(axis=1,initial=0.)*omega).sum()))
     d_omega,d_base,d_r,d_rho,d_gains,d_mask,d_demand,d_umax,d_memory=[cuda.to_device(np.array(a,order='C',copy=True)) for a in
@@ -130,7 +191,8 @@ def relaxed_flows_cuda(params,omega,base_load,replicas,rho,gains,mask,options):
     q=cuda.to_device(np.zeros((n,n,nf)));cap=cuda.device_array((n,nf));unit=cuda.device_array((n,nf))
     factors=cuda.device_array((nf,n,1));slope=cuda.device_array((n,nf));price=cuda.to_device(np.zeros((n,nf)))
     best=cuda.device_array((n,nf),dtype=np.int64);positive=cuda.device_array((n,nf),dtype=np.bool_)
-    values=cuda.device_array((size,1,1));leaves,levels,count=_tree(size)
+    values=cuda.device_array((size,1,1));leaves,levels,count,roots=_tree(size)
+    d_roots=cuda.to_device(roots)
     d_leaves=cuda.to_device(leaves);d_levels=[cuda.to_device(a) for a in levels];sums=cuda.device_array(count)
     setup[(n*nf+127)//128,128](d_r,d_demand,d_umax,d_memory,mref,cap,unit)
     cuda.synchronize()
@@ -145,6 +207,7 @@ def relaxed_flows_cuda(params,omega,base_load,replicas,rho,gains,mask,options):
       gap_values[(size+127)//128,128](q,d_gains,d_mask,price,d_omega,best,positive,values)
       leaf_sums[(len(leaves)+127)//128,128](values,d_leaves,sums)
       for nodes in d_levels:combine[(nodes.shape[0]+127)//128,128](nodes,sums)
+      chunk_sum[1,1](d_roots,sums)
       gap=float(sums[:1].copy_to_host()[0]);n_iter=t+1
       converged=gap<=options['fw_tolerance']*scale and t>0
       if not converged:update[(size+127)//128,128](q,d_omega,best,positive,2./(t+2.))
