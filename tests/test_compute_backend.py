@@ -81,3 +81,24 @@ def test_coverage_is_scoped_and_records_cpu_reasons():
   with compute_session({}) as coverage:
     record_operation('ignored','cpu',1)
     assert coverage==[]
+
+
+@pytest.mark.parametrize('dp,compute',[('cpu','cpu'),('cuda','cpu'),('cpu','cuda'),('cuda','cuda')])
+def test_dp_compute_gate_is_scoped_and_driver_free(dp,compute,monkeypatch):
+  from utils import compute_backend as backend
+  original=builtins.__import__
+  def guarded(name,*a,**kw):
+    assert not name.startswith(('numba','cuda'))
+    return original(name,*a,**kw)
+  monkeypatch.setattr(builtins,'__import__',guarded)
+  assert not backend.cuda_dp_compute_enabled()
+  with pytest.raises(RuntimeError):
+    with compute_session(dict(dp_device=dp,compute_device=compute,use_dp=True)):
+      assert backend.cuda_dp_compute_enabled() is (dp==compute=='cuda')
+      with compute_session({}):assert not backend.cuda_dp_compute_enabled()
+      assert backend.cuda_dp_compute_enabled() is (dp==compute=='cuda')
+      with monkeypatch.context() as patch:
+        patch.setattr(backend.os,'getpid',lambda:-1)
+        assert not backend.cuda_dp_compute_enabled()
+      raise RuntimeError('reset')
+  assert not backend.cuda_dp_compute_enabled()

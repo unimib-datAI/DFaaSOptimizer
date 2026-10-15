@@ -131,7 +131,12 @@ def exact_minimize(ctx: HamiltonianContext, r_max: np.ndarray) -> np.ndarray:
   # multi-choice knapsack DP over the integer RAM budget: exact argmin of the
   # Hamiltonian under the hard RAM constraint (per-node problem is separable
   # per function; RAM is the only coupling)
-  return minimize_replica_costs(
+  return minimize_replica_costs(*prepare_exact_problem(ctx,r_max))
+
+
+def prepare_exact_problem(ctx: HamiltonianContext,r_max: np.ndarray):
+  """The same ordered CPU curves for standalone or independent batched DP."""
+  return (
     [_level_values(ctx, f, int(m)) for f, m in enumerate(r_max)],
     ctx.ram_req, ctx.ram_cap,
   )

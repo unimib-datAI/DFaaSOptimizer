@@ -5,6 +5,7 @@ from contextvars import ContextVar
 
 _session = ContextVar('compute_session', default=None)
 _coverage = ContextVar('compute_coverage', default=None)
+_dp_selection = ContextVar('compute_dp_selection', default='cpu')
 
 
 def compute_device(options: dict) -> str:
@@ -18,8 +19,9 @@ def compute_device(options: dict) -> str:
 def compute_session(options: dict):
   # Validate dp_device independently, including its use_dp requirement.
   from models.local_sp import dp_device
-  dp_device(options)
+  selected_dp = dp_device(options)
   token = _session.set((os.getpid(), compute_device(options)))
+  dp_token = _dp_selection.set(selected_dp)
   coverage = []
   coverage_token = _coverage.set(coverage)
   try:
@@ -27,6 +29,12 @@ def compute_session(options: dict):
   finally:
     _coverage.reset(coverage_token)
     _session.reset(token)
+    _dp_selection.reset(dp_token)
+
+
+def cuda_dp_compute_enabled() -> bool:
+  """Extended DP adapters require both validated options in the owning process."""
+  return cuda_compute_enabled() and _dp_selection.get() == 'cuda'
 
 
 def cuda_compute_enabled() -> bool:

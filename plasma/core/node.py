@@ -273,6 +273,9 @@ class PlasmaNode:
         decode_spins(s, bits, r_max), ctx.benefit, self.params.ram_req,
         self.params.ram_cap,
       )
+    return self._apply_sb_proposal(ctx,r_new)
+
+  def _apply_sb_proposal(self,ctx,r_new) -> bool:
     h_prev = hamiltonian(self.r, ctx)
     h_new = hamiltonian(r_new, ctx)
     improving = h_new < h_prev - self.opts.eps_commit * abs(h_prev)

@@ -130,8 +130,13 @@ class PlasmaEngine:
       self._send_heartbeats(round_)
       if self.opts.k_sb > 0 and (round_ + 1) % self.opts.k_sb == 0:
         with step_time.parallel_phase():
-          for node in step_time.timed(self.nodes, key=id):
-            node.sb_pass(round_)
+          from utils.compute_backend import cuda_dp_compute_enabled
+          if cuda_dp_compute_enabled():
+            from plasma.gpu import exact_sb_batch
+            exact_sb_batch(self.nodes,round_)
+          else:
+            for node in step_time.timed(self.nodes, key=id):
+              node.sb_pass(round_)
 
     def should_stop():
       return step_time.current_modelled() >= time_limit
