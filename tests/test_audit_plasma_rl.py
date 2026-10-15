@@ -31,7 +31,8 @@ def test_plasma_exports_rates_and_preserves_fractional_load(W, load, served, rej
     'memory_capacity': {1: 1}, 'memory_requirement': {1: 1},
     'incoming_load': {(1, 1): load},
   }}
-  ctx = SimpleNamespace(Nn=1, Nf=1, base_data=data, config={'seed': 0}, parallelism=0)
+  ctx = SimpleNamespace(Nn=1, Nf=1, base_data=data, config={'seed': 0}, parallelism=0,
+                        time_limit=float('inf'))
   opts = (WelfareOptions(W=W, rounds_per_step=1) if welfare
           else PlasmaOptions(W=W, rounds_per_step=1, k_sb=0))
   result = _solve_step(ctx, 0, data, opts=opts, welfare=welfare,

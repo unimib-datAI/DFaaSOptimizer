@@ -78,6 +78,7 @@ def define_bids(
       }
     return bid_cache[(i, f)].get(j, p[j,f] + auction_options["epsilon"])
 
+  memory_bid_value._madea2_gpu_mode = value_mode
   return _madea_bids(
     omega, blackboard, p, data, neighborhood, rho, auction_options, latency, fairness,
     force_memory_bids, memory_bid_value=memory_bid_value,

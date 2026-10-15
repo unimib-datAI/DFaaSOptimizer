@@ -33,6 +33,28 @@ def sample_assignments(
     current_y: np.array = None,
     tolerance: float = 1e-6,
   ) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
+  from utils.compute_backend import record_operation
+  record_operation('sample_assignments','cpu',len(omega),shape=list(omega.shape),
+                   reason='full CUDA score preparation slower; sampling depends on prior remaining-capacity choices and preserves host RNG')
+  return _sample_assignments(omega, blackboard, data, neighborhood, rho, powerd_options,
+                             latency, fairness, force_memory_bids, rng, current_y, tolerance)
+
+
+def _sample_assignments(
+    omega: np.array,
+    blackboard: np.array,
+    data: dict,
+    neighborhood: np.array,
+    rho: np.array,
+    powerd_options: dict,
+    latency: np.array,
+    fairness: np.array,
+    force_memory_bids: bool,
+    rng: np.random.Generator,
+    current_y: np.array = None,
+    tolerance: float = 1e-6,
+    score_lookup=None,
+  ) -> Tuple[pd.DataFrame, pd.DataFrame, int]:
   """Power-of-d-choices counterpart of decentralized_diffusion.define_assignments.
 
   For each overloaded (i, f), instead of scanning the whole candidate
@@ -77,7 +99,7 @@ def sample_assignments(
     candidates = []
     for j in potential_capacity_sellers:
       j = int(j)
-      s = (
+      s = score_lookup[i,j,f] if score_lookup is not None else (
         data[None]["beta"][(i + 1, j + 1, f + 1)]
         - powerd_options["latency_weight"] * latency[i, j]
         - powerd_options["fairness_weight"] * fairness[i, f]

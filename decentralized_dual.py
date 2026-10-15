@@ -44,6 +44,15 @@ def pair_scores(
   values = data[None]
   nn = values["Nn"][None]
   nf = values["Nf"][None]
+  from utils.compute_backend import cuda_compute_enabled,record_operation
+  if cuda_compute_enabled():
+    device_bytes=17*nn*nn*nf+16*nn*nn+16*nn*nf
+    if (nn>=100 and nf>=5 and np.count_nonzero(neighborhood)>=nn*nn/2
+        and device_bytes<=64*1024*1024 and latency.dtype==np.float64 and fairness.dtype==np.float64):
+      from models.bids_gpu import pair_scores_cuda
+      return pair_scores_cuda(data,neighborhood,latency,fairness,dual_options)
+    record_operation('pair_scores','cpu',nn,shape=[nn,nn,nf],
+                     reason='outside measured dense float64 domain (>=100 nodes, >=5 functions, >=50% neighbors, <=64 MiB)')
   scores = np.full((nn, nn, nf), -np.inf)
   eligible = np.zeros((nn, nn, nf), dtype=bool)
 
@@ -79,6 +88,9 @@ def buyer_price_response(
   sparsely while exposing the Cloud-relative utility.
   """
   nn, nf = omega.shape
+  from utils.compute_backend import record_operation
+  record_operation('buyer_price_response','cpu',nn,shape=[nn,nf],
+                   reason='performance gate: small phase gain after eligibility packing; complete-step benefit not demonstrated')
   demand = np.zeros((nn, nf))
   dual_term = 0.0
   rows = []

@@ -222,6 +222,9 @@ def define_bids(
   ) -> Tuple[pd.DataFrame, pd.DataFrame]:
   """Bids of the buyers. ``memory_bid_value(i, j, f)`` (MADEA2): memory bids
   also carry the uncovered quantity "d" and that value "v"."""
+  from utils.compute_backend import record_operation
+  record_operation('define_bids','cpu',len(omega),shape=list(omega.shape),
+                   reason='full CUDA adapter failed phase performance gate; custom callbacks also require ordered host execution')
   use_internal_value = auction_options.get("use_internal_value", False)
   # loop over agents and functions
   potential_buyers, functions_to_share = np.nonzero(omega)

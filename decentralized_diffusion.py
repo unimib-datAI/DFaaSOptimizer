@@ -48,6 +48,9 @@ def define_assignments(
   capacity. No bid price is computed (no epsilon/delta); the per-pair score is
   stored in the ``utility`` column, on which evaluate_assignments later sorts.
   """
+  from utils.compute_backend import record_operation
+  record_operation('define_assignments','cpu',len(omega),shape=list(omega.shape),
+                   reason='complete CUDA adapter slower after packing and ordered DataFrame reconstruction')
   if current_y is None:
     current_y = np.zeros((omega.shape[0], omega.shape[0], omega.shape[1]))
   # no_ping_pong: a node that is a sender of f (residual demand or already
