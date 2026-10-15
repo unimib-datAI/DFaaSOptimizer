@@ -23,11 +23,14 @@ def _shape(costs, memory, ram_cap):
   return nf, nl, budget + 1
 
 
+def _buffer_bytes(count, nf, nl, nb):
+  # float64 costs + int32 memory/lengths/output + budget/nf/status + DP buffers/choices
+  return count * (8 * nf * nl + 12 * nf + 12 + 16 * nb + 4 * nf * nb)
+
+
 def _padded_bytes(items):
   shapes = [_shape(*item) for item in items]
-  nf, nl, nb = map(max, zip(*shapes))
-  # float64 costs + int32 memory/lengths/output + budget/nf/status + DP buffers/choices
-  return len(items) * (8 * nf * nl + 12 * nf + 12 + 16 * nb + 4 * nf * nb)
+  return _buffer_bytes(len(items), *map(max, zip(*shapes)))
 
 
 def gpu_problem_fits(costs, memory, ram_cap):
@@ -39,14 +42,17 @@ def gpu_problem_fits(costs, memory, ram_cap):
 
 
 def _chunks(items):
-  chunk = []
+  chunk, shape = [], (0, 0, 0)
   for item in items:
-    if not gpu_problem_fits(*item):
+    item_shape = _shape(*item)
+    if _buffer_bytes(1, *item_shape) > _MAX_DEVICE_BYTES:
       raise ValueError('GPU DP problem exceeds device buffer/index limits')
-    if chunk and _padded_bytes(chunk + [item]) > _MAX_DEVICE_BYTES:
+    padded = tuple(map(max, zip(shape, item_shape)))
+    if chunk and _buffer_bytes(len(chunk) + 1, *padded) > _MAX_DEVICE_BYTES:
       yield chunk
-      chunk = []
+      chunk, padded = [], item_shape
     chunk.append(item)
+    shape = padded
   if chunk:
     yield chunk
 
@@ -147,8 +153,13 @@ def _minimize_batch(costs_batch, memory_batch, ram_caps, *, threads=128, profile
   if not (len(costs_batch) == len(memory_batch) == len(ram_caps)):
     raise ValueError('GPU DP batch lengths differ')
   result = []
+  planning_started = perf_counter()
   for chunk in _chunks(list(zip(costs_batch, memory_batch, ram_caps))):
+    planning_s = perf_counter() - planning_started
     result.extend(_run_chunk(chunk, threads=threads, profile=profile))
+    if profile is not None:
+      profile[-1]['packing_s'] += planning_s
+    planning_started = perf_counter()
   return result
 
 

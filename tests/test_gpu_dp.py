@@ -53,3 +53,15 @@ def test_real_gpu_chunked_result_parity(monkeypatch):
   got = dp_gpu.minimize_replica_costs_batch(costs, [[1]] * 30, [257] * 30)
   for choice in got:
     np.testing.assert_array_equal(choice, [2])
+
+
+def test_chunk_planning_scales_linearly(monkeypatch):
+  calls = []
+  original = dp_gpu._shape
+  def shape(*args):
+    calls.append(1)
+    return original(*args)
+  monkeypatch.setattr(dp_gpu, '_shape', shape)
+  items = [([[0., -1.]], [1], 30)] * 100
+  assert len(list(dp_gpu._chunks(items))) == 1
+  assert len(calls) <= 3 * len(items)

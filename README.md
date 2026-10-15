@@ -1116,3 +1116,91 @@ continuous forwarding. On fractional-capacity inputs their feasible sets can
 differ; equal timing and output units do not make their mathematical models
 identical. Integer `fixed_sum` traces conserve the total rounded once to the
 nearest request; real-valued traces conserve it to the nearest thousandth.
+
+### Optional CUDA backend for local DP batches
+
+CPU is the default. Install the optional GPU group on the execution host (Python
+3.10; the locked environment was validated on Linux aarch64, NumPy 2.2.6,
+NVIDIA GB10 SM 12.1, driver 580.178.04 and CUDA toolkit 13.0):
+
+```bash
+uv sync --locked --no-default-groups --group dev --group gpu
+```
+
+This does not install the RL/Torch group. A working NVIDIA driver and CUDA toolkit
+are prerequisites; no GPU provisioning or driver installation is performed.
+Enable GPU batches in the existing runner configuration:
+
+```json
+{"solver_options": {"general": {"use_dp": true, "dp_device": "cuda"}}}
+```
+
+Campaign YAML already supports the same option:
+
+```yaml
+experiments:
+  overrides:
+    solver_options:
+      general:
+        use_dp: true
+        dp_device: cuda
+```
+
+`dp_device` accepts only `cpu` and `cuda`; CUDA requires boolean `use_dp: true`.
+It is never forwarded to the external MILP solver. Remove `dp_device` (or set it
+to `cpu`) to restore CPU dispatch. The CPU path imports no CUDA module. Device 0
+is used; select a physical device with `CUDA_VISIBLE_DEVICES`.
+
+Coverage is limited to the independent local groups in `solve_subproblem` and
+`compute_social_welfare`. This includes callers such as MADEA and faas-macro;
+it does not add GPU execution to PLASMA/PLASMA-Welfare or sequential potential
+game moves. Single local calls, fixed-x/fixed-r direct solutions, unsupported
+models, fewer than two eligible DPs, and problems exceeding the int32/64 MiB
+buffer limits stay on CPU. Logs report these reasons. Unsupported or infeasible
+DPs keep the configured Pyomo solver policy, including failure with
+`missing_solver` in DP-only campaigns. Missing GPU packages, unavailable drivers,
+compilation errors, OOM and CUDA errors propagate when eligible GPU work exists.
+
+`parallelism` still controls CPU workers. GPU batches run in the calling process,
+even with `parallelism=0`; no worker initializes CUDA. Each problem keeps its own
+RAM constraint. Float64 arithmetic, GCD scaling, strict tie comparisons, replica
+choices, and the existing flow reconstruction are shared with the CPU reference.
+
+GPU phases return only after synchronization and host reconstruction. Preparation,
+allocations, copies, kernel execution, decoding, CPU residuals, and the first
+context/JIT compilation count toward the experiment limit. The shared GPU phase
+is charged **once**, without division by node count. Stops occur at existing
+checks after the phase; kernels are not preempted. `runtime.csv` keeps its schema;
+`algorithm_s` includes shared GPU service latency and `workers` still counts CPU
+workers. Batch results carry equal `runtime` values and
+`runtime_kind="batch_latency"`; their legacy mean is the complete batch latency.
+Logs identify `timing_basis=gpu_batch_wall`.
+
+Correctness checks on a real GPU (the environment flag explicitly opts into
+hardware tests; skips are not hardware verification):
+
+```bash
+DFAAS_TEST_CUDA=1 .venv/bin/python -m pytest \
+  tests/test_gpu_dp_config.py tests/test_gpu_dp.py tests/test_gpu_local_sp.py -q
+```
+
+Reproducible benchmark, including original CPU DP, a persistent warm CPU pool,
+CUDA kernels at 64/128/256 threads (production remains 128), full local batches,
+and complete MADEA/faas-macro steps:
+
+```bash
+.venv/bin/python experiments/gpu_dp/benchmark.py \
+  --instance <materialized-instance-directory> --nodes 1 32 128 500 1000 \
+  --repeats 10 --output <new-directory>
+```
+
+The destination must not exist. Samples and median/p95 summaries include actual
+backend/GPU share, first calls and warm calls, packing/copy/kernel times, buffer
+bytes, hardware, versions, and revisions. Pool startup/warmup is declared
+separately. `jit_cold` identifies the first actual CUDA call; subsequent first
+calls reuse the compiled kernel. Repetition beyond the source instance size is
+explicitly a **synthetic batch**, not a measured network of that size. A singleton
+full batch uses CPU although the numeric kernel is also measured with one DP.
+Step artifacts must match at nonbinding limits; the separate 30 ms budget runs
+report achieved welfare, which may change with available iterations. Physical
+occupancy requires profiler permissions and is not inferred from CUDA core count.
