@@ -124,6 +124,16 @@ def buyer_price_response(
   return bids, demand, dual_term
 
 
+def _append_memory_requests(rows,omega,placed,data,neighborhood,rho,forbidden):
+  for i,f in step_time.timed(zip(*np.nonzero(omega>0)),key=lambda item:int(item[0])):
+    i,f=int(i),int(f)
+    if placed[i,f]+1e-12<omega[i,f]:
+      memory_requirement=data[None]['memory_requirement'][f+1]
+      for j in np.nonzero(neighborhood[i,:])[0]:
+        if rho[int(j)]>=memory_requirement and not forbidden[int(j),f]:
+          rows['i'].append(i);rows['j'].append(int(j));rows['f'].append(f)
+
+
 def dual_coordination_round(
   omega: np.array,
   residual_capacity: np.array,
@@ -240,16 +250,21 @@ def dual_coordination_round(
   memory_bids = {"i": [], "j": [], "f": []}
   placed = best_y.sum(axis=1)
   with step_time.parallel_phase():  # each buyer asks for replicas it still needs
-    for i, f in step_time.timed(zip(*np.nonzero(omega > 0)), key=lambda item: int(item[0])):
-      i, f = int(i), int(f)
-      if placed[i, f] + 1e-12 < omega[i, f]:
-        memory_requirement = data[None]["memory_requirement"][f + 1]
-        for j in np.nonzero(neighborhood[i, :])[0]:
-          if rho[int(j)] >= memory_requirement and not forbidden[int(j), f]:
-            memory_bids["i"].append(i)
-            memory_bids["j"].append(int(j))
-            memory_bids["f"].append(f)
-  memory_bids = pd.DataFrame(memory_bids)
+    from utils.compute_backend import cuda_compute_enabled,record_operation
+    eligible=False
+    if cuda_compute_enabled():
+      bound=nn*nn*(nf+8)+17*nn*nf+8*nn+8*nf
+      eligible=(nn>=100 and nf>=5 and bound<=64*1024*1024
+                and all(a.dtype==np.float64 for a in (omega,placed,neighborhood,rho))
+                and np.count_nonzero((omega>0)&(placed+1e-12<omega))>=250)
+      if not eligible:
+        record_operation('dual_memory_requests','cpu',nn,shape=[nn,nf],
+                         reason='performance/buffer gate: >=100 nodes, >=5 functions, >=250 unmet pairs, float64 snapshots, <=64 MiB')
+    if eligible:
+      from models.bids_gpu import dual_memory_requests_cuda
+      memory_bids=dual_memory_requests_cuda(omega,placed,data,neighborhood,rho,forbidden)
+    else:_append_memory_requests(memory_bids,omega,placed,data,neighborhood,rho,forbidden)
+  if not isinstance(memory_bids,pd.DataFrame):memory_bids=pd.DataFrame(memory_bids)
 
   gap_info = {
     "LB": best_lb, "UB": best_ub, "gap": gap,

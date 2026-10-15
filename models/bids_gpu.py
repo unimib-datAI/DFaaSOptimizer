@@ -389,3 +389,241 @@ def generate_level_requests_cuda(engine,buyer_structures,all_structures,current_
   record_operation('hierarchy_bid_scores','cuda',len(pairs),shape=list(parameters.shape),device_bytes=parameters.nbytes+scores.nbytes)
   prepared=dict(prices=prices,sellers=sellers,scores=dict(zip(pairs,scores)),sending=sending,receiving=receiving)
   return engine._generate_level_requests_host(*args,prepared=prepared)
+
+
+@lru_cache(maxsize=1)
+def _diffusion_kernel():
+  from numba import cuda
+  from numba.cuda import libdevice as ld
+  from models.numeric_gpu import _source_reducer
+  import math
+  globals()['cuda']=cuda
+  source_sum=_source_reducer()
+
+  @cuda.jit(device=True)
+  def floor_divide(a,b):
+    remainder=ld.fmod(a,b);div=ld.ddiv_rn(ld.dadd_rn(a,-remainder),b)
+    result=math.floor(div)
+    if ld.dadd_rn(div,-result)>.5:result+=1
+    return int(result)
+
+  @cuda.jit
+  def kernel(capacity,ell,r,rho,ram,demand,utilization,active,offsets,buyers,quantities,utilities,
+             incumbent,scores,tentative,y,additional):
+    j=cuda.grid(1);nn,nf=capacity.shape
+    if j>=nn:return
+    free=rho[j]
+    for f in range(nf):
+      additional[j,f]=0.
+      for i in range(nn):y[i,j,f]=0.
+      if not active[j,f]:continue
+      k=j*nf+f;index,end=offsets[k],offsets[k+1]
+      remaining=capacity[j,f]
+      while index<end and remaining>0:
+        q=min(remaining,quantities[index]);i=buyers[index]
+        y[i,j,f]=ld.dadd_rn(y[i,j,f],q)
+        remaining=ld.dadd_rn(remaining,-q)
+        quantities[index]=ld.dadd_rn(quantities[index],-q)
+        if quantities[index]<=1e-12:index+=1
+      if tentative and index<end:
+        max_a=floor_divide(free,ram[f])
+        if max_a>0:
+          maximum=ld.ddiv_rn(ld.dmul_rn(ld.dadd_rn(r[j,f],max_a),utilization[f]),demand[j,f])
+          spare=max(0.,ld.dadd_rn(ld.dadd_rn(maximum,-ell[j,f]),-source_sum(y,j,f)))
+          while index<end and spare>1e-12:
+            q=min(spare,quantities[index]);i=buyers[index]
+            y[i,j,f]=ld.dadd_rn(y[i,j,f],q)
+            quantities[index]=ld.dadd_rn(quantities[index],-q)
+            spare=ld.dadd_rn(spare,-q)
+            if quantities[index]<=1e-12:index+=1
+          hosted=ld.dadd_rn(ell[j,f],source_sum(y,j,f))
+          required=int(math.ceil(ld.dadd_rn(ld.ddiv_rn(ld.dmul_rn(demand[j,f],hosted),utilization[f]),-1e-12)))
+          a=min(max_a,max(0,required-int(r[j,f])))
+          additional[j,f]=a;free=ld.dadd_rn(free,-ld.dmul_rn(a,ram[f]))
+      while index<end:
+        i=buyers[index];candidate=utilities[index]
+        while quantities[index]>1e-12:
+          best=-1;best_score=float('inf')
+          for old in range(nn):
+            score=scores[old,j,f]
+            if incumbent[old,j,f]>1e-12 and old!=i and candidate>score:
+              if best<0 or score<best_score or (score==best_score and old>best):
+                best,best_score=old,score
+          if best<0:break
+          q=min(quantities[index],incumbent[best,j,f])
+          y[best,j,f]=ld.dadd_rn(y[best,j,f],-q);y[i,j,f]=ld.dadd_rn(y[i,j,f],q)
+          incumbent[best,j,f]=ld.dadd_rn(incumbent[best,j,f],-q)
+          quantities[index]=ld.dadd_rn(quantities[index],-q)
+        index+=1
+  return cuda,kernel
+
+
+def evaluate_assignments_cuda(bids,residual_capacity,data,ell,r,initial_rho,tentatively_start_replicas,
+                               last_y=None,diffusion_options=None,latency=None,fairness=None):
+  step_time.mark_shared_device()
+  nn,nf=residual_capacity.shape;v=data[None]
+  if last_y is None:last_y=np.zeros((nn,nn,nf))
+  if diffusion_options is None:diffusion_options=dict(latency_weight=0.,fairness_weight=0.)
+  if latency is None:latency=np.zeros((nn,nn))
+  if fairness is None:fairness=np.zeros((nn,nf))
+  active=residual_capacity>0
+  for row in bids[['j','f']].drop_duplicates().itertuples(index=False):
+    j,f=int(row.j),int(row.f)
+    if last_y[:,j,f].sum()>0:active[j,f]=True
+  if tentatively_start_replicas:active[np.nonzero(initial_rho)[0],:]=True
+  groups={(int(j),int(f)):group.sort_values(['utility','i'],ascending=[False,True]).reset_index(drop=True)
+          for (j,f),group in bids.groupby(['j','f'])}
+  offsets=[0];buyers=[];quantities=[];utilities=[]
+  for j in range(nn):
+    for f in range(nf):
+      group=groups.get((j,f))
+      if group is not None:
+        buyers.extend(group['i'].to_numpy(dtype=np.int64));quantities.extend(group['d'].to_numpy(dtype=np.float64))
+        utilities.extend(group['utility'].to_numpy(dtype=np.float64))
+      offsets.append(len(buyers))
+  ram=np.ones(nf);demand=np.ones((nn,nf));utilization=np.ones(nf)
+  if tentatively_start_replicas:
+    for j,f in groups:
+      if initial_rho[j]>0:
+        ram[f]=v['memory_requirement'][f+1]
+        demand[j,f]=v['demand'][j+1,f+1];utilization[f]=v['max_utilization'][f+1]
+  scores=np.zeros(last_y.shape)
+  for i,j,f in zip(*np.nonzero(last_y>1e-12)):
+    scores[i,j,f]=(v['beta'][i+1,j+1,f+1]-diffusion_options['latency_weight']*latency[i,j]
+                   -diffusion_options['fairness_weight']*fairness[i,f])
+  cuda,kernel=_diffusion_kernel()
+  host=[np.array(a,dtype=np.float64,order='C',copy=True) for a in (residual_capacity,ell,r,initial_rho,ram,demand,utilization)]
+  host.extend([np.array(active,dtype=np.bool_,order='C'),np.asarray(offsets,dtype=np.int64),
+               np.asarray(buyers,dtype=np.int64),np.asarray(quantities,dtype=np.float64),np.asarray(utilities,dtype=np.float64),
+               np.array(last_y,dtype=np.float64,order='C',copy=True),scores])
+  inputs=[cuda.to_device(a) for a in host]
+  y=cuda.device_array(last_y.shape,dtype=np.float64);additional=cuda.device_array(r.shape,dtype=np.float64)
+  kernel[(nn+127)//128,128](*inputs,tentatively_start_replicas,y,additional)
+  result=y.copy_to_host(),additional.copy_to_host(),int(np.count_nonzero(active));cuda.synchronize()
+  record_operation('evaluate_assignments','cuda',int(np.count_nonzero(active.any(axis=1))),
+                   shape=[nn,nf,len(bids)],device_bytes=sum(a.nbytes for a in host)+result[0].nbytes+result[1].nbytes)
+  return result
+
+
+def diffusion_evaluation_eligible(bids,capacity,data,ell,r,rho,tentative,last_y):
+  if not isinstance(capacity,np.ndarray) or capacity.ndim!=2:return False,'snapshot shapes outside GPU domain',0
+  nn,nf=capacity.shape
+  arrays=(capacity,ell,r,rho) if last_y is None else (capacity,ell,r,rho,last_y)
+  if not all(isinstance(a,np.ndarray) and a.dtype==np.float64 and np.isfinite(a).all() for a in arrays):
+    return False,'requires finite float64 snapshots',0
+  if (ell.shape!=(nn,nf) or r.shape!=(nn,nf) or rho.shape!=(nn,)
+      or (last_y is not None and last_y.shape!=(nn,nn,nf))):
+    return False,'snapshot shapes outside GPU domain',0
+  if bids.empty:return False,'empty bids',0
+  indices=[bids[key].to_numpy() for key in ('i','j','f')]
+  if any(a.dtype.kind not in 'iu' for a in indices):return False,'noninteger bid indices',0
+  if any(a.min()<0 or a.max()>=bound for a,bound in zip(indices,(nn,nn,nf))):
+    return False,'bid indices outside measured domain',0
+  if (not np.isfinite(bids['d'].to_numpy(dtype=float)).all()
+      or not np.isfinite(bids['utility'].to_numpy(dtype=float)).all()):return False,'nonfinite bid values',0
+  active=(capacity>0).any(axis=1)
+  if tentative:active|=rho!=0
+  if last_y is not None:
+    if (last_y<0).any():return False,'negative incumbent flows outside GPU domain',0
+    positive=(last_y>0).any(axis=0)
+    j,f=indices[1:];active[j[positive[j,f]]]=True
+  count=int(np.count_nonzero(active))
+  bound=24*nn*nn*nf+64*nn*nf+8*nn+16*nf+24*len(bids)+16
+  if count<100 or nf<5:return False,'performance gate: >=100 active vendors and >=5 functions',count
+  if bound>64*1024*1024:return False,'64 MiB device buffer limit',count
+  if r.max()>2**31:return False,'replica count outside GPU integer domain',count
+  if tentative:
+    try:
+      v=data[None];memory=np.array([v['memory_requirement'][f+1] for f in range(nf)],dtype=float)
+      utilization=np.array([v['max_utilization'][f+1] for f in range(nf)],dtype=float)
+      demand=np.array([v['demand'][j+1,f+1] for j in range(nn) for f in range(nf)],dtype=float)
+    except KeyError:return False,'incomplete replica parameters',count
+    if any(not np.isfinite(a).all() or (a<=0).any() for a in (memory,utilization,demand)):
+      return False,'replica parameters outside positive finite domain',count
+    if rho.max()/memory.min()>2**31:return False,'replica batch outside GPU integer domain',count
+  return True,'',count
+
+
+@lru_cache(maxsize=1)
+def _proposal_kernel():
+  from numba import cuda
+  globals()['cuda']=cuda
+  @cuda.jit
+  def kernel(values,positions,offsets,out):
+    k=cuda.grid(1)
+    if k<out.size:
+      start=offsets[k];best=values[start];position=positions[start]
+      for i in range(start+1,offsets[k+1]):
+        if values[i]>best:best,position=values[i],positions[i]
+      out[k]=position
+  return cuda,kernel
+
+
+def best_agent_bids_cuda(bids):
+  if bids.empty:return bids.copy()
+  values=bids['utility'].to_numpy()
+  native=all(isinstance(bids[key].dtype,np.dtype) for key in ('i','f','utility'))
+  ids,functions=bids['i'].to_numpy(),bids['f'].to_numpy()
+  if (not native or ids.dtype.kind not in 'iu' or functions.dtype.kind not in 'iu'
+      or not bids.index.is_unique or values.dtype.kind!='f' or values.dtype.itemsize>8 or not np.isfinite(values).all()
+      or 32*len(bids)+8>64*1024*1024):
+    record_operation('gcaa_proposals','cpu',len(bids),reason='non-native integer grouping, nonunique index, nonfinite/nonfloating scores or 64 MiB limit')
+    return bids.loc[bids.groupby(['i','f'])['utility'].idxmax()]
+  step_time.mark_shared_device()
+  order=np.lexsort((functions,ids))
+  si,sf=ids[order],functions[order]
+  starts=np.flatnonzero(np.r_[True,(si[1:]!=si[:-1]) | (sf[1:]!=sf[:-1])])
+  offsets=np.r_[starts,len(bids)].astype(np.int64)
+  host=[np.asarray(values[order],dtype=np.float64),np.asarray(order,dtype=np.int64),offsets]
+  cuda,kernel=_proposal_kernel();inputs=[cuda.to_device(a) for a in host]
+  out=cuda.device_array(len(starts),dtype=np.int64)
+  kernel[(len(starts)+127)//128,128](*inputs,out)
+  selected=out.copy_to_host();cuda.synchronize()
+  result=bids.iloc[selected]
+  record_operation('gcaa_proposals','cuda',len(starts),shape=[len(bids),len(starts)],device_bytes=sum(a.nbytes for a in host)+selected.nbytes)
+  return result
+
+
+def resolve_gcaa_round_cuda(bids,residual_capacity,current_y=None):
+  from decentralized_gcaa import _resolve_gcaa_host
+  best=best_agent_bids_cuda(bids)
+  return _resolve_gcaa_host(bids,residual_capacity,current_y,best_per_agent=best)
+
+
+@lru_cache(maxsize=1)
+def _dual_memory_kernel():
+  from numba import cuda
+  from numba.cuda import libdevice as ld
+  globals()['cuda']=cuda
+  @cuda.jit
+  def kernel(omega,placed,neighbors,rho,forbidden,memory,out):
+    k=cuda.grid(1);nn,nf=omega.shape
+    if k<out.size:
+      i,f,j=k//(nn*nf),(k//nn)%nf,k%nn
+      out[i,f,j]=(omega[i,f]>0 and ld.dadd_rn(placed[i,f],1e-12)<omega[i,f]
+                  and neighbors[i,j]!=0 and rho[j]>=memory[f] and not forbidden[j,f])
+  return cuda,kernel
+
+
+def dual_memory_requests_cuda(omega,placed,data,neighborhood,rho,forbidden):
+  nn,nf=omega.shape;needed=(omega>0)&(placed+1e-12<omega)
+  bound=nn*nn*nf+8*nn*nn+17*nn*nf+8*nn+8*nf
+  if not needed.any() or bound>64*1024*1024:
+    from decentralized_dual import _append_memory_requests
+    reason='no residual requests' if not needed.any() else '64 MiB buffer limit'
+    record_operation('dual_memory_requests','cpu',nn,shape=[nn,nf],reason=reason)
+    rows=dict(i=[],j=[],f=[]);_append_memory_requests(rows,omega,placed,data,neighborhood,rho,forbidden)
+    return pd.DataFrame(rows)
+  step_time.mark_shared_device()
+  memory=np.ones(nf)
+  for f in np.flatnonzero(needed.any(axis=0)):memory[f]=data[None]['memory_requirement'][int(f)+1]
+  host=[np.array(a,dtype=dtype,order='C',copy=True) for a,dtype in
+        ((omega,np.float64),(placed,np.float64),(neighborhood,np.float64),(rho,np.float64),(forbidden,np.bool_),(memory,np.float64))]
+  cuda,kernel=_dual_memory_kernel();inputs=[cuda.to_device(a) for a in host]
+  out=cuda.device_array((nn,nf,nn),dtype=np.bool_)
+  kernel[(out.size+127)//128,128](*inputs,out)
+  mask=out.copy_to_host();cuda.synchronize()
+  i,f,j=np.nonzero(mask)
+  result=pd.DataFrame(dict(i=i,j=j,f=f)) if len(i) else pd.DataFrame(dict(i=[],j=[],f=[]))
+  record_operation('dual_memory_requests','cuda',nn,shape=[nn,nf,nn],device_bytes=sum(a.nbytes for a in host)+mask.nbytes)
+  return result

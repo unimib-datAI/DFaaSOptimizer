@@ -2,10 +2,11 @@
 import numpy as np
 
 _residual_kernel = None
+_source_sum_device = None
 
 
 def _residual():
-  global _residual_kernel, cuda
+  global _residual_kernel, cuda, _source_sum_device
   if _residual_kernel is None:
     from numba import cuda
     from numba import float64, int64
@@ -59,6 +60,8 @@ def _residual():
         if not go_right:
           return value
 
+    _source_sum_device = source_sum
+
     @cuda.jit
     def kernel(x, y, r, demand, utilization, cap, residual, ell):
       k = cuda.grid(1)
@@ -73,6 +76,12 @@ def _residual():
         residual[n,f] = max(0., libdevice.dadd_rn(capacity, -load))
     _residual_kernel = kernel
   return _residual_kernel
+
+
+def _source_reducer():
+  """Reuse the exact one-dimensional NumPy reduction without another launch."""
+  _residual()
+  return _source_sum_device
 
 
 def residual_capacity_cuda(x, y, r, demand, utilization):
@@ -200,4 +209,34 @@ def dual_price_cuda(lam,alpha,subgradient):
   kernel[(out.size+127)//128,128](cuda.to_device(lam.ravel()),alpha,cuda.to_device(gradient.ravel()),out)
   result=out.copy_to_host().reshape(lam.shape);cuda.synchronize()
   record_operation('dual_price','cuda',len(lam),shape=list(lam.shape),device_bytes=3*lam.nbytes)
+  return result
+
+
+def _confirmation():
+  global _confirmation_cached,cuda
+  if '_confirmation_cached' in globals():return _confirmation_cached
+  from numba import cuda
+  @cuda.jit
+  def kernel(ids,functions,omega,tolerance,mask,demand):
+    k=cuda.grid(1)
+    if k<ids.size:
+      value=omega[ids[k],functions[k]]
+      mask[k]=value>tolerance;demand[k]=value
+  _confirmation_cached=kernel
+  return kernel
+
+
+def confirm_memory_rows_cuda(ids,functions,omega,tolerance):
+  from utils import step_time
+  from utils.compute_backend import record_operation
+  step_time.mark_shared_device()
+  kernel=_confirmation()
+  arrays=[np.array(a,dtype=dtype,order='C',copy=True) for a,dtype in ((ids,np.int64),(functions,np.int64),(omega,np.float64))]
+  inputs=[cuda.to_device(a) for a in arrays]
+  mask=cuda.device_array(len(ids),dtype=np.bool_);demand=cuda.device_array(len(ids),dtype=np.float64)
+  kernel[(len(ids)+127)//128,128](*inputs,tolerance,mask,demand)
+  result=mask.copy_to_host(),demand.copy_to_host();cuda.synchronize()
+  with step_time.untimed():
+    record_operation('memory_confirmation','cuda',len(np.unique(ids)),shape=[len(ids),*omega.shape],
+                     device_bytes=sum(a.nbytes for a in arrays)+9*len(ids))
   return result

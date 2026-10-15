@@ -17,6 +17,11 @@ from run_faasmadea import start_additional_replicas
 from madea2 import start_replicas_by_value
 from models.numeric_gpu import aggregate_groups_cuda,dual_price_cuda
 from models.bids_gpu import generate_level_requests_cuda
+from models.bids_gpu import evaluate_assignments_cuda
+from decentralized_diffusion import evaluate_assignments
+from models.bids_gpu import best_agent_bids_cuda,resolve_gcaa_round_cuda
+from decentralized_gcaa import resolve_gcaa_round
+from models.bids_gpu import dual_memory_requests_cuda
 
 pytestmark = pytest.mark.skipif(os.environ.get('DFAAS_TEST_CUDA') != '1', reason='real CUDA opt-in required')
 
@@ -424,3 +429,227 @@ def test_custom_hierarchy_scoring_preserves_callback_rng(monkeypatch):
   with compute_session({'compute_device':'cuda'}) as coverage:actual,other,other_state=execute(True)
   assert actual==expected and seen==other and state==other_state
   assert coverage[-1]['backend']=='cpu' and 'custom' in coverage[-1]['reason']
+
+
+@pytest.mark.parametrize('detailed',[False,True])
+def test_memory_confirmation_batch_order_types_and_freshness(detailed):
+  import run_faasmadea as madea
+  from utils.compute_backend import compute_session
+  from utils import step_time
+  rng=np.random.default_rng(92);n,nf=40,3;size=2400
+  omega=rng.choice([0.,1e-6-1e-9,1e-6,1e-6+1e-9,2.],(n,nf))
+  bids=pd.DataFrame(dict(i=rng.integers(0,n,size),j=rng.integers(0,n,size),f=rng.integers(0,nf,size)),index=pd.Index(rng.integers(0,10,size),name='source'))
+  if detailed:bids['d']=1;bids['v']=rng.random(size)
+  before=bids.copy(deep=True)
+  for shift in (0.,.5):
+    expected=pd.concat([madea.confirm_memory_bids(g,(omega+shift)[int(i)],tolerance=1e-6) for i,g in bids.groupby('i')])
+    with compute_session({'compute_device':'cuda'}) as coverage,step_time.parallel_phase() as phase:
+      actual=madea.confirm_memory_bid_batch(bids,omega+shift,tolerance=1e-6)
+      assert phase.shared_device
+    pd.testing.assert_frame_equal(actual,expected,check_exact=True)
+    assert any(row['operation']=='memory_confirmation' and row['backend']=='cuda' for row in coverage)
+  pd.testing.assert_frame_equal(bids,before)
+
+
+def test_confirmation_custom_callback_preserves_rng():
+  import run_faasmadea as madea
+  from utils.compute_backend import compute_session
+  bids=pd.DataFrame(dict(i=[2,0,2,1],j=[1,1,0,2],f=[0,0,0,0]));omega=np.ones((3,1))
+  def execute(batch):
+    seen=[];rng=np.random.default_rng(81)
+    def callback(group,load,**kwargs):
+      seen.append((int(group['i'].iloc[0]),rng.random()))
+      return madea.confirm_memory_bids(group,load,**kwargs)
+    if batch:result=madea.confirm_memory_bid_batch(bids,omega,confirm=callback)
+    else:result=pd.concat([callback(g,omega[int(i)]) for i,g in bids.groupby('i')])
+    return result,seen,rng.bit_generator.state
+  expected,seen,state=execute(False)
+  with compute_session({'compute_device':'cuda'}) as coverage:actual,other,other_state=execute(True)
+  pd.testing.assert_frame_equal(actual,expected,check_exact=True)
+  assert seen==other and state==other_state
+  assert coverage[-1]['backend']=='cpu' and 'callback' in coverage[-1]['reason']
+
+
+def test_confirmation_coverage_observer_is_outside_clock(monkeypatch):
+  from models.numeric_gpu import confirm_memory_rows_cuda
+  from utils.compute_backend import compute_session
+  from utils import step_time
+  ids=np.array([0,1]);functions=np.zeros(2,dtype=int);omega=np.ones((2,1))
+  confirm_memory_rows_cuda(ids,functions,omega,1e-6)
+  now=[0.];original=np.unique
+  def slow_count(*args,**kwargs):
+    now[0]+=1.;return original(*args,**kwargs)
+  monkeypatch.setattr(np,'unique',slow_count)
+  monkeypatch.setattr(step_time,'perf_counter',lambda:now[0])
+  clock=step_time.start_step()
+  try:
+    with compute_session({'compute_device':'cuda'}),step_time.parallel_phase():
+      confirm_memory_rows_cuda(ids,functions,omega,1e-6)
+  finally:timing=step_time.end_step(clock)
+  assert timing['wall_s']==1. and timing['algorithm_s']==0.
+
+
+@pytest.mark.parametrize('n,nf',[(1,1),(6,3),(30,5),(100,3)])
+@pytest.mark.parametrize('tentative',[False,True])
+def test_diffusion_vendor_sequence_exact(n,nf,tentative):
+  rng=np.random.default_rng(30);data=make_data(n,nf)
+  data[None]['memory_requirement']={f+1:float(f+1) for f in range(nf)}
+  data[None]['demand']={(j+1,f+1):float([.3,.7,1.][(j+f)%3]) for j in range(n) for f in range(nf)}
+  bids=pd.DataFrame(dict(i=rng.integers(0,n,n*nf*4),j=rng.integers(0,n,n*nf*4),f=rng.integers(0,nf,n*nf*4),
+                         d=rng.choice([0.,.2,1.,3.],n*nf*4),utility=rng.choice([.5,1.,2.],n*nf*4)))
+  capacity=rng.choice([0.,.5,1.,3.],(n,nf));ell=rng.random((n,nf));replicas=rng.integers(0,4,(n,nf)).astype(float)
+  rho=rng.integers(0,10,n).astype(float);old=rng.choice([0.,0.,0.,.2,1.],(n,n,nf))
+  latency=rng.random((n,n));fairness=rng.random((n,nf));options=dict(latency_weight=.3,fairness_weight=.7)
+  before=deepcopy(data),bids.copy(deep=True),[a.copy() for a in (capacity,ell,replicas,rho,old,latency,fairness)]
+  for shift in (0.,.25):
+    args=bids,capacity,data,ell+shift,replicas,rho,tentative,old,options,latency,fairness
+    expected=evaluate_assignments(*args);actual=evaluate_assignments_cuda(*args)
+    for a,b in zip(actual[:2],expected[:2]):np.testing.assert_array_equal(a,b)
+    assert actual[2]==expected[2]
+  assert data==before[0];pd.testing.assert_frame_equal(bids,before[1])
+  for a,b in zip((capacity,ell,replicas,rho,old,latency,fairness),before[2]):np.testing.assert_array_equal(a,b)
+
+
+def test_diffusion_evaluation_dispatch_and_full_clock():
+  from utils.compute_backend import compute_session
+  from utils import step_time
+  n,nf=100,5;data=make_data(n,nf)
+  bids=pd.DataFrame([dict(i=i,j=(i+1)%n,f=f,d=2.,utility=2.) for i in range(n) for f in range(nf)])
+  args=bids,np.ones((n,nf)),data,np.zeros((n,nf)),np.ones((n,nf)),np.full(n,4.),True
+  expected=evaluate_assignments(*args)
+  clock=step_time.start_step()
+  try:
+    with compute_session({'compute_device':'cuda'}) as coverage:actual=evaluate_assignments(*args)
+  finally:timing=step_time.end_step(clock)
+  for a,b in zip(actual[:2],expected[:2]):np.testing.assert_array_equal(a,b)
+  assert actual[2]==expected[2]
+  assert any(row['operation']=='evaluate_assignments' and row['backend']=='cuda' for row in coverage)
+  assert timing['algorithm_s']>=.9*timing['wall_s']
+
+
+@pytest.mark.parametrize('n,nf',[(1,1),(6,3),(100,5)])
+def test_gcaa_proposals_and_ordered_consensus(n,nf):
+  rng=np.random.default_rng(73);size=n*nf*8
+  bids=pd.DataFrame(dict(i=rng.integers(0,n,size),j=rng.integers(0,n,size),f=rng.integers(0,nf,size),
+                         d=rng.choice([.5,1.,2.],size),utility=rng.choice([-1.,0.,1.,2.],size)),
+                    index=pd.Index(rng.permutation(size)+100,name='bid'))
+  expected=bids.loc[bids.groupby(['i','f'])['utility'].idxmax()]
+  pd.testing.assert_frame_equal(best_agent_bids_cuda(bids),expected,check_exact=True)
+  capacity=np.full((n,nf),2.);current=np.zeros((n,n,nf))
+  if n>1:current[0,1,0]=1.
+  np.testing.assert_array_equal(resolve_gcaa_round_cuda(bids,capacity,current),resolve_gcaa_round(bids,capacity,current))
+
+
+def test_gcaa_duplicate_index_retains_cpu_semantics():
+  from utils.compute_backend import compute_session
+  bids=pd.DataFrame(dict(i=[0,1,0],j=[1,2,2],f=[0,0,0],d=[1.,1.,1.],utility=[2.,3.,2.]),index=[7,7,2])
+  expected=bids.loc[bids.groupby(['i','f'])['utility'].idxmax()]
+  with compute_session({'compute_device':'cuda'}) as coverage:actual=best_agent_bids_cuda(bids)
+  pd.testing.assert_frame_equal(actual,expected,check_exact=True)
+  assert coverage[-1]['backend']=='cpu'
+
+
+def test_categorical_confirmation_preserves_pandas_group_order():
+  import run_faasmadea as madea
+  from utils.compute_backend import compute_session
+  bids=pd.DataFrame(dict(i=pd.Categorical(np.repeat(np.arange(30),40),categories=list(range(29,-1,-1)),ordered=True),
+                         j=np.zeros(1200,dtype=int),f=np.zeros(1200,dtype=int)))
+  omega=np.ones((30,1))
+  expected=pd.concat([madea.confirm_memory_bids(group,omega[int(i)]) for i,group in bids.groupby('i',observed=False)])
+  with compute_session({'compute_device':'cuda'}) as coverage:actual=madea.confirm_memory_bid_batch(bids,omega)
+  pd.testing.assert_frame_equal(actual,expected,check_exact=True)
+  assert coverage[-1]['backend']=='cpu'
+
+
+def test_categorical_gcaa_keeps_first_tie_in_category_order():
+  from utils.compute_backend import compute_session
+  bids=pd.DataFrame(dict(i=pd.Categorical([0,1,2],categories=[2,0,1],ordered=True),j=[1,2,1],f=[0,0,0],d=[1.,1.,1.],utility=[2.,2.,2.]))
+  capacity=np.ones((3,1))
+  expected=resolve_gcaa_round(bids,capacity)
+  with compute_session({'compute_device':'cuda'}) as coverage:actual=resolve_gcaa_round_cuda(bids,capacity)
+  np.testing.assert_array_equal(actual,expected)
+  assert coverage[-1]['backend']=='cpu'
+
+
+@pytest.mark.parametrize('n,nf',[(1,1),(6,3),(100,5)])
+def test_dual_memory_request_order_thresholds_and_freshness(n,nf):
+  rng=np.random.default_rng(77);data=make_data(n,nf)
+  omega=rng.choice([0.,1.,1.+1e-9,2.],(n,nf));placed=rng.choice([0.,1.-1e-12,1.,2.],(n,nf))
+  neighbors=rng.integers(0,2,(n,n));rho=rng.choice([0.,1.,2.,3.],n);forbidden=rng.integers(0,2,(n,nf)).astype(bool)
+  for shift in (0.,.5):
+    rows=dict(i=[],j=[],f=[])
+    for i,f in zip(*np.nonzero(omega>0)):
+      if placed[i,f]+shift+1e-12<omega[i,f]:
+        for j in np.nonzero(neighbors[i,:])[0]:
+          if rho[int(j)]>=data[None]['memory_requirement'][f+1] and not forbidden[int(j),f]:
+            rows['i'].append(int(i));rows['j'].append(int(j));rows['f'].append(int(f))
+    expected=pd.DataFrame(rows)
+    actual=dual_memory_requests_cuda(omega,placed+shift,data,neighbors,rho,forbidden)
+    pd.testing.assert_frame_equal(actual,expected,check_exact=True)
+
+
+@pytest.mark.parametrize('kind',['madea','gcaa'])
+def test_shared_seller_roles_keep_original_commit_order(kind):
+  from run_faasmadea import evaluate_bids
+  from utils.compute_backend import compute_session
+  bids=pd.DataFrame(dict(i=[0,1],j=[1,2],f=[0,0],d=[1.,1.],b=[2.,2.],utility=[2.,2.]))
+  capacity=np.array([[0.],[1.],[1.]])
+  call=(lambda:evaluate_bids(bids,capacity,make_data(3,1),may_replace_existing_assignments=False)) if kind=='madea' else (lambda:(resolve_gcaa_round(bids,capacity),))
+  expected=call()
+  with compute_session({'compute_device':'cuda'}) as coverage:actual=call()
+  for a,b in zip(actual,expected):np.testing.assert_array_equal(a,b)
+  assert actual[0][0,1,0]==1. and actual[0][1,2,0]==0.
+  assert any(row['backend']=='cpu' and 'shared' in row['reason'] for row in coverage)
+
+
+def test_incumbent_replacement_releases_role_before_later_vendor():
+  from run_faasmadea import evaluate_bids
+  from utils.compute_backend import compute_session
+  bids=pd.DataFrame(dict(i=[0,2],j=[1,3],f=[0,0],d=[1.,1.],b=[3.,2.],utility=[3.,2.]))
+  old=np.zeros((4,4,1));old[3,1,0]=1.
+  blackboard=np.array([[0.],[1.],[0.],[1.]])
+  residual=np.array([[0.],[0.],[0.],[1.]])
+  def call():
+    return evaluate_bids(bids,blackboard,make_data(4,1),previous_y=old,p=np.ones((4,1)),
+                         residual_capacity=residual,may_replace_existing_assignments=True)
+  expected=call()
+  with compute_session({'compute_device':'cuda'}):actual=call()
+  for a,b in zip(actual,expected):np.testing.assert_array_equal(a,b)
+  assert actual[0][3,1,0]==-1. and actual[0][0,1,0]==1. and actual[0][2,3,0]==1.
+  combined=old+actual[0]
+  assert not ((combined.sum(axis=0)>1e-10)&(combined.sum(axis=1)>1e-10)).any()
+
+
+def test_dual_memory_request_production_dispatch():
+  from decentralized_dual import dual_coordination_round
+  from utils.compute_backend import compute_session
+  n,nf=100,5;data=make_data(n,nf);omega=np.zeros((n,nf));omega[:70]=3.
+  options=dict(max_inner_iterations=3,alpha0=.1,theta=.5,gap_tolerance=0.,step_rule='sqrt',latency_weight=0.,fairness_weight=0.)
+  args=omega,np.zeros((n,nf)),data,np.ones((n,n))-np.eye(n),np.full(n,4.),options,np.zeros((n,n)),np.zeros((n,nf))
+  expected=dual_coordination_round(*args)
+  with compute_session({'compute_device':'cuda'}) as coverage:actual=dual_coordination_round(*args)
+  np.testing.assert_array_equal(actual[0],expected[0]);pd.testing.assert_frame_equal(actual[1],expected[1],check_exact=True)
+  for key in actual[2]:np.testing.assert_array_equal(actual[2][key],expected[2][key])
+  assert any(row['operation']=='dual_memory_requests' and row['backend']=='cuda' for row in coverage)
+
+
+def test_diffusion_unused_replica_placeholders_are_expected_cpu_case():
+  from utils.compute_backend import compute_session
+  n,nf=100,5
+  bids=pd.DataFrame(dict(i=np.arange(n),j=(np.arange(n)+1)%n,f=np.zeros(n,dtype=int),d=np.ones(n),utility=np.ones(n)))
+  args=bids,np.ones((n,nf)),make_data(n,nf),np.zeros(n),np.zeros(n),np.zeros((n,nf)),False
+  expected=evaluate_assignments(*args)
+  with compute_session({'compute_device':'cuda'}) as coverage:actual=evaluate_assignments(*args)
+  for a,b in zip(actual[:2],expected[:2]):np.testing.assert_array_equal(a,b)
+  assert any(row['backend']=='cpu' and 'shape' in row['reason'] for row in coverage)
+
+
+def test_diffusion_cuda_failure_is_not_hidden(monkeypatch):
+  import models.bids_gpu as module
+  from utils.compute_backend import compute_session
+  n,nf=100,5
+  bids=pd.DataFrame(dict(i=np.arange(n),j=(np.arange(n)+1)%n,f=np.zeros(n,dtype=int),d=np.ones(n),utility=np.ones(n)))
+  def broken():raise RuntimeError('CUDA kernel failure')
+  monkeypatch.setattr(module,'_diffusion_kernel',broken)
+  with compute_session({'compute_device':'cuda'}),pytest.raises(RuntimeError,match='CUDA kernel failure'):
+    evaluate_assignments(bids,np.ones((n,nf)),make_data(n,nf),np.zeros((n,nf)),np.zeros((n,nf)),np.zeros(n),False)

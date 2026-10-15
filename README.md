@@ -1238,8 +1238,8 @@ main process; CPU workers keep their original code paths.
 | --- | --- | --- |
 | cpu | cpu | CPU defaults, including the corrected PLASMA time budget |
 | cuda | cpu | Existing DP GPU batches, with host cost preparation |
-| cpu | cuda | Eligible residual-capacity phases; knapsack remains CPU |
-| cuda | cuda | Eligible residual-capacity phases and device local curves feeding the existing DP |
+| cpu | cuda | Eligible shared numerical/node phases; knapsack remains CPU |
+| cuda | cuda | Eligible shared numerical/node phases and device local curves feeding the existing DP |
 
 The local curve chain requires at least 30 problems. Direct fixed-x/fixed-r
 adapters were checked for exact decisions but remain CPU in production: complete
@@ -1262,3 +1262,27 @@ Install the existing optional group locally with
 installations need no CUDA package. Measurements and the remaining roadmap
 coverage are recorded in the parent workspace under
 `docs/superpowers/reports/2026-10-15-shared-gpu-compute/`.
+
+Node operations additionally dispatch eligible dense pair scores, independent
+seller replica policies, diffusion vendor evaluation, memory request masks,
+buyer confirmations, and large overlapping hierarchy aggregations. Production
+gates require float64 numerical inputs and at most 64 MiB per operation;
+thresholds and exact coverage are recorded in the parent report's
+`phase-inventory.md`. These are partial GPU paths: ordered auction/GCAA commits,
+Power-of-d sampling, request/message reconstruction, custom callbacks, and
+small or unsupported domains retain CPU execution. Raw prototypes that lost
+complete-phase benchmarks are not selected in production.
+
+Comparison benchmarks on heterogeneous CPUs can pin the whole process and its
+workers to a homogeneous set, for example on the measured GB10 machine:
+
+```bash
+taskset -c 5-8 .venv/bin/python experiments/gpu_compute/benchmark.py \
+  --config <config.json> --methods MADEA faas-diffusion faas-dual \
+  --parallelism 4 --repeats 10 --output <new-directory>
+```
+
+Affinity is a benchmark setting, not an application pool policy.
+`compute_coverage.json` covers the new compute operators; legacy DP GPU usage
+is reported separately in the run log and merged by the benchmark harness.
+A zero compute coverage flag therefore does not imply zero legacy DP work.

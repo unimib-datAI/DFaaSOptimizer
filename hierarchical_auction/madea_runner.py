@@ -27,6 +27,7 @@ from run_faasmadea import (
   check_stopping_criteria,
   compute_residual_capacity,
   confirm_memory_bids,
+  confirm_memory_bid_batch,
   define_bids,
   evaluate_bids,
   start_additional_replicas,
@@ -215,10 +216,7 @@ def _solve_step(ctx, t: int, data: dict, *, auction_options: dict,
     memory_bids = memory_candidates
     if len(memory_candidates) > 0:
       with step_time.parallel_phase():
-        confirmed = []
-        for i, candidates in step_time.timed(memory_candidates.groupby("i"), key=lambda item: item[0]):
-          confirmed.append(confirm_memory_bids(candidates, omega[int(i)], tolerance=tolerance))
-        memory_bids = pd.concat(confirmed)
+        memory_bids = confirm_memory_bid_batch(memory_candidates, omega, tolerance=tolerance, confirm=confirm_memory_bids)
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
       s = step_time.now()
       additional_replicas, sp_rho = start_additional_replicas(

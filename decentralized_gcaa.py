@@ -30,6 +30,18 @@ def resolve_gcaa_round(
     residual_capacity: np.array,
     current_y: np.array = None,
   ) -> np.array:
+  from utils.compute_backend import record_operation
+  record_operation('resolve_gcaa_round','cpu',len(residual_capacity),shape=[len(bids),*residual_capacity.shape],
+                   reason='proposal CUDA adapter failed full-phase performance gate; shared sender/receiver roles require ordered consensus')
+  return _resolve_gcaa_host(bids,residual_capacity,current_y)
+
+
+def _resolve_gcaa_host(
+    bids: pd.DataFrame,
+    residual_capacity: np.array,
+    current_y: np.array = None,
+    best_per_agent=None,
+  ) -> np.array:
   """One GCAA consensus round (Braquet & Bakolas, 2021 - Algorithms 1+3):
   each buyer agent (i, f) proposes only its highest-utility task (j, f);
   for each contested task, the single highest-utility proposal wins and
@@ -44,7 +56,8 @@ def resolve_gcaa_round(
     current_y = y_round
   sending = current_y.sum(axis=1) > 1e-10
   receiving = current_y.sum(axis=0) > 1e-10
-  best_per_agent = bids.loc[bids.groupby(["i", "f"])["utility"].idxmax()]
+  if best_per_agent is None:
+    best_per_agent = bids.loc[bids.groupby(["i", "f"])["utility"].idxmax()]
   for (j, f), group in step_time.timed(best_per_agent.groupby(["j", "f"]), key=lambda item: int(item[0][0])):
     j, f = int(j), int(f)
     if sending[j, f]:

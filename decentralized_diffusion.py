@@ -9,6 +9,7 @@ from run_faasmadea import (
   check_stopping_criteria,
   compute_residual_capacity,
   confirm_memory_bids,
+  confirm_memory_bid_batch,
   start_additional_replicas,
 )
 from utils.centralized import (
@@ -148,6 +149,15 @@ def evaluate_assignments(
   provided, a higher-score request may replace a lower-score incumbent, matching
   the auction's reassignment role without using prices.
   """
+  from utils.compute_backend import cuda_compute_enabled,record_operation
+  if cuda_compute_enabled():
+    from models.bids_gpu import diffusion_evaluation_eligible,evaluate_assignments_cuda
+    eligible,reason,count=diffusion_evaluation_eligible(bids,residual_capacity,data,ell,r,initial_rho,tentatively_start_replicas,last_y)
+    if eligible:
+      step_time.mark_shared_device()
+      return evaluate_assignments_cuda(bids,residual_capacity,data,ell,r,initial_rho,tentatively_start_replicas,
+                                       last_y,diffusion_options,latency,fairness)
+    record_operation('evaluate_assignments','cpu',count,shape=[*residual_capacity.shape,len(bids)],reason=reason)
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
   if last_y is None:
@@ -354,10 +364,7 @@ def assignment_step(ctx, t: int, data: dict, *, options: dict, assign) -> run_fr
     memory_bids = memory_candidates
     if len(memory_candidates) > 0:
       with step_time.parallel_phase():
-        confirmed = []
-        for i, candidates in step_time.timed(memory_candidates.groupby("i"), key=lambda item: item[0]):
-          confirmed.append(confirm_memory_bids(candidates, omega[int(i)], tolerance=tolerance))
-        memory_bids = pd.concat(confirmed)
+        memory_bids = confirm_memory_bid_batch(memory_candidates, omega, tolerance=tolerance, confirm=confirm_memory_bids)
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
       additional_replicas, sp_rho = start_additional_replicas(
         memory_bids, sp_r, sp_data, sp_rho

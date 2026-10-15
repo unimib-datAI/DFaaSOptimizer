@@ -366,6 +366,9 @@ def evaluate_bids(
   """Seller-side evaluation. MADEA2 rules: ``replica_value_per_mb`` serves the
   pending bids by value per MB of a new replica when replicas start here;
   ``congestion_weight`` raises the price by the offered demand left unserved."""
+  from utils.compute_backend import record_operation
+  record_operation('evaluate_bids','cpu',data[None]['Nn'][None],shape=list(blackboard.shape),
+                   reason='ordered vendors update shared sender/receiver roles, including incumbent role release; per-vendor price writes stay at that boundary')
   Nn = data[None]["Nn"][None]
   Nf = data[None]["Nf"][None]
   last_y = np.zeros((Nn,Nn,Nf)) if previous_y is None else previous_y.copy()
@@ -543,6 +546,38 @@ def confirm_memory_bids(
   if "d" in confirmed.columns:
     confirmed["d"] = demand[demand > tolerance]
   return confirmed
+
+
+_BUILTIN_CONFIRM_MEMORY_BIDS = confirm_memory_bids
+
+
+def confirm_memory_bid_batch(candidates,omega,*,tolerance=1e-6,confirm=None):
+  """Confirm independent buyers in the caller's existing parallel phase."""
+  from utils.compute_backend import cuda_compute_enabled,record_operation
+  confirm=confirm_memory_bids if confirm is None else confirm
+  if candidates.empty:return candidates.copy()
+  if cuda_compute_enabled():
+    count=int(candidates['i'].nunique())
+    ids=candidates['i'].to_numpy();functions=candidates['f'].to_numpy()
+    native=all(isinstance(candidates[key].dtype,np.dtype) for key in ('i','f'))
+    bounds=(native and ids.dtype.kind in 'iu' and functions.dtype.kind in 'iu'
+            and ids.min()>=0 and ids.max()<len(omega) and functions.min()>=0 and functions.max()<omega.shape[1])
+    eligible=(confirm is _BUILTIN_CONFIRM_MEMORY_BIDS and count>=30 and len(candidates)>=1000
+              and omega.dtype==np.float64 and bounds and omega.nbytes+25*len(candidates)<=64*1024*1024)
+    if eligible:
+      step_time.mark_shared_device()
+      from models.numeric_gpu import confirm_memory_rows_cuda
+      mask,demand=confirm_memory_rows_cuda(ids,functions,omega,tolerance)
+      order=np.argsort(ids,kind='stable');kept=order[mask[order]]
+      result=candidates.iloc[kept].copy()
+      if 'd' in result.columns:result['d']=demand[kept]
+      return result
+    reason='custom callback requires ordered host execution' if confirm is not _BUILTIN_CONFIRM_MEMORY_BIDS else 'performance/index/buffer gate: >=30 buyers, >=1000 rows, native integer indices, float64 omega, <=64 MiB'
+    record_operation('memory_confirmation','cpu',count,shape=[len(candidates),*omega.shape],reason=reason)
+  confirmed=[]
+  for i,group in step_time.timed(candidates.groupby('i'),key=lambda item:item[0]):
+    confirmed.append(confirm(group,omega[int(i)],tolerance=tolerance))
+  return pd.concat(confirmed)
 
 
 @step_time.parallel
@@ -816,10 +851,7 @@ def run_madea_cycle(
     memory_bids = memory_candidates
     if len(memory_candidates) > 0:
       with step_time.parallel_phase():
-        confirmed = []
-        for i, candidates in step_time.timed(memory_candidates.groupby("i"), key=lambda item: item[0]):
-          confirmed.append(confirm_memory_bids(candidates, omega[int(i)], tolerance=tolerance))
-        memory_bids = pd.concat(confirmed)
+        memory_bids = confirm_memory_bid_batch(memory_candidates, omega, tolerance=tolerance, confirm=confirm_memory_bids)
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
       # tentatively start additional replicas
       s = step_time.now()
