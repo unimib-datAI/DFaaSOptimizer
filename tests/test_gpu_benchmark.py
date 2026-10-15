@@ -56,3 +56,28 @@ def test_binding_budget_reports_its_actual_gpu_share(monkeypatch, tmp_path):
   for row in rows:
     if row['scope'] == 'binding_budget':
       assert row['gpu_fraction'] == (1. if row['backend'] == 'cuda' else 0.)
+
+
+def test_pool_warmup_includes_constructor_and_initial_tasks(monkeypatch):
+  from types import SimpleNamespace
+  from test_gpu_local_sp import data
+  now = [0.]
+  monkeypatch.setattr(benchmark, 'perf_counter', lambda: now[0])
+  class Pool:
+    def __init__(self, *args):
+      now[0] += .4  # process construction
+    def __enter__(self):
+      now[0] += .1
+      return self
+    def map(self, fn, agents):
+      now[0] += .2  # worker initialization and first tasks
+    def __exit__(self, *args):
+      now[0] += .8  # pool shutdown is outside startup/warmup
+  monkeypatch.setattr(benchmark.mp, 'get_context', lambda _: SimpleNamespace(Pool=Pool))
+  # Later timed CPU/GPU samples are outside the startup/warmup interval under test.
+  def measured_samples(*args, **kwargs):
+    now[0] += 2.
+  monkeypatch.setattr(benchmark, 'measure', measured_samples)
+  args = SimpleNamespace(nodes=[1], workers=1, repeats=1, threads=[128])
+  warmups = benchmark.benchmark_batches(data(), args, [])
+  assert warmups[0]['pool_startup_warmup_s'] == pytest.approx(.7)

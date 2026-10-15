@@ -158,8 +158,8 @@ def benchmark_batches(base, args, rows):
     common = dict(nodes=nodes, repeats=args.repeats,
                   synthetic=nodes > base[None]['Nn'][None])
     # Spawn prevents inheriting a CUDA context when a later size creates its CPU pool.
+    start = perf_counter()
     with mp.get_context('spawn').Pool(min(nodes, args.workers), init_worker, (data, items)) as pool:
-      start = perf_counter()
       pool.map(worker_local, agents)
       warmups.append(dict(problems=nodes, pool_startup_warmup_s=perf_counter()-start))
       measure(rows, lambda _: [minimize_replica_costs(*i) for i in items], expected,
