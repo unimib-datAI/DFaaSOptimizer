@@ -43,6 +43,8 @@ ray-dispatcher = { git = "https://github.com/miciav/ray-dispatcher.git", tag = "
 RL4CC = { git = "https://github.com/FFede0/RL4CC.git", rev = "6256ac010eaada08ce6072315dd34c5ed5211938" }
 
 [dependency-groups]
+# Optional local DP kernels; CPU installations do not need CUDA.
+gpu = ["numba-cuda==0.30.4", "numba==0.68.0"]
 # reinforcement learning (train_rl_agent.py, rlagents/): ~3 GB with CUDA, not needed by the optimizers
 rl = [
   "ray[rllib]==2.40.0",
