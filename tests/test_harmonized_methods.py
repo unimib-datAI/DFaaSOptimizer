@@ -160,3 +160,26 @@ def test_runtime_contract_of_excluded_and_centralized_runners(name, tmp_path):
     assert (frame.parallel_phases == 0).all() and (frame.workers == 1).all()
   else:                       # sequential sweeps may add no phase; a pool is not required
     assert (frame.parallel_phases >= 0).all() and frame.workers.isin([0, 2]).all()
+
+
+@pytest.mark.parametrize('name', ['MADEA', 'faas-macro'])
+def test_gpu_batch_consumes_budget_at_existing_stop(monkeypatch, tmp_path, name):
+  import numpy as np
+  from models import dp_gpu
+  from plasma.core.sbm import minimize_replica_costs
+  from test_step_time import FakeClock
+  now = FakeClock()
+  monkeypatch.setattr(step_time, 'perf_counter', now)
+  calls = []
+  def batch(cs, ms, bs):
+    calls.append(len(cs))
+    now.t += .04
+    return [minimize_replica_costs(c, m, b) for c, m, b in zip(cs, ms, bs)]
+  monkeypatch.setattr(dp_gpu, 'minimize_replica_costs_batch', batch)
+  folder = run_folder(name, INSTANCES[0], 0, tmp_path,
+                      dp_device='cuda', use_dp=True, algorithm_time_limit=.03, TimeLimit=1e9)
+  assert calls
+  assert 'time limit' in (folder / 'termination_condition.csv').read_text().lower()
+  frame = pd.read_csv(folder / 'runtime.csv')
+  assert (frame.algorithm_s >= .04).all()
+  assert (frame.workers == 0).all()

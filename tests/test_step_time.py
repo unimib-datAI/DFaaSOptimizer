@@ -316,3 +316,12 @@ def test_run_timestamp_keeps_the_folder_format(monkeypatch):
 
   monkeypatch.setattr(common, "datetime", Fixed)
   assert common.run_timestamp() == "2026-01-02_03-04-05.000006"
+
+
+def test_shared_gpu_wall_is_counted_once_for_500_results(now):
+  clock = step_time.start_step()
+  with step_time.parallel_phase() as phase:
+    results = [{'runtime': .04, 'runtime_kind': 'batch_latency'} for _ in range(500)]
+    now.t = .04
+    assert not phase.tasks and phase.nodes == 0
+  assert step_time.end_step(clock)['algorithm_s'] == pytest.approx(.04)

@@ -146,3 +146,100 @@ def test_gpu_infeasible_keeps_configured_solver_policy(fake_gpu):
   with pytest.raises(RuntimeError, match='unavailable'):
     local_sp.solve_agent_batch(d, [0, 1, 2], LSPr(), OPTIONS, 'missing_solver')
   assert fake_gpu == [3]
+
+
+@pytest.mark.parametrize('count', [3, 500])
+def test_batch_latency_counts_preparation_chunks_decode_once(monkeypatch, count):
+  from models import dp_solver
+  from utils import step_time
+  import run_faasmacro as macro
+  from test_step_time import FakeClock
+  now = FakeClock()
+  monkeypatch.setattr(step_time, 'perf_counter', now)
+  d = data()
+  v = d[None]
+  v['Nn'] = {None: count}
+  for key in ('incoming_load', 'demand', 'alpha', 'delta', 'gamma'):
+    v[key] = {(n, f): val for (node, f), val in v[key].items() if node == 1 for n in range(1, count+1)}
+  v['memory_capacity'] = {n: 4 for n in range(1, count+1)}
+  original_prepare, original_finish = dp_solver.prepare_local_problem, dp_solver.finish_local_solution
+  def prepare(*args):
+    now.t += .01 / count
+    return original_prepare(*args)
+  def finish(*args, **kwargs):
+    result = original_finish(*args, **kwargs)
+    now.t += .01 / count
+    return result
+  calls = []
+  def batch(cs, ms, bs):
+    # Initial context/JIT costs count in the first call; two synchronized chunks.
+    now.t += .1 if not calls else 0
+    calls.append(1)
+    now.t += .01
+    result = [minimize_replica_costs(c, m, b) for c, m, b in zip(cs, ms, bs)]
+    now.t += .01
+    return result
+  monkeypatch.setattr(dp_solver, 'prepare_local_problem', prepare)
+  monkeypatch.setattr(dp_solver, 'finish_local_solution', finish)
+  monkeypatch.setattr(dp_gpu, 'minimize_replica_costs_batch', batch)
+  for expected in (.14, .04):
+    clock = step_time.start_step()
+    result = macro.solve_subproblem(d, range(count), LSP(), 'missing_solver', OPTIONS, -1)
+    row = step_time.end_step(clock)
+    assert row['algorithm_s'] == pytest.approx(expected)
+    assert row['workers'] == 0
+    assert result[-1]['tot'] == pytest.approx(expected)
+  result = local_sp.solve_agent_batch(d, range(count), LSP(), OPTIONS, 'missing_solver')
+  assert all(r['runtime_kind'] == 'batch_latency' and r['runtime'] == pytest.approx(.04) for r in result.values())
+
+
+@real_gpu
+@pytest.mark.parametrize('name', ['LSP', 'LSP_detailed', 'LSP_v0', 'LSP_fixedr',
+  'LSP_fixedr_v0', 'LSP_capped', 'LSP_capped_fixedr', 'LSP_pg', 'LSP_pg_fixedr',
+  'LSPr', 'LSPr_v0', 'LSPr_x', 'LSPr_fixedr'])
+def test_real_gpu_all_local_models_and_pyomo_constraints(name):
+  import pyomo.environ as pyo
+  from models import sp
+  d = data()
+  v = d[None]
+  v.update(neighborhood={(n,m): int(n != m) for n in (1,2,3) for m in (1,2,3)},
+           beta={(n,m,f): float(m+f) for n in (1,2,3) for m in (1,2,3) for f in (1,2)},
+           y_bar={(m,n,f): 0. for n in (1,2,3) for m in (1,2,3) for f in (1,2)},
+           omega_bar={(n,f): 0. for n in (1,2,3) for f in (1,2)},
+           x_bar={(n,f): 1 for n in (1,2,3) for f in (1,2)},
+           r_bar={(n,f): 1 for n in (1,2,3) for f in (1,2)})
+  model = getattr(sp, name)()
+  actual = local_sp.solve_agent_batch(d, [2, 0], model, OPTIONS, 'missing_solver')
+  for agent in (2, 0):
+    single = deepcopy(d)
+    single[None]['whoami'] = {None: agent + 1}
+    expected = local_sp.solve_agent_problem(model, single, {'use_dp': True}, 'missing_solver')
+    assert {k: val for k, val in actual[agent].items() if not k.startswith('runtime')} == {k: val for k, val in expected.items() if k != 'runtime'}
+    instance = model.generate_instance(single)
+    for key in ('x', 'y', 'r', 'z', 'omega'):
+      if key in actual[agent]:
+        for index, val in zip(getattr(instance, key), actual[agent][key]):
+          assert val in getattr(instance, key)[index].domain
+          getattr(instance, key)[index].set_value(val)
+    for constraint in instance.component_data_objects(pyo.Constraint, active=True):
+      value = pyo.value(constraint.body)
+      assert constraint.lower is None or value >= pyo.value(constraint.lower) - 1e-9
+      assert constraint.upper is None or value <= pyo.value(constraint.upper) + 1e-9
+    assert pyo.value(instance.OBJ) == pytest.approx(actual[agent]['obj'], abs=1e-9)
+
+
+def test_logging_is_excluded_from_batch_latency(monkeypatch, fake_gpu):
+  from utils import step_time
+  from test_step_time import FakeClock
+  now = FakeClock()
+  monkeypatch.setattr(step_time, 'perf_counter', now)
+  def slow_log(*args):
+    now.t += .25
+  monkeypatch.setattr(local_sp.log, 'info', slow_log)
+  clock = step_time.start_step()
+  with step_time.parallel_phase():
+    results = local_sp.solve_agent_batch(data(), [0, 2], LSP(), OPTIONS, 'missing_solver')
+  row = step_time.end_step(clock)
+  assert row['algorithm_s'] == 0
+  assert row['wall_s'] == .25
+  assert all(r['runtime'] == 0 for r in results.values())

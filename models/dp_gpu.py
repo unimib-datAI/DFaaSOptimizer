@@ -85,11 +85,14 @@ def _get_kernel():
     if tid == 0:
       value = float('inf')
       budget = 0
+      has_finite = False
       for b in range(nb):
+        if best[n, b] > -float('inf') and best[n, b] < float('inf'):
+          has_finite = True
         if best[n, b] < value:
           value = best[n, b]
           budget = b
-      valid[n] = value < float('inf')
+      valid[n] = has_finite
       if valid[n]:
         for f in range(nfs[n] - 1, -1, -1):
           k = choices[n, f, budget]

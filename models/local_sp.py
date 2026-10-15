@@ -1,5 +1,9 @@
 """Select the opt-in local DP backend, with the configured Pyomo solver as fallback."""
 from models.dp_solver import try_solve_local
+from utils import step_time, run_log
+from collections import Counter
+
+log = run_log.logger(__name__)
 
 
 def dp_enabled(solver_options):
@@ -31,13 +35,14 @@ def solve_agent_problem(model, data, solver_options, solver_name):
 
 def solve_agent_batch(data, agents, model, solver_options, solver_name, prices=None):
   """Solve an explicitly requested CUDA group in input order, in this process."""
+  started = step_time.now()
   if dp_device(solver_options) != 'cuda':
     raise ValueError('solve_agent_batch requires dp_device=cuda')
   from models.dp_solver import prepare_local_problem, finish_local_solution
   from models.dp_gpu import gpu_problem_fits, minimize_replica_costs_batch
-  from plasma.core.sbm import minimize_replica_costs
   prepared, local_data, eligible, results = {}, {}, [], {}
   agents = list(agents)
+  reasons = Counter()
   for agent in agents:
     local = data.copy()
     local[None] = data[None].copy()
@@ -50,7 +55,13 @@ def solve_agent_batch(data, agents, model, solver_options, solver_name, prices=N
     if (problem is not None and not problem.direct
         and gpu_problem_fits(problem.costs, problem.memory, problem.ram_cap)):
       eligible.append(agent)
-  if len(eligible) >= 2:
+    else:
+      reasons['unsupported_or_direct_infeasible' if problem is None else
+              'direct' if problem.direct else 'device_buffer_or_index_limit'] += 1
+  gpu_count = len(eligible) if len(eligible) >= 2 else 0
+  if not gpu_count:
+    reasons['batch_cardinality'] += len(eligible)
+  if gpu_count:
     problems = [prepared[a] for a in eligible]
     choices = minimize_replica_costs_batch([p.costs for p in problems],
                                          [p.memory for p in problems],
@@ -58,7 +69,15 @@ def solve_agent_batch(data, agents, model, solver_options, solver_name, prices=N
     for agent, choice in zip(eligible, choices):
       if choice is not None:
         results[agent] = finish_local_solution(prepared[agent], choice, runtime=0.)
+      else:
+        reasons['gpu_infeasible'] += 1
   for agent in agents:
     if agent not in results:
       results[agent] = solve_agent_problem(model, local_data[agent], solver_options, solver_name)
+  latency = step_time.now() - started
+  for result in results.values():
+    result.update(runtime=latency, runtime_kind='batch_latency')
+  with step_time.untimed():
+    log.info('dp_device=cuda timing_basis=gpu_batch_wall gpu_problems=%d cpu_problems=%d cpu_reasons=%s',
+             gpu_count, sum(reasons.values()), dict(reasons))
   return {a: results[a] for a in agents}

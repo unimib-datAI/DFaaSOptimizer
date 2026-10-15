@@ -27,7 +27,8 @@ def test_real_gpu_matches_cpu_across_heterogeneous_calls():
   rng = np.random.default_rng(47)
   cases = [([[0, 0], [0, 0]], [2, 4], 8), ([[np.inf]], [1], 0),
            ([[0, -1], [0, -2]], [4, 6], 9), ([[0, -1]], [1], 257),
-           ([[3, 2]], [3], 0)]
+           ([[3, 2]], [3], 0), ([[float("-inf")]], [1], 0),
+           ([[0., float("-inf")]], [1], 1)]
   for _ in range(80):
     nf = int(rng.integers(1, 7))
     curves = [rng.integers(-5, 6, size=int(rng.integers(1, 9))).astype(float) for _ in range(nf)]
