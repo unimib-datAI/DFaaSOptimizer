@@ -14,7 +14,7 @@ from utils.faasmacro import (
 from utils.common import load_configuration
 from postprocessing import plot_history
 
-from models.local_sp import solve_agent_problem
+from models.local_sp import solve_agent_problem, solve_agent_batch, dp_device
 from models.rmp import RMPAbstractModel, LRMP
 from models.sp import (
   SPAbstractModel, 
@@ -323,7 +323,9 @@ def compute_social_welfare(
   # solve for all agents
   agents_sol = {}
   with step_time.parallel_phase():
-    if parallelism != 0:
+    if dp_device(solver_options) == 'cuda':
+      agents_sol = solve_agent_batch(spr_data, agents, spr, solver_options, solver_name)
+    elif parallelism != 0:
       agents_sol = _solve_agents_parallel(
         spr_data, agents, spr, solver_name, solver_options, parallelism,
       )
@@ -608,7 +610,11 @@ def solve_subproblem(
   # solve for all agents
   agents_sol = {}
   with step_time.parallel_phase():
-    if parallelism != 0:
+    if dp_device(solver_options) == 'cuda':
+      agents_sol = solve_agent_batch(
+        sp_data, agents, sp, solver_options, solver_name, detailed_pi,
+      )
+    elif parallelism != 0:
       agents_sol = _solve_agents_parallel(
         sp_data, agents, sp, solver_name, solver_options, parallelism, detailed_pi,
       )
