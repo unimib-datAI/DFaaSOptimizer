@@ -199,7 +199,7 @@ def test_sweep_counts_buyer_that_cannot_place_as_active():
   assert placed == 0.0
 
 
-def test_sweep_force_memory_bids_includes_capacity_seller():
+def test_sweep_force_memory_candidates_withdrawn_when_capacity_serves_buyer():
   data = _base_data(Nn=2, Nf=1)
   omega = np.zeros((2, 1)); omega[0, 0] = 1.0
   residual = np.zeros((2, 1)); residual[1, 0] = 1.0
@@ -211,4 +211,4 @@ def test_sweep_force_memory_bids_includes_capacity_seller():
     force_memory_bids=True, order="fixed", response="greedy",
   )
 
-  assert list(memory_bids[["i", "j", "f"]].iloc[0]) == [0, 1, 0]
+  assert memory_bids.empty

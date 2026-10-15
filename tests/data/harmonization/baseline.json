@@ -1,222 +1,222 @@
 {
- "MADEA": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342335,
-   586.1829985821607
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   827.398780014845,
-   836.9368894318152
-  ]
- },
- "MADEA-one-shot": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342336,
-   586.1829985821608
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   832.6127434032776,
-   843.4394953890435
-  ]
- },
- "MADEA2": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342335,
-   586.1829985821608
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   824.1597107174914,
-   845.6940136079006
-  ]
- },
- "MADEA2-b": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342335,
-   586.1829985821608
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   824.1597107174914,
-   845.4924675145626
-  ]
- },
- "MADEA2-one-shot": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342336,
-   586.1829985821608
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   836.3789128726177,
-   848.1821224939858
-  ]
- },
- "MADEA2-b-one-shot": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342336,
-   586.1829985821608
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   836.3789128726177,
-   845.933309205097
-  ]
- },
- "FaaS-MAFW": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   592.4331951536329,
-   585.0207333733586
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   832.2926341539957,
-   848.3628301550963
-  ]
- },
- "FaaS-MAFW-b": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   592.4647778489674,
-   585.2605614015365
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   824.3390122160739,
-   837.1217152149846
-  ]
- },
- "hierarchical-MAFW": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   592.789538570719,
-   585.4004263766649
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   832.2926341539957,
-   848.5019395955724
-  ]
- },
- "hierarchical-madea": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342335,
-   586.1829985821607
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   827.4563890010605,
-   837.1168594154007
-  ]
- },
- "hierarchical-madea-cycles": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342335,
-   586.1829985821607
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   827.4563890010605,
-   837.1168594154007
-  ]
- },
- "hierarchical-madea-legacy": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342336,
-   586.1829985821608
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   830.5327388410838,
-   845.9116827313812
-  ]
- },
- "hierarchical-one-shot": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342336,
-   586.1829985821608
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   828.4118107843135,
-   841.1328103702879
-  ]
- },
- "hierarchical": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   593.3497594342336,
-   586.1829985821608
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   828.4118107843135,
-   841.1328103702879
-  ]
- },
- "PLASMA": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   519.032987301453,
-   529.9965836976006
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   722.3573632840582,
-   695.6758778584517
-  ]
- },
- "PLASMA-Welfare": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   586.8596852336466,
-   579.5004147140698
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   868.4649006183445,
-   867.9085648630935
-  ]
- },
- "faas-macro": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   588.9818053075992,
-   582.7947289506402
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   808.209495410519,
-   819.8310638672436
-  ]
- },
- "faas-macro-v0": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   588.9770516844109,
-   582.6673143479414
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   808.206857836018,
-   819.8310638672436
-  ]
- },
- "faas-diffuse": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   587.7699284784364,
-   581.0387127074367
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   821.0253258759885,
-   829.7090645018608
-  ]
- },
- "faas-powd": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   592.2333098736831,
-   583.6391945398162
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   826.8663510533594,
-   836.1316971131471
-  ]
- },
- "faas-gcaa": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   554.7928907087804,
-   551.1280162270499
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   758.172673920122,
-   768.8106239497694
-  ]
- },
- "faas-dual": {
-  "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
-   591.8422820788617,
-   584.4152353023034
-  ],
-  "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
-   830.9943724308587,
-   840.4896224955091
-  ]
- }
+  "MADEA": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342335,
+      586.1829985821607
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      826.7867804186654,
+      835.465928411697
+    ]
+  },
+  "MADEA-one-shot": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342336,
+      586.1829985821608
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      833.0431134032776,
+      843.4000842168825
+    ]
+  },
+  "MADEA2": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342335,
+      586.1829985821608
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      830.4212930906401,
+      843.1138895790148
+    ]
+  },
+  "MADEA2-b": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342335,
+      586.1829985821608
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      829.9415176796126,
+      848.0500678265569
+    ]
+  },
+  "MADEA2-one-shot": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342336,
+      586.1829985821608
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      836.3789128726177,
+      848.2538103606526
+    ]
+  },
+  "MADEA2-b-one-shot": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342336,
+      586.1829985821608
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      833.9754621667697,
+      844.8837289384304
+    ]
+  },
+  "FaaS-MAFW": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      592.4331951536329,
+      585.0207333733586
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      832.2926341539957,
+      848.3628301550963
+    ]
+  },
+  "FaaS-MAFW-b": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      592.4647778489674,
+      585.2605614015365
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      824.3390122160739,
+      837.1217152149846
+    ]
+  },
+  "hierarchical-MAFW": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      592.789538570719,
+      585.4004263766649
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      832.2926341539957,
+      848.5019395955724
+    ]
+  },
+  "hierarchical-madea": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342335,
+      586.1829985821607
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      826.7867804186654,
+      839.6587210344852
+    ]
+  },
+  "hierarchical-madea-cycles": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342335,
+      586.1829985821607
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      826.7867804186654,
+      839.6587210344852
+    ]
+  },
+  "hierarchical-madea-legacy": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342336,
+      586.1829985821608
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      828.399378858089,
+      845.7454017828871
+    ]
+  },
+  "hierarchical-one-shot": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342336,
+      586.1829985821608
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      827.6467085620914,
+      839.0251008831085
+    ]
+  },
+  "hierarchical": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      593.3497594342336,
+      586.1829985821608
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      827.6467085620914,
+      839.0251008831085
+    ]
+  },
+  "PLASMA": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      519.032987301453,
+      529.9965836976006
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      722.3573632840582,
+      695.6758778584517
+    ]
+  },
+  "PLASMA-Welfare": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      586.8596852336466,
+      579.5004147140698
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      868.4649006183445,
+      867.9085648630935
+    ]
+  },
+  "faas-macro": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      588.9818053075992,
+      582.7947289506402
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      808.209495410519,
+      819.8310638672436
+    ]
+  },
+  "faas-macro-v0": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      588.9770516844109,
+      582.6673143479414
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      808.206857836018,
+      819.8310638672436
+    ]
+  },
+  "faas-diffuse": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      587.7699284784364,
+      581.0387127074367
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      820.1350333136511,
+      829.2861445397435
+    ]
+  },
+  "faas-powd": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      592.258922353022,
+      583.6391945398162
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      825.976058491022,
+      833.8074883607599
+    ]
+  },
+  "faas-gcaa": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      554.7928907087804,
+      551.1280162270499
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      758.172673920122,
+      768.8106239497694
+    ]
+  },
+  "faas-dual": {
+    "cilic-europe30-v1-delaunay__huawei-d1-f5-n30-t144x10m-ln1.6-0.5-s1-s1": [
+      591.8422820788617,
+      584.4152353023034
+    ],
+    "ether-urban-n40-s1-knn__huawei-d1-f5-n40-t144x10m-ln1.6-0.5-s1-s1": [
+      830.9943724308587,
+      840.4896224955091
+    ]
+  }
 }

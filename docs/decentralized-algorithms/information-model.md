@@ -28,6 +28,16 @@ un'informazione (β dei compratori) che in MADEA non hanno.
 La scelta del vicino in MAFW è sempre privata: il mittente confronta il proprio
 β con il prezzo del ricevente.
 
+Con richieste intere, gli allocatori condivisi di MADEA e MADEA2 avviano gruppi
+di repliche che aumentano la capacità intera servibile, considerando anche le
+repliche già presenti. Partendo da zero, una replica da 0,889 richieste non viene
+avviata da sola: ne occorrono due, se la memoria disponibile lo consente. MADEA redistribuisce
+le quote inutilizzabili tra le funzioni con gruppi utili che entrano in memoria;
+MADEA2 confronta il valore delle richieste servibili con il costo in memoria
+dell'intero gruppo. La decisione usa soltanto i dati già disponibili al venditore
+e si applica anche ai runner che riusano questi allocatori. Con richieste continue,
+la capacità frazionaria resta utilizzabile.
+
 ## Perché si è arrivati qui
 
 1. Su istanze alpha-gt-beta MAFW batteva i metodi d'asta, e l'analisi delle
@@ -53,3 +63,34 @@ La scelta del vicino in MAFW è sempre privata: il mittente confronta il proprio
 - Test: `tests/test_information_model.py` (in modalità `bid` le offerte di
   memoria non contengono β; con `price` la riparazione non cambia se il
   mittente alza il proprio β).
+
+## Conferma locale delle richieste di memoria (15/10/2026)
+
+Nel ciclo MADEA (incluse MADEA2/-b e i wrapper), in Diffuse/PowD e nel
+ciclo autonomo hierarchical-madea-legacy, le richieste formulate prima
+dell'asta sono candidate locali. Dopo l'esito dell'asta e l'aggiornamento
+della domanda, ciascun compratore conferma solo quelle per funzioni con
+residuo maggiore della tolleranza del runner. Solo allora il venditore
+riceve i messaggi confermati. La conferma riceve esclusivamente la riga
+locale di domanda: il venditore non accede alla matrice globale `omega`.
+MADEA conserva `(i,j,f)`; MADEA2/-b conserva `(i,j,f,d,v)`, aggiornando `d`
+al residuo corrente (anche da zero a positivo dopo un rifiuto), e conserva
+`v`, destinatari, ordine e molteplicità. Non si ripete l'asta dopo il ritiro.
+La decisione di avviare repliche durante l'asta resta basata sulle candidate
+originarie; una creazione diretta impedisce la seconda allocazione.
+
+La conferma aggiunge una fase causale e computazionale parallela per compratore
+solo quando esistono candidate, senza un nuovo costo di rete nel modello.
+Best Response conferma dopo la decisione di ogni nodo con il target locale
+aggiornato da reopt, mantenendo sequenziale il costo dello sweep.
+One-shot e gerarchico classico mantengono l'allocazione nel solo ramo senza
+offerte di capacità; Dual costruisce le richieste dalla domanda non assegnata
+nel coordinamento. Non viene aggiunta loro una fase ridondante.
+
+FaaS-MAPG ha un contratto diverso: la scarsità della proposta locale e del Cloud
+può generare richieste anche quando la proposta è rifiutata e la soluzione
+corrente serve già il nodo. Queste richieste esplorano una diversa decisione
+locale, quindi non vengono filtrate con il residuo MADEA. I wrapper PG che
+eseguono un ciclo MADEA ereditano invece la conferma di quel ciclo.
+Richieste vive verso più venditori possono ancora creare capacità invenduta;
+la conferma non prova convergenza universale e non cambia stop o budget.

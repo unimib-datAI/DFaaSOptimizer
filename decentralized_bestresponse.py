@@ -7,6 +7,7 @@ from run_faasmadea import (
   check_ls_pr_feasibility_from_fixed_y,
   check_stopping_criteria,
   compute_residual_capacity,
+  confirm_memory_bids,
   start_additional_replicas,
 )
 from utils import run_frame, step_time
@@ -69,7 +70,7 @@ def best_response_sweep(
   # (matches decentralized_potentialgame's inductive argument).
   live_y = np.array(current_y, dtype=float)
   y_increment = np.zeros((Nn, Nn, Nf))
-  memory_bids = {"i": [], "j": [], "f": []}
+  confirmed_memory = []
   reopt_runtime = 0.0
   placed_total = 0.0
   active = set()
@@ -84,6 +85,7 @@ def best_response_sweep(
   if response not in {"greedy", "reopt"}:
     raise ValueError("response must be one of: greedy, reopt")
   for i in node_order:
+    memory_bids = {"i": [], "j": [], "f": []}
     neighbours = set(int(j) for j in np.nonzero(neighborhood[i, :])[0])
     previous_row = current_y[i, :, :]
     if not np.any(omega[i, :] > 0) and not np.any(previous_row > 0):
@@ -151,8 +153,13 @@ def best_response_sweep(
           memory_bids["f"].append(f)
     y_increment[i, :, :] = new_row - previous_row
     live_y[i, :, :] = new_row
+    confirmed_memory.append(confirm_memory_bids(
+      pd.DataFrame(memory_bids, dtype=int), np.maximum(0., omega[i] - new_row.sum(axis=0)),
+      tolerance=tolerance,
+    ))
   return (
-    y_increment, pd.DataFrame(memory_bids), len(active),
+    y_increment, (pd.concat(confirmed_memory) if confirmed_memory else
+                  pd.DataFrame(columns=["i", "j", "f"])), len(active),
     placed_total, reopt_runtime,
   )
 

@@ -123,10 +123,10 @@ def start_replicas_by_value(
   """Greedy replica start by requested value per MB (seller-local).
 
   For each seller j, every memory bid (i, f) asks for ``d`` req/s worth
-  ``v`` per req/s (advantage over the Cloud).  A new replica of f serves
-  ``U_f / D_jf`` req/s and costs ``ram_f`` MB: the seller repeatedly starts
-  the replica whose served requests (taken from the highest-value bids
-  still uncovered) bring the largest value per MB, until the free memory or
+  ``v`` per req/s (advantage over the Cloud).  The seller repeatedly starts
+  the smallest productive replica batch whose served requests (taken from
+  the highest-value bids still uncovered) bring the largest value per MB,
+  pricing the whole batch and its usable capacity, until the free memory or
   the requested demand runs out.  Bids from different buyers are not
   coordinated, so the same uncovered demand may be requested from several
   sellers; LSPr releases replicas that stay idle.
@@ -151,9 +151,11 @@ def start_replicas_by_value(
       best = None
       for f, requests in queues.items():
         ram_f = data[None]["memory_requirement"][f+1]
-        if ram_f > free:
-          continue
         capacity = data[None]["max_utilization"][f+1] / data[None]["demand"][(j+1,f+1)]
+        count, capacity = _madea.next_replica_batch(r[j,f] + additional_replicas[j,f], capacity)
+        memory = count * ram_f
+        if memory > free:
+          continue
         value, left = 0.0, capacity
         for v, d in requests:
           take = min(d, left)
@@ -161,14 +163,14 @@ def start_replicas_by_value(
           left -= take
           if left <= 0:
             break
-        if value > 0 and (best is None or value / ram_f > best[0]):
-          best = (value / ram_f, f, capacity, ram_f)
+        if value > 0 and (best is None or value / memory > best[0]):
+          best = (value / memory, f, capacity, count, memory)
       if best is None:
         break
-      _, f, capacity, ram_f = best
-      additional_replicas[j, f] += 1
-      free -= ram_f
-      residual_memory[j] -= ram_f
+      _, f, capacity, count, memory = best
+      additional_replicas[j, f] += count
+      free -= memory
+      residual_memory[j] -= memory
       left = capacity
       requests = queues[f]
       while requests and left > 0:

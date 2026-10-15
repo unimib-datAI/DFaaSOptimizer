@@ -26,6 +26,7 @@ from run_faasmadea import (
   check_ls_pr_feasibility_from_fixed_y,
   check_stopping_criteria,
   compute_residual_capacity,
+  confirm_memory_bids,
   define_bids,
   evaluate_bids,
   start_additional_replicas,
@@ -163,7 +164,7 @@ def _solve_step(ctx, t: int, data: dict, *, auction_options: dict,
           total_capacity.tolist(), blackboard.tolist(), ell.tolist(), stalled, e - s,
         )
     s = step_time.now()
-    bids, memory_bids, n_auctions = define_bids(
+    bids, memory_candidates, n_auctions = define_bids(
       omega, blackboard, p, sp_data, ctx.neighborhood, sp_rho,
       first_level_options, latency, fairness,
       force_memory_bids=(sp_rho > 0).any() and stalled,
@@ -180,7 +181,7 @@ def _solve_step(ctx, t: int, data: dict, *, auction_options: dict,
       auction_y, p, additional_replicas, n_auctions = evaluate_bids(
         bids, blackboard, sp_data, y, ell, p, total_capacity, u0,
         first_level_options, sp_rho, sp_r,
-        tentatively_start_replicas=(len(memory_bids) == 0),
+        tentatively_start_replicas=(len(memory_candidates) == 0),
         residual_capacity = residual_capacity
       )
       rt = step_time.now() - s
@@ -211,6 +212,13 @@ def _solve_step(ctx, t: int, data: dict, *, auction_options: dict,
             y.tolist(),
           )
 
+    memory_bids = memory_candidates
+    if len(memory_candidates) > 0:
+      with step_time.parallel_phase():
+        confirmed = []
+        for i, candidates in step_time.timed(memory_candidates.groupby("i"), key=lambda item: item[0]):
+          confirmed.append(confirm_memory_bids(candidates, omega[int(i)], tolerance=tolerance))
+        memory_bids = pd.concat(confirmed)
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
       s = step_time.now()
       additional_replicas, sp_rho = start_additional_replicas(

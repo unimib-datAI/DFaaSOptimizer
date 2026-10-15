@@ -8,6 +8,7 @@ from run_faasmadea import (
   check_ls_pr_feasibility_from_fixed_y,
   check_stopping_criteria,
   compute_residual_capacity,
+  confirm_memory_bids,
   start_additional_replicas,
 )
 from utils.centralized import (
@@ -310,7 +311,7 @@ def assignment_step(ctx, t: int, data: dict, *, options: dict, assign) -> run_fr
     )
     blackboard = np.maximum(0.0, capacity - sp_x)
     coordination_rho = np.zeros_like(sp_rho) if fixed else sp_rho
-    bids, memory_bids, n_auctions = assign(
+    bids, memory_candidates, n_auctions = assign(
       omega, blackboard, sp_data, ctx.neighborhood, coordination_rho,
       options, ctx.latency, fairness,
       force_memory_bids=(
@@ -325,7 +326,7 @@ def assignment_step(ctx, t: int, data: dict, *, options: dict, assign) -> run_fr
     if len(bids) > 0:
       diffusion_y, additional_replicas, n_sellers = evaluate_assignments(
         bids, residual_capacity, sp_data, ell, sp_r, coordination_rho,
-        tentatively_start_replicas=(len(memory_bids) == 0),
+        tentatively_start_replicas=(len(memory_candidates) == 0),
         last_y=y,
         diffusion_options=options,
         latency=ctx.latency,
@@ -347,6 +348,13 @@ def assignment_step(ctx, t: int, data: dict, *, options: dict, assign) -> run_fr
       sp_x, _, _, _, sp_r, sp_rho = spr_sol
       omega = sp_omega - rmp_omega
       omega[np.abs(omega) < tolerance] = 0.0
+    memory_bids = memory_candidates
+    if len(memory_candidates) > 0:
+      with step_time.parallel_phase():
+        confirmed = []
+        for i, candidates in step_time.timed(memory_candidates.groupby("i"), key=lambda item: item[0]):
+          confirmed.append(confirm_memory_bids(candidates, omega[int(i)], tolerance=tolerance))
+        memory_bids = pd.concat(confirmed)
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
       additional_replicas, sp_rho = start_additional_replicas(
         memory_bids, sp_r, sp_data, sp_rho

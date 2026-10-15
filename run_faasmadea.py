@@ -496,6 +496,40 @@ def neigh_dict_to_matrix(neighborhood_dict: dict, Nn: int) -> np.array:
   return neighborhood
 
 
+def _replicas_for_capacity(capacity: float, target: int) -> int:
+  """Invert capacity using the same strict boundary as the bidding rules."""
+  count = max(0, int(np.ceil(target / capacity)))
+  # Division can round across an integer even when multiplication is exact.
+  while count and (count - 1) * capacity >= target:
+    count -= 1
+  while count * capacity < target:
+    count += 1
+  return count
+
+
+def next_replica_batch(replicas: float, capacity: float) -> Tuple[int, float]:
+  """Smallest replica batch that increases usable capacity in the request domain."""
+  if VAR_TYPE is not int:
+    return 1, capacity
+  served = int(np.floor(replicas * capacity))
+  count = max(1, _replicas_for_capacity(capacity, served + 1) - int(replicas))
+  gain = int(np.floor((replicas + count) * capacity)) - served
+  return count, gain
+
+
+def confirm_memory_bids(
+    candidates: pd.DataFrame, residual_demand: np.ndarray, *, tolerance: float = 1e-6,
+  ) -> pd.DataFrame:
+  """Confirm one buyer's candidates using only its current residual demand."""
+  if candidates.empty:
+    return candidates.copy()
+  demand = residual_demand[candidates["f"].to_numpy(dtype=int)]
+  confirmed = candidates.loc[demand > tolerance].copy()
+  if "d" in confirmed.columns:
+    confirmed["d"] = demand[demand > tolerance]
+  return confirmed
+
+
 @step_time.parallel
 def start_additional_replicas(
     memory_bids: pd.DataFrame, 
@@ -512,6 +546,10 @@ def start_additional_replicas(
       # count the fraction that each function requires
       fractions = bids_for_j["f"].value_counts(normalize = True).sort_index()
       allocated_memory = {}
+      capacities = {
+        f: data[None]["max_utilization"][f+1] / data[None]["demand"][(j+1,f+1)]
+        for f in fractions.index
+      }
       # assign new replicas proportionally to this fraction
       for f, frac in fractions.items():
         # -- check memory requirement
@@ -519,6 +557,13 @@ def start_additional_replicas(
         # -- determine the maximum number of replicas that fit in the 
         # assignable fraction of the residual memory capacity
         a = int((seller_capacity * frac) // ram_f)
+        if VAR_TYPE is int:
+          # Trim replicas that add no whole request, including a useless tail.
+          capacity = capacities[f]
+          before = int(np.floor(r[j,f] * capacity))
+          after = int(np.floor((r[j,f] + a) * capacity))
+          needed = max(0, _replicas_for_capacity(capacity, after) - int(r[j,f]))
+          a = min(a, needed) if after > before else 0
         # -- update
         residual_capacity[j] -= int(ram_f * a)
         additional_replicas[j,f] = a
@@ -528,14 +573,17 @@ def start_additional_replicas(
         for f, frac in fractions.items():
           ram_f = data[None]["memory_requirement"][f+1]
           deficit = seller_capacity * frac - allocated_memory[f]
-          if ram_f <= residual_capacity[j] and deficit > 0:
-            candidates.append((deficit, frac, -int(f), int(f), ram_f))
+          count, _ = next_replica_batch(r[j,f] + additional_replicas[j,f], capacities[f])
+          memory = count * ram_f
+          # A function may use another's unspendable share once its own is full.
+          if memory <= residual_capacity[j] and (VAR_TYPE is int or deficit > 0):
+            candidates.append((deficit, frac, -int(f), int(f), count, memory))
         if not candidates:
           break
-        _, _, _, f, ram_f = max(candidates)
-        additional_replicas[j, f] += 1
-        allocated_memory[f] += ram_f
-        residual_capacity[j] -= ram_f
+        _, _, _, f, count, memory = max(candidates)
+        additional_replicas[j, f] += count
+        allocated_memory[f] += memory
+        residual_capacity[j] -= memory
   return additional_replicas, residual_capacity
 
 
@@ -639,7 +687,7 @@ def run_madea_cycle(
         )
     # buyers define their bids
     s = step_time.now()
-    bids, memory_bids, n_auctions = rules["define_bids"](
+    bids, memory_candidates, n_auctions = rules["define_bids"](
       omega,
       blackboard,
       p,
@@ -680,7 +728,7 @@ def run_madea_cycle(
         auction_options,
         sp_rho,
         sp_r,
-        tentatively_start_replicas = (len(memory_bids) == 0),
+        tentatively_start_replicas = (len(memory_candidates) == 0),
         it = it,
         may_replace_existing_assignments = True,
         residual_capacity = residual_capacity
@@ -742,6 +790,13 @@ def run_madea_cycle(
             auction_y.tolist(), omega.tolist(), sp_x.tolist(), sp_r.tolist(), sp_rho.tolist(),
             y.tolist(),
           )
+    memory_bids = memory_candidates
+    if len(memory_candidates) > 0:
+      with step_time.parallel_phase():
+        confirmed = []
+        for i, candidates in step_time.timed(memory_candidates.groupby("i"), key=lambda item: item[0]):
+          confirmed.append(confirm_memory_bids(candidates, omega[int(i)], tolerance=tolerance))
+        memory_bids = pd.concat(confirmed)
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
       # tentatively start additional replicas
       s = step_time.now()
