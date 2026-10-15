@@ -12,6 +12,9 @@ from run_faasmadea import define_bids
 from decentralized_diffusion import define_assignments
 from models.bids_gpu import sample_assignments_cuda
 from decentralized_powerd import sample_assignments
+from models.replicas_gpu import start_additional_replicas_cuda,start_replicas_by_value_cuda
+from run_faasmadea import start_additional_replicas
+from madea2 import start_replicas_by_value
 
 pytestmark = pytest.mark.skipif(os.environ.get('DFAAS_TEST_CUDA') != '1', reason='real CUDA opt-in required')
 
@@ -225,3 +228,81 @@ def test_sparse_large_buyer_dispatch():
   assert any(r['operation']=='buyer_price_response' and r['backend']=='cpu' and 'performance' in r['reason'] for r in coverage)
   pd.testing.assert_frame_equal(actual[0],expected[0],check_exact=True)
   np.testing.assert_array_equal(actual[1],expected[1]);assert actual[2]==expected[2]
+
+
+@pytest.mark.parametrize('n,nf',[(1,1),(8,3),(100,7)])
+@pytest.mark.parametrize('capacity',[.1,.4,.7,1.-1e-9,1.,1.+1e-9,3.])
+def test_seller_policies_exact_and_fresh(n,nf,capacity):
+  rng=np.random.default_rng(56);data=make_data(n,nf)
+  for j in range(n):
+    for f in range(nf):data[None]['demand'][j+1,f+1]=.7/capacity
+  # Include Python float floor-division boundaries and fractional memory sizes.
+  data[None]['memory_requirement']={f+1:[1.,2.3,.7][f%3] for f in range(nf)}
+  replicas=rng.integers(0,6,(n,nf)).astype(float);rho=rng.integers(0,30,n).astype(float)
+  rows=[dict(i=k%max(n,1),j=j,f=f,d=float(k%4)+.1,v=float(k%3))
+        for j in range(n) for f in range(nf) for k in range(1+(j+f)%4)]
+  bids=pd.DataFrame(rows);before=deepcopy(data),replicas.copy(),rho.copy(),bids.copy()
+  for shift in (0.,1.):
+    for cpu,gpu in [(start_additional_replicas,start_additional_replicas_cuda),
+                    (start_replicas_by_value,start_replicas_by_value_cuda)]:
+      expected=cpu(bids,replicas+shift,data,rho)
+      actual=gpu(bids,replicas+shift,data,rho)
+      for a,b in zip(actual,expected):np.testing.assert_array_equal(a,b)
+      assert (actual[0]>=0).all() and (actual[0]==np.floor(actual[0])).all()
+      assert (actual[1]>=-1e-9).all()
+  assert data==before[0];np.testing.assert_array_equal(replicas,before[1]);np.testing.assert_array_equal(rho,before[2]);pd.testing.assert_frame_equal(bids,before[3])
+
+
+def test_empty_seller_batches():
+  bids=pd.DataFrame(columns=['i','j','f','d','v']);r=np.zeros((3,2));rho=np.ones(3);data=make_data(3,2)
+  for cpu,gpu in [(start_additional_replicas,start_additional_replicas_cuda),
+                  (start_replicas_by_value,start_replicas_by_value_cuda)]:
+    for a,b in zip(gpu(bids,r,data,rho),cpu(bids,r,data,rho)):np.testing.assert_array_equal(a,b)
+
+
+@pytest.mark.parametrize('kwargs',[
+  {},dict(free=2,quantities=(1,)),dict(existing=(1,),quantities=(1,)),
+  dict(capacity=(.4,),free=4),dict(capacity=(.1,1.),existing=(0,0),free=10,quantities=(10,10),values=(1,1)),
+  dict(capacity=(.3,),existing=(9,),free=1,quantities=(1,)),
+  dict(capacity=(.7,),existing=(29,),free=1,quantities=(1,)),
+  dict(capacity=(.3333333332,),free=3,quantities=(1,)),
+  dict(capacity=(.3333333332,),free=4,quantities=(1,)),
+])
+def test_productive_replica_regressions_on_device(kwargs):
+  from test_productive_replicas import case
+  args=case(**kwargs)
+  for cpu,gpu in [(start_additional_replicas,start_additional_replicas_cuda),
+                  (start_replicas_by_value,start_replicas_by_value_cuda)]:
+    for a,b in zip(gpu(*args),cpu(*args)):np.testing.assert_array_equal(a,b)
+
+
+@pytest.mark.parametrize('value_policy',[False,True])
+def test_continuous_replica_policy_stays_cpu(value_policy,monkeypatch):
+  import run_faasmadea
+  from utils.compute_backend import compute_session
+  from test_productive_replicas import case
+  monkeypatch.setattr(run_faasmadea,'VAR_TYPE',float)
+  args=case(quantities=(.5,))
+  cpu,gpu=(start_replicas_by_value,start_replicas_by_value_cuda) if value_policy else (start_additional_replicas,start_additional_replicas_cuda)
+  expected=cpu(*args)
+  with compute_session({'compute_device':'cuda'}) as coverage:actual=gpu(*args)
+  for a,b in zip(actual,expected):np.testing.assert_array_equal(a,b)
+  assert coverage[-1]['backend']=='cpu' and 'continuous' in coverage[-1]['reason']
+
+
+@pytest.mark.parametrize('value_policy,n',[(False,100),(True,30)])
+def test_seller_production_dispatch_and_clock(value_policy,n):
+  from utils.compute_backend import compute_session
+  from utils import step_time
+  nf=5;data=make_data(n,nf)
+  bids=pd.DataFrame([dict(i=k,j=j,f=f,d=4.,v=2.) for j in range(n) for f in range(nf) for k in range(4)])
+  r=np.zeros((n,nf));rho=np.full(n,100.)
+  call=start_replicas_by_value if value_policy else start_additional_replicas
+  expected=call(bids,r,data,rho)
+  clock=step_time.start_step()
+  try:
+    with compute_session({'compute_device':'cuda'}) as coverage:actual=call(bids,r,data,rho)
+  finally:timing=step_time.end_step(clock)
+  for a,b in zip(actual,expected):np.testing.assert_array_equal(a,b)
+  assert any(row['operation']==('replicas_value' if value_policy else 'replicas_proportional') and row['backend']=='cuda' for row in coverage)
+  assert timing['algorithm_s']>=.9*timing['wall_s']

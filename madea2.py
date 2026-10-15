@@ -132,6 +132,14 @@ def start_replicas_by_value(
   coordinated, so the same uncovered demand may be requested from several
   sellers; LSPr releases replicas that stay idle.
   """
+  from utils.compute_backend import cuda_compute_enabled,record_operation
+  if cuda_compute_enabled():
+    from models.replicas_gpu import replica_batch_eligible,start_replicas_by_value_cuda
+    eligible,reason,count=replica_batch_eligible(memory_bids,r,rho,value_policy=True)
+    if eligible:
+      step_time.mark_shared_device()
+      return start_replicas_by_value_cuda(memory_bids,r,data,rho)
+    record_operation('replicas_value','cpu',count,shape=list(r.shape),reason=reason)
   additional_replicas = np.zeros(r.shape)
   residual_memory = deepcopy(rho)
   if len(memory_bids) == 0:

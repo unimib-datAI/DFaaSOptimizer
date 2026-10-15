@@ -552,6 +552,14 @@ def start_additional_replicas(
     data: dict,
     rho: np.array
   ) -> Tuple[np.array, np.array]:
+  from utils.compute_backend import cuda_compute_enabled,record_operation
+  if cuda_compute_enabled():
+    from models.replicas_gpu import replica_batch_eligible,start_additional_replicas_cuda
+    eligible,reason,count=replica_batch_eligible(memory_bids,r,rho,value_policy=False)
+    if eligible:
+      step_time.mark_shared_device()
+      return start_additional_replicas_cuda(memory_bids,r,data,rho)
+    record_operation('replicas_proportional','cpu',count,shape=list(r.shape),reason=reason)
   # loop over sellers
   additional_replicas = np.zeros(r.shape)
   residual_capacity = deepcopy(rho)
