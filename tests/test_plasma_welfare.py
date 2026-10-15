@@ -18,6 +18,31 @@ def _node(i=0, neighbors=(), alpha=(10., 2.), gamma=(1., 1.), beta=None, ram=1.,
   return WelfareNode(params, WelfareOptions(), np.random.default_rng(i))
 
 
+def test_prepared_plan_keeps_local_priority_and_function_ties():
+  from plasma.welfare import Offer,Reservation
+  node=_node(0,(1,2),alpha=(2.,2.),gamma=(0.,0.),capacity=1.)
+  node.start_window(np.array([1,1]),0,initialize=False)
+  reservations=[Reservation(i,0,0,1,(Offer(0,False,1,2.),)) for i in (1,2)]
+  prepared=node._prepare_plan(reservations)
+  assert prepared.allocations[0][1]==((-1,-1,1),(0,0,0),(1,0,0))
+  for curve in prepared.costs:np.testing.assert_array_equal(curve,[0.,-2.])
+  plan=node._finish_plan(prepared,np.array([1,0]))
+  np.testing.assert_array_equal(plan.r,[1,0]);np.testing.assert_array_equal(plan.x,[1,0])
+  assert plan.accepted==((0,),(0,));assert plan.gain==2.
+  actual=node.plan(reservations)
+  np.testing.assert_array_equal(actual.r,plan.r);np.testing.assert_array_equal(actual.x,plan.x)
+  assert actual.accepted==plan.accepted and actual.gain==plan.gain
+
+
+@pytest.mark.parametrize('invalid',['epoch','neighbor','receiver','locked'])
+def test_prepared_plan_preserves_reservation_validation(invalid):
+  from plasma.welfare import Offer,Reservation
+  node=_node(0,(1,));node.start_window(np.array([0,0]),0,initialize=False)
+  reservation=Reservation(2 if invalid=='neighbor' else 1,2 if invalid=='receiver' else 0,-1 if invalid=='epoch' else 0,1,(Offer(0,False,1,2.),))
+  if invalid=='locked':node.reservation=reservation
+  with pytest.raises(RuntimeError if invalid=='locked' else ValueError):node._prepare_plan([reservation])
+
+
 @pytest.mark.parametrize('load,alpha,gamma,expected', [
   ([100, 10], (10., 2.), (1., 1.), [0, 10]),
   ([10, 10], (4., 3.), (0., 4.), [0, 10]),

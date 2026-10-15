@@ -102,3 +102,106 @@ def test_sb_per_problem_infeasibility_keeps_other_proposals(monkeypatch):
     if node.params.ram_cap==8.:
       assert not actual[i];assert_state([node],[before[i]])
     else:assert actual[i]==expected[i]
+
+
+def assert_plan(a,b):
+  np.testing.assert_array_equal(a.r,b.r);np.testing.assert_array_equal(a.x,b.x)
+  assert a.accepted==b.accepted and a.gain==b.gain
+
+
+def test_welfare_batch_plans_mixed_domains_and_no_cuda_singleton(monkeypatch):
+  from plasma.gpu import welfare_plan_batch
+  from test_plasma_welfare import _node
+  from plasma.welfare import Reservation,Offer
+  from models import dp_gpu
+  nodes=[_node(i,(9,),ram=1.5 if i==0 else 3.) for i in range(4)]
+  jobs=[]
+  for i,node in enumerate(nodes):
+    node.start_window(np.array([0,10+i]),0,initialize=False)
+    jobs.append((node,[Reservation(9,i,0,1,(Offer(0,False,5,2.),))]))
+  expected=[node.plan(r) for node,r in jobs]
+  with compute_session(GPU) as coverage:actual=welfare_plan_batch(jobs)
+  for a,b in zip(actual,expected):assert_plan(a,b)
+  assert any(r['operation']=='plasma_welfare_plan' and r['backend']=='cuda' for r in coverage)
+  def forbidden(*a,**kw):raise AssertionError('unexpected CUDA')
+  monkeypatch.setattr(dp_gpu,'minimize_replica_costs_batch',forbidden)
+  with compute_session(GPU):assert_plan(welfare_plan_batch(jobs[:1])[0],expected[0])
+
+
+@pytest.mark.parametrize('parallelism',[0,2])
+@pytest.mark.parametrize('loss',[0.,.5])
+def test_welfare_engine_matches_cpu_pool_no_gpu_workers(parallelism,loss,monkeypatch):
+  import networkx as nx
+  import plasma.welfare as welfare
+  from run_faasmacro import parallel_solver_session
+  graph=nx.circular_ladder_graph(6);opts=welfare.WelfareOptions(hb_loss=loss,rounds_per_step=4)
+  rng=np.random.default_rng(31);nodes=[]
+  for i in range(12):
+    nbrs=tuple(sorted(graph[i]));params=NodeParams(i,nbrs,rng.uniform(0,5,3),rng.uniform(0,2,3),rng.uniform(0,8,(len(nbrs),3)),rng.integers(2,6,3),4.,np.ones(3))
+    nodes.append(welfare.WelfareNode(params,opts,np.random.default_rng(i)))
+  cpu=welfare.WelfareEngine(deepcopy(nodes),opts,np.random.default_rng(31),parallelism=2)
+  gpu=welfare.WelfareEngine(deepcopy(nodes),opts,np.random.default_rng(31),parallelism=parallelism)
+  cpu_messages=[];gpu_messages=[]
+  for engine,messages in ((cpu,cpu_messages),(gpu,gpu_messages)):
+    send=engine._send
+    def traced(source,target,operation,*payload,_send=send,_messages=messages):
+      _messages.append((source,target,operation,payload));return _send(source,target,operation,*payload)
+    engine._send=traced
+  for epoch in range(3):
+    arrivals=rng.integers(0,20,(12,3));cpu.set_alive(0,epoch!=1);gpu.set_alive(0,epoch!=1)
+    with parallel_solver_session():expected=cpu.run_rounds(4,arrivals)
+    def forbidden(*a,**kw):raise AssertionError('GPU plans must not create CPU workers')
+    with monkeypatch.context() as patch,compute_session(GPU) as coverage:
+      patch.setattr(welfare.mp,'Pool',forbidden)
+      actual=gpu.run_rounds(4,arrivals)
+    for key in ('x','y','z','r','xi'):np.testing.assert_array_equal(getattr(actual,key),getattr(expected,key))
+    assert gpu.workers==0;assert gpu_messages==cpu_messages
+    assert (gpu.msg_count,gpu.hb_count,gpu.accepted_trades)==(cpu.msg_count,cpu.hb_count,cpu.accepted_trades)
+    assert gpu.rng.bit_generator.state==cpu.rng.bit_generator.state
+    for a,b in zip(gpu.nodes,cpu.nodes):
+      for key in ('x','y','z','r','incoming','load'):np.testing.assert_array_equal(getattr(a,key),getattr(b,key))
+      assert a.reservation is b.reservation is None
+      assert a.rng.bit_generator.state==b.rng.bit_generator.state
+    assert any(r['operation']=='plasma_welfare_plan' and r['backend']=='cuda' for r in coverage)
+
+
+def test_welfare_cuda_failure_releases_every_offer(monkeypatch):
+  from test_plasma_welfare import _node
+  from plasma.welfare import WelfareEngine,WelfareOptions
+  from plasma.core.types import Heartbeat
+  from models import dp_gpu
+  nodes=[]
+  for source,receiver in ((0,1),(2,3)):
+    nodes.extend([_node(source,(receiver,),alpha=(0.,),gamma=(1.,),beta=[[2.]],ram=0.),
+                  _node(receiver,(source,),alpha=(0.,),gamma=(0.,),beta=[[0.]],ram=1.)])
+  for i,node in enumerate(nodes):node.start_window(np.array([10 if i%2==0 else 0]),0)
+  for receiver,source in ((1,0),(3,2)):nodes[receiver].on_heartbeat(Heartbeat(source,1,(0.,),(0.,),(10.,)),0)
+  engine=WelfareEngine(nodes,WelfareOptions(),np.random.default_rng(0));engine.accepted_trades=0
+  def broken(*a,**kw):
+    assert nodes[0].reservation is not None and nodes[2].reservation is not None
+    raise RuntimeError('injected CUDA reservation failure')
+  monkeypatch.setattr(dp_gpu,'minimize_replica_costs_batch',broken)
+  with compute_session(GPU),pytest.raises(RuntimeError,match='injected CUDA reservation failure'):
+    engine._negotiate_batch(0,[1,3],None)
+  assert all(node.reservation is None for node in nodes)
+  for i in (0,2):np.testing.assert_array_equal(nodes[i].z,[10])
+  for i in (1,3):np.testing.assert_array_equal(nodes[i].incoming,[0])
+
+
+def test_welfare_shared_participants_never_widen_batches(monkeypatch):
+  import plasma.gpu as adapter
+  from test_plasma_welfare import _node
+  from plasma.welfare import WelfareEngine,WelfareOptions
+  n=6;opts=WelfareOptions(rounds_per_step=3)
+  nodes=[_node(i,tuple(j for j in range(n) if j!=i),capacity=1.) for i in range(n)]
+  cpu=WelfareEngine(deepcopy(nodes),opts,np.random.default_rng(5),parallelism=2)
+  gpu=WelfareEngine(deepcopy(nodes),opts,np.random.default_rng(5),parallelism=0)
+  assert all(len(batch)==1 for batch in gpu._negotiation_batches(list(range(n))))
+  arrivals=np.full((n,2),20);expected=cpu.run_rounds(3,arrivals)
+  sizes=[];original=adapter.welfare_plan_batch
+  def counted(jobs):sizes.append(len(jobs));return original(jobs)
+  monkeypatch.setattr(adapter,'welfare_plan_batch',counted)
+  with compute_session(GPU):actual=gpu.run_rounds(3,arrivals)
+  assert sizes==[n]
+  for key in ('x','y','z','r','xi'):np.testing.assert_array_equal(getattr(actual,key),getattr(expected,key))
+  assert (gpu.msg_count,gpu.hb_count,gpu.accepted_trades)==(cpu.msg_count,cpu.hb_count,cpu.accepted_trades)

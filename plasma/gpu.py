@@ -38,3 +38,26 @@ def exact_sb_batch(nodes,round_):
   if len(selected)<len(nodes):
     record_operation('plasma_exact_sb','cpu',len(nodes)-len(selected),reason='dead, stochastic SB, unsupported integer memory or device bounds')
   return result
+
+
+def welfare_plan_batch(jobs):
+  """Independent prepared plans; reservations/acceptance belong to the caller."""
+  selected=[i for i,(node,_) in enumerate(jobs) if node.alive and node_problem_fits(node)] if cuda_dp_compute_enabled() else []
+  if len(selected)<2:
+    record_operation('plasma_welfare_plan','cpu',len(jobs),reason='both CUDA options and at least two supported independent jobs required')
+    return [node.plan(reservations) for node,reservations in step_time.timed(jobs,key=lambda job:job[0].params.node_id)]
+  step_time.mark_shared_device()
+  from models.dp_gpu import minimize_replica_costs_batch
+  prepared=[jobs[i][0]._prepare_plan(jobs[i][1]) for i in selected]
+  choices=minimize_replica_costs_batch([p.costs for p in prepared],[p.memory for p in prepared],[p.ram_cap for p in prepared])
+  proposals={i:(p,r) for i,p,r in zip(selected,prepared,choices)}
+  result=[]
+  for i,(node,reservations) in enumerate(jobs):
+    if i not in proposals:result.append(node.plan(reservations));continue
+    p,r=proposals[i]
+    if r is None:raise ValueError('No feasible local replica allocation')
+    result.append(node._finish_plan(p,r.astype(int)))
+  record_operation('plasma_welfare_plan','cuda',len(selected),shape=[len(jobs),max(node.Nf for node,_ in jobs)])
+  if len(selected)<len(jobs):
+    record_operation('plasma_welfare_plan','cpu',len(jobs)-len(selected),reason='dead or unsupported integer memory/device bounds')
+  return result

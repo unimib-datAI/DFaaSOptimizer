@@ -74,6 +74,16 @@ class Plan:
   gain: float
 
 
+@dataclass(frozen=True)
+class PreparedWelfarePlan:
+  costs: list
+  memory: np.ndarray
+  ram_cap: float
+  allocations: list
+  gain_local: np.ndarray
+  reservations: object
+
+
 class WelfareNode:
   def __init__(self, params, opts: WelfareOptions, rng):
     self.params, self.opts, self.rng = params, opts, rng
@@ -163,6 +173,11 @@ class WelfareNode:
 
   def plan(self, reservations):
     """Optimize own RAM using only local state and neighbor offer payloads."""
+    prepared=self._prepare_plan(reservations)
+    r=minimize_replica_costs(prepared.costs,prepared.memory,prepared.ram_cap)
+    return self._finish_plan(prepared,r)
+
+  def _prepare_plan(self,reservations) -> PreparedWelfarePlan:
     if self.reservation is not None:
       raise RuntimeError('A source with locked offers cannot reallocate its traffic')
     gain_local = (self.params.alpha + self.params.gamma) / np.where(self.load > 0, self.load, 1)
@@ -198,7 +213,10 @@ class WelfareNode:
         choices.append(tuple(counts))
       levels.append(np.array(costs))
       allocations.append(choices)
-    r = minimize_replica_costs(levels, self.params.ram_req, self.params.ram_cap)
+    return PreparedWelfarePlan(levels,self.params.ram_req,self.params.ram_cap,allocations,gain_local,reservations)
+
+  def _finish_plan(self,prepared,r) -> Plan:
+    allocations,gain_local,reservations=prepared.allocations,prepared.gain_local,prepared.reservations
     x = np.zeros(self.Nf, dtype=int)
     accepted = [[0] * len(reservation.items) for reservation in reservations]
     for f, replicas in enumerate(r):
@@ -309,7 +327,9 @@ class WelfareEngine(PlasmaEngine):
   def _negotiate_batch(self, round_, batch, pool):
     """One parallel phase: the nodes of a conflict-free batch negotiate at once."""
     with step_time.parallel_phase() as phase, ExitStack() as stack:
-      if pool is None:
+      from utils.compute_backend import cuda_dp_compute_enabled
+      gpu=cuda_dp_compute_enabled()
+      if pool is None and not gpu:
         for i in step_time.timed(batch):
           self.accepted_trades += self.nodes[i].negotiate(round_, self._sender(i))
         return
@@ -319,7 +339,17 @@ class WelfareEngine(PlasmaEngine):
         reservations = stack.enter_context(self.nodes[i].offers(round_, send))
         if reservations:
           pending.append((i, reservations, send))
+      from_gpu=False
+      if gpu and len(pending)>=2:
+        from plasma.gpu import node_problem_fits,welfare_plan_batch
+        from_gpu=sum(node_problem_fits(self.nodes[i]) for i,_,_ in pending)>=2
+        if from_gpu:
+          plans=welfare_plan_batch([(self.nodes[i],r) for i,r,_ in pending])
+          for (i,reservations,send),plan in zip(pending,plans):
+            self.accepted_trades+=self.nodes[i].accept_plan(reservations,plan,send)
       # A single ready plan is cheaper inline than a process round trip.
+      if from_gpu:
+        return
       if len(pending) == 1:
         i, reservations, send = pending[0]
         with step_time.task(i):
@@ -327,8 +357,11 @@ class WelfareEngine(PlasmaEngine):
           self.accepted_trades += node.accept_plan(reservations, node.plan(reservations), send)
       elif pending:
         with step_time.offloaded(self.workers):
-          results = pool.map(_timed_plan, [_plan_job(self.nodes[i], r) for i, r, _ in pending],
-                             chunksize=1)
+          if pool is None:
+            results=[_timed_plan((self.nodes[i],r)) for i,r,_ in pending]
+          else:
+            results = pool.map(_timed_plan, [_plan_job(self.nodes[i], r) for i, r, _ in pending],
+                               chunksize=1)
           for (i, _, _), (_, seconds) in zip(pending, results):
             phase.add(i, seconds)
         for (i, reservations, send), (plan, _) in zip(pending, results):
@@ -342,8 +375,13 @@ class WelfareEngine(PlasmaEngine):
     for node, load in zip(self.nodes, arrivals):
       node.start_window(load, self.clock.round, initialize=False)
     alive = [i for i, node in enumerate(self.nodes) if node.alive]
+    from utils.compute_backend import cuda_dp_compute_enabled
+    gpu_jobs=0
+    if cuda_dp_compute_enabled():
+      from plasma.gpu import node_problem_fits
+      gpu_jobs=sum(node_problem_fits(self.nodes[i]) for i in alive)
     pool, self.workers = None, 0
-    if self.parallelism and alive:
+    if self.parallelism and alive and not (gpu_jobs>=2 and gpu_jobs==len(alive)):
       with parallel_solver_session() as state:
         if state['pool'] is None:
           available = _available_cpu_count() if self.parallelism < 0 else self.parallelism
@@ -352,13 +390,17 @@ class WelfareEngine(PlasmaEngine):
         pool, self.workers = state['pool'], state['workers']
     # initial plans: every alive node optimizes its own RAM at once
     with step_time.parallel_phase() as phase:
-      with step_time.offloaded(self.workers):
-        if pool is not None:
-          results = pool.map(_timed_plan, [_plan_job(self.nodes[i], ()) for i in alive], chunksize=1)
-        else:
-          results = [_timed_plan((self.nodes[i], ())) for i in alive]
-        for i, (_, seconds) in zip(alive, results):
-          phase.add(i, seconds)
+      if gpu_jobs>=2:
+        from plasma.gpu import welfare_plan_batch
+        results=[(plan,0.) for plan in welfare_plan_batch([(self.nodes[i],()) for i in alive])]
+      else:
+        with step_time.offloaded(self.workers):
+          if pool is not None:
+            results = pool.map(_timed_plan, [_plan_job(self.nodes[i], ()) for i in alive], chunksize=1)
+          else:
+            results = [_timed_plan((self.nodes[i], ())) for i in alive]
+          for i, (_, seconds) in zip(alive, results):
+            phase.add(i, seconds)
       for i, (plan, _) in zip(alive, results):
         node = self.nodes[i]
         node.r, node.x = plan.r, plan.x
