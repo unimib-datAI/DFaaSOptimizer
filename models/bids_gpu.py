@@ -330,3 +330,62 @@ def sample_assignments_cuda(omega,blackboard,data,neighborhood,rho,powerd_option
                              force_memory_bids,rng,current_y,tolerance,score_lookup=lookup)
   record_operation('sample_assignments','cuda',len(omega),shape=[len(edges)],reason='numeric scores device; dependent sampling and remaining-capacity decisions host')
   return result
+
+
+@lru_cache(maxsize=1)
+def _hierarchy_kernel():
+  from numba import cuda
+  from numba.cuda import libdevice as ld
+  globals()['cuda']=cuda
+  @cuda.jit
+  def kernel(parameters,out):
+    k=cuda.grid(1)
+    if k<out.size:
+      structure_price,node_price,latency,fairness,epsilon,lw,fw=parameters[k]
+      bid=max(ld.dadd_rn(structure_price,epsilon),node_price)
+      out[k]=ld.dadd_rn(ld.dadd_rn(ld.dadd_rn(bid,-node_price),-ld.dmul_rn(lw,latency)),-ld.dmul_rn(fw,fairness))
+  return cuda,kernel
+
+
+def generate_level_requests_cuda(engine,buyer_structures,all_structures,current_y,node_prices,
+                                  token_manager,latency,fairness,omega,eta,epsilon,
+                                  latency_weight,fairness_weight,level):
+  from hierarchical_auction import engine as module
+  from hierarchical_auction.token_manager import CapacityTokenManager
+  args=(buyer_structures,all_structures,current_y,node_prices,token_manager,latency,fairness,
+        omega,eta,epsilon,latency_weight,fairness_weight,level)
+  functions=(module.compute_structure_price,module.generate_structure_bid,module.compute_effective_bid,
+             getattr(engine._collect_seller_nodes,'__func__',None))
+  if functions!=module._GPU_REQUEST_FUNCTIONS or type(token_manager) is not CapacityTokenManager:
+    record_operation('hierarchy_bid_scores','cpu',len(buyer_structures),reason='custom preparation callbacks or token manager require original ordered host execution')
+    return engine._generate_level_requests_host(*args)
+  sending=current_y.sum(axis=1)>1e-10;receiving=current_y.sum(axis=0)>1e-10
+  prices={};sellers={};pairs=[];estimated=0
+  for root,buyer in buyer_structures.items():
+    prices[root]=module.compute_structure_price(buyer,node_prices,token_manager.tokens,eta=eta)
+    for f in range(engine._num_functions):
+      if not buyer.is_buyer(f):continue
+      nodes=engine._collect_seller_nodes(buyer,all_structures,token_manager,f);sellers[root,f]=nodes
+      buyers=[i for i in sorted(buyer.member_nodes) if omega[i,f]>1e-10]
+      estimated+=len(nodes)*len(buyers)
+      if estimated*64>64*1024*1024:
+        record_operation('hierarchy_bid_scores','cpu',len(buyer_structures),reason='candidate preparation exceeds 64 MiB bound')
+        return engine._generate_level_requests_host(*args)
+      for i in buyers:
+        for j in nodes:
+          if j!=i and engine._neighborhood[i,j]>0 and not receiving[i,f] and not sending[j,f] and token_manager.available_tokens(j,f)>0:
+            pairs.append((root,i,j,f))
+  if not pairs:
+    record_operation('hierarchy_bid_scores','cpu',len(buyer_structures),reason='no eligible candidate edges')
+    return engine._generate_level_requests_host(*args)
+  # The marker applies to the whole enclosing phase, including eligibility prep.
+  step_time.mark_shared_device()
+  if hasattr(latency,'toarray'):latency=latency.toarray()
+  parameters=np.array([(prices[root][f],node_prices[j,f],latency[i,j],fairness[i,f],epsilon,latency_weight,fairness_weight)
+                        for root,i,j,f in pairs],dtype=np.float64)
+  cuda,kernel=_hierarchy_kernel();out=cuda.device_array(len(pairs),dtype=np.float64)
+  kernel[(len(pairs)+127)//128,128](cuda.to_device(parameters),out)
+  scores=out.copy_to_host();cuda.synchronize()
+  record_operation('hierarchy_bid_scores','cuda',len(pairs),shape=list(parameters.shape),device_bytes=parameters.nbytes+scores.nbytes)
+  prepared=dict(prices=prices,sellers=sellers,scores=dict(zip(pairs,scores)),sending=sending,receiving=receiving)
+  return engine._generate_level_requests_host(*args,prepared=prepared)

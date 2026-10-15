@@ -201,6 +201,24 @@ class HierarchicalAuctionEngine:
     )
     return LevelResult(current_y, current_omega, level_accepted)
 
+  def _aggregate_cuda(self,structures,values,field):
+    from utils.compute_backend import cuda_compute_enabled,record_operation
+    if not cuda_compute_enabled():return False
+    count=len(structures);members_count=sum(len(s.member_nodes) for s in structures.values())
+    bound=values.nbytes+8*members_count+8*(count+1)+8*count*values.shape[1]
+    if (count<500 or members_count<250000 or values.shape[1]<5 or bound>64*1024*1024
+        or values.dtype not in (np.dtype('float64'),np.dtype('int64'))):
+      record_operation('aggregate_groups','cpu',count,shape=[count,values.shape[1],members_count],
+                       reason=f'{field}: outside measured large overlapping int64/float64 domain (500 groups, 250000 memberships, 5 functions, 64 MiB)')
+      return False
+    step_time.mark_shared_device()
+    from models.numeric_gpu import aggregate_groups_cuda
+    groups=[sorted(s.member_nodes) for s in structures.values()]
+    offsets=[0]+list(np.cumsum([len(group) for group in groups]))
+    rows=aggregate_groups_cuda(values,[i for group in groups for i in group],offsets)
+    for structure,row in zip(structures.values(),rows):setattr(structure,field,row)
+    return True
+
   @step_time.parallel
   def _aggregate_residual_demand(
     self,
@@ -208,6 +226,7 @@ class HierarchicalAuctionEngine:
     omega: FloatArray,
   ) -> None:
     """Ω_{S_i^(ℓ)}^f = Σ_{k∈S_i^(ℓ)} ω_k^{f,res}  (Eq.24)."""
+    if self._aggregate_cuda(structures,omega,'residual_demand'):return
     for s in step_time.timed(structures.values(), key=id):
       members = sorted(s.member_nodes)
       s.residual_demand = omega[members, :].sum(axis=0)
@@ -219,6 +238,7 @@ class HierarchicalAuctionEngine:
     token_manager: CapacityTokenManager,
   ) -> None:
     """T_{S_i^(ℓ)}^f = Σ_{k∈S} T_k^f (indicative only)."""
+    if self._aggregate_cuda(structures,token_manager.tokens,'indicative_tokens'):return
     for s in step_time.timed(structures.values(), key=id):
       members = sorted(s.member_nodes)
       s.indicative_tokens = token_manager.tokens[members, :].sum(axis=0)
@@ -258,26 +278,51 @@ class HierarchicalAuctionEngine:
     fairness_weight: float,
     level: int,
   ) -> list[TokenRequest]:
+    from utils.compute_backend import record_operation
+    record_operation('hierarchy_bid_scores','cpu',len(buyer_structures),
+                     reason='full GPU immutable candidate preparation slower; ordered role commits and request registration stay host')
+    return self._generate_level_requests_host(
+      buyer_structures, all_structures, current_y, node_prices, token_manager,
+      latency, fairness, omega, eta, epsilon, latency_weight, fairness_weight, level,
+    )
+
+  def _generate_level_requests_host(
+    self,
+    buyer_structures: dict[int, Structure],
+    all_structures: dict[int, Structure],
+    current_y: FloatArray,
+    node_prices: FloatArray,
+    token_manager: CapacityTokenManager,
+    latency: FloatArray,
+    fairness: FloatArray,
+    omega: FloatArray,
+    eta: float,
+    epsilon: float,
+    latency_weight: float,
+    fairness_weight: float,
+    level: int,
+    prepared=None,
+  ) -> list[TokenRequest]:
     """Generate token requests for all buyer structures at a given level.
 
     For each buyer structure with residual demand, find seller nodes in
     adjacent structures, compute bid and effective bid, create requests.
     """
     requests: list[TokenRequest] = []
-    sending = current_y.sum(axis=1) > 1e-10
-    receiving = current_y.sum(axis=0) > 1e-10
+    sending = current_y.sum(axis=1) > 1e-10 if prepared is None else prepared['sending']
+    receiving = current_y.sum(axis=0) > 1e-10 if prepared is None else prepared['receiving']
 
     for root, buyer_s in step_time.timed(buyer_structures.items(), key=lambda item: item[0]):
       buyer_s.structure_price = compute_structure_price(
         buyer_s, node_prices, token_manager.tokens, eta=eta,
-      )
+      ) if prepared is None else prepared['prices'][root]
       for f in range(self._num_functions):
         if not buyer_s.is_buyer(f):
           continue
 
         seller_nodes = self._collect_seller_nodes(
           buyer_s, all_structures, token_manager, f,
-        )
+        ) if prepared is None else prepared['sellers'][root,f]
         if not seller_nodes:
           continue
 
@@ -304,19 +349,22 @@ class HierarchicalAuctionEngine:
             if available <= 0:
               continue
 
-            structure_bid = generate_structure_bid(
-              buyer_s.structure_price[f],
-              node_prices[seller_node, f],
-              epsilon=epsilon,
-            )
-            effective = compute_effective_bid(
-              bid=structure_bid,
-              node_price=node_prices[seller_node, f],
-              latency=latency[buyer_node, seller_node],
-              fairness=fairness[buyer_node, f],
-              latency_weight=latency_weight,
-              fairness_weight=fairness_weight,
-            )
+            if prepared is None:
+              structure_bid = generate_structure_bid(
+                buyer_s.structure_price[f],
+                node_prices[seller_node, f],
+                epsilon=epsilon,
+              )
+              effective = compute_effective_bid(
+                bid=structure_bid,
+                node_price=node_prices[seller_node, f],
+                latency=latency[buyer_node, seller_node],
+                fairness=fairness[buyer_node, f],
+                latency_weight=latency_weight,
+                fairness_weight=fairness_weight,
+              )
+            else:
+              effective=prepared['scores'][root,buyer_node,seller_node,f]
             if effective <= 0.0:
               continue
             candidates.append((effective, seller_node, available))
@@ -369,3 +417,8 @@ class HierarchicalAuctionEngine:
         if token_manager.available_tokens(node, function) > 0:
           seller_nodes.add(node)
     return sorted(seller_nodes)
+
+
+# Immutable references identify the built-in pure preparation callbacks.
+_GPU_REQUEST_FUNCTIONS = (compute_structure_price, generate_structure_bid,
+                          compute_effective_bid, HierarchicalAuctionEngine._collect_seller_nodes)

@@ -232,6 +232,9 @@ def dual_coordination_round(
       alpha = dual_options["alpha0"] / np.sqrt(k)
     with step_time.parallel_phase() as phase:  # each seller updates its own price
       phase.uniform(nn)
+      from utils.compute_backend import record_operation
+      record_operation('dual_price','cpu',nn,shape=list(lam.shape),
+                       reason='performance gate: vectorized CPU phase faster than complete CUDA transfer/sync at 30/100/500 nodes')
       lam = np.maximum(0.0, lam + alpha * subgradient)
 
   memory_bids = {"i": [], "j": [], "f": []}

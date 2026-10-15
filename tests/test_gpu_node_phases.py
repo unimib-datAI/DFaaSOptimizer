@@ -15,6 +15,8 @@ from decentralized_powerd import sample_assignments
 from models.replicas_gpu import start_additional_replicas_cuda,start_replicas_by_value_cuda
 from run_faasmadea import start_additional_replicas
 from madea2 import start_replicas_by_value
+from models.numeric_gpu import aggregate_groups_cuda,dual_price_cuda
+from models.bids_gpu import generate_level_requests_cuda
 
 pytestmark = pytest.mark.skipif(os.environ.get('DFAAS_TEST_CUDA') != '1', reason='real CUDA opt-in required')
 
@@ -306,3 +308,119 @@ def test_seller_production_dispatch_and_clock(value_policy,n):
   for a,b in zip(actual,expected):np.testing.assert_array_equal(a,b)
   assert any(row['operation']==('replicas_value' if value_policy else 'replicas_proportional') and row['backend']=='cuda' for row in coverage)
   assert timing['algorithm_s']>=.9*timing['wall_s']
+
+
+@pytest.mark.parametrize('n,nf',[(1,1),(8,1),(129,1),(500,1),(8,3),(500,5)])
+def test_ordered_group_sums_shared_members_and_fresh_inputs(n,nf):
+  rng=np.random.default_rng(309)
+  values=rng.random((n,nf))*rng.choice([1e-9,1.,1e9],(n,nf))
+  groups=[[],[0],list(range(n)),list(range(n-1,-1,-1)),list(range(n//2,n))]
+  offsets=np.array([0]+list(np.cumsum([len(g) for g in groups])),dtype=np.int64)
+  members=np.array([i for g in groups for i in g],dtype=np.int64)
+  before=values.copy()
+  for delta in (0.,1e-9):
+    expected=np.array([(values+delta)[g,:].sum(axis=0) for g in groups])
+    actual=aggregate_groups_cuda(values+delta,members,offsets)
+    np.testing.assert_array_equal(actual,expected)
+  np.testing.assert_array_equal(values,before)
+  assert aggregate_groups_cuda(values,[],[0]).shape==(0,nf)
+
+
+@pytest.mark.parametrize('alpha',[0.,1e-9,.3,1.])
+def test_dual_price_clipping_and_thresholds(alpha):
+  lam=np.array([[0.,1e-9,1.,1.],[-1.,0.,1.,2.]])[:,::-1]
+  gradient=np.array([[-1.,1.,-1.-1e-9,-1.+1e-9],[1.,0.,2.,-3.]])[:,::-1]
+  before=lam.copy(),gradient.copy()
+  for shift in (0.,.5):
+    np.testing.assert_array_equal(dual_price_cuda(lam+shift,alpha,gradient),np.maximum(0.,lam+shift+alpha*gradient))
+  np.testing.assert_array_equal(lam,before[0]);np.testing.assert_array_equal(gradient,before[1])
+
+
+def test_group_token_sums_preserve_int64_and_overflow():
+  values=np.array([[2**62,3],[2**62,7],[-1,11]],dtype=np.int64)
+  members=np.array([0,1,2,2,1],dtype=np.int64);offsets=[0,3,3,5]
+  expected=np.array([values[[0,1,2],:].sum(axis=0),values[[],:].sum(axis=0),values[[2,1],:].sum(axis=0)])
+  actual=aggregate_groups_cuda(values,members,offsets)
+  assert actual.dtype==expected.dtype
+  np.testing.assert_array_equal(actual,expected)
+
+
+def test_empty_group_phase_remains_cpu():
+  from utils import step_time
+  from utils.compute_backend import compute_session
+  with compute_session({'compute_device':'cuda'}) as coverage,step_time.parallel_phase() as phase:
+    actual=aggregate_groups_cuda(np.zeros((3,2)),[],[0])
+    assert not phase.shared_device
+  assert actual.shape==(0,2) and coverage[-1]['backend']=='cpu'
+
+
+def test_hierarchy_group_fields_dispatch_and_fresh_values():
+  from hierarchical_auction.engine import HierarchicalAuctionEngine
+  from hierarchical_auction.structure import Structure
+  from hierarchical_auction.token_manager import CapacityTokenManager
+  from utils.compute_backend import compute_session
+  n,nf=600,5;rng=np.random.default_rng(31)
+  engine=HierarchicalAuctionEngine(np.eye(n),nf,np.ones(nf))
+  structures={i:Structure(2,i,set((np.arange(500)+i)%n),set(),nf) for i in range(500)}
+  values=rng.random((n,nf))
+  manager=CapacityTokenManager(np.full((n,nf),20.),np.ones(nf))
+  with compute_session({'compute_device':'cuda'}) as coverage:
+    for shift in (0.,1e-9):
+      engine._aggregate_residual_demand(structures,values+shift)
+      engine._populate_indicative_tokens(structures,manager)
+      for s in structures.values():
+        members=sorted(s.member_nodes)
+        np.testing.assert_array_equal(s.residual_demand,(values+shift)[members,:].sum(axis=0))
+        np.testing.assert_array_equal(s.indicative_tokens,manager.tokens[members,:].sum(axis=0))
+        assert s.indicative_tokens.dtype==np.int64
+  assert sum(row['operation']=='aggregate_groups' and row['backend']=='cuda' for row in coverage)==4
+
+
+@pytest.mark.parametrize('penalty',[0.,.1,1.+1e-9])
+def test_hierarchy_request_preparation_preserves_order_and_roles(penalty):
+  from hierarchical_auction.engine import HierarchicalAuctionEngine
+  from hierarchical_auction.structure import Structure
+  from hierarchical_auction.token_manager import CapacityTokenManager
+  from utils.compute_backend import compute_session
+  n,nf=6,2;rng=np.random.default_rng(21)
+  engine=HierarchicalAuctionEngine(np.ones((n,n))-np.eye(n),nf,np.array([1.,2.]))
+  structures={i:Structure(2,i,{i,i+1},set(range(0,n,2))-{i},nf) for i in range(0,n,2)}
+  omega=np.zeros((n,nf));omega[::2]=3.
+  capacity=np.full((n,nf),4.);prices=rng.random((n,nf))
+  engine._aggregate_residual_demand(structures,omega)
+  cpu_structures=deepcopy(structures);gpu_structures=deepcopy(structures)
+  cpu_manager=CapacityTokenManager(capacity,np.array([1.,2.]));gpu_manager=CapacityTokenManager(capacity,np.array([1.,2.]))
+  common=dict(current_y=np.zeros((n,n,nf)),node_prices=prices,latency=rng.random((n,n)),fairness=rng.random((n,nf)),
+              omega=omega,eta=.5,epsilon=.01,latency_weight=penalty,fairness_weight=penalty,level=2)
+  expected=engine._generate_level_requests(cpu_structures,cpu_structures,token_manager=cpu_manager,**common)
+  with compute_session({'compute_device':'cuda'}) as coverage:
+    actual=generate_level_requests_cuda(engine,gpu_structures,gpu_structures,token_manager=gpu_manager,**common)
+  assert actual==expected
+  assert any(row['operation']=='hierarchy_bid_scores' and row['backend']=='cuda' for row in coverage)
+  for j in range(n):
+    for f in range(nf):assert gpu_manager.pending_requests(j,f)==cpu_manager.pending_requests(j,f)
+  for root in structures:np.testing.assert_array_equal(gpu_structures[root].structure_price,cpu_structures[root].structure_price)
+
+
+def test_custom_hierarchy_scoring_preserves_callback_rng(monkeypatch):
+  from hierarchical_auction import engine as module
+  from hierarchical_auction.structure import Structure
+  from hierarchical_auction.token_manager import CapacityTokenManager
+  from utils.compute_backend import compute_session
+  engine=module.HierarchicalAuctionEngine(np.ones((3,3))-np.eye(3),1,np.ones(1))
+  omega=np.array([[3.],[2.],[0.]])
+  def execute(gpu):
+    rng=np.random.default_rng(93);seen=[];original=module._GPU_REQUEST_FUNCTIONS[2]
+    def scoring(**kw):
+      seen.append(tuple(kw.values()));return original(**kw)+rng.random()*1e-9
+    monkeypatch.setattr(module,'compute_effective_bid',scoring)
+    structures={i:Structure(2,i,{i},set(range(3))-{i},1) for i in range(3)}
+    engine._aggregate_residual_demand(structures,omega)
+    manager=CapacityTokenManager(np.full((3,1),4.),np.ones(1))
+    args=(structures,structures,np.zeros((3,3,1)),np.zeros((3,1)),manager,np.zeros((3,3)),np.zeros((3,1)),omega,.5,.01,0.,0.,2)
+    result=generate_level_requests_cuda(engine,*args) if gpu else engine._generate_level_requests(*args)
+    return result,seen,rng.bit_generator.state
+  expected,seen,state=execute(False)
+  with compute_session({'compute_device':'cuda'}) as coverage:actual,other,other_state=execute(True)
+  assert actual==expected and seen==other and state==other_state
+  assert coverage[-1]['backend']=='cpu' and 'custom' in coverage[-1]['reason']
