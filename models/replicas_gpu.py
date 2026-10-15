@@ -165,6 +165,9 @@ def replica_batch_eligible(memory_bids,r,rho,*,value_policy):
   from run_faasmadea import VAR_TYPE
   if VAR_TYPE is not int:return False,'continuous request domain',0
   if len(memory_bids)==0:return False,'empty bids',0
+  if any(not isinstance(memory_bids[c].dtype,np.dtype) or memory_bids[c].dtype.kind not in 'iu'
+         for c in ('i','j','f')):
+    return False,'outside native integer grouping domain',0
   sellers=np.unique(memory_bids['j'].to_numpy())
   count=int(np.count_nonzero(rho[sellers]>0))
   minimum=30 if value_policy else 100

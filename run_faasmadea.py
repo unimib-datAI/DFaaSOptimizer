@@ -180,7 +180,10 @@ def compute_residual_capacity(
   Nf = data[None]["Nf"][None]
   from utils.compute_backend import cuda_compute_enabled
   if (cuda_compute_enabled() and Nn >= 100 and Nn * Nf >= 1000
-      and 8 * (Nn*Nn*Nf + 6*Nn*Nf + Nf) <= 64*1024*1024):
+      and 8 * (Nn*Nn*Nf + 6*Nn*Nf + Nf) <= 64*1024*1024
+      and all(a.dtype == np.float64 for a in (x,y,r))
+      and all(type(v) in (float,np.float64) or (type(v) is int and abs(v)<=2**53)
+              for v in (*data[None]['demand'].values(), *data[None]['max_utilization'].values()))):
     step_time.mark_shared_device()
     from models.numeric_gpu import residual_capacity_cuda
     demand = np.array([[data[None]['demand'][(n+1,f+1)] for f in range(Nf)] for n in range(Nn)])
@@ -189,7 +192,7 @@ def compute_residual_capacity(
   if cuda_compute_enabled():
     from utils.compute_backend import record_operation
     record_operation('residual_capacity','cpu',Nn,shape=[Nn,Nf],
-                     reason='below 100 nodes/1000 entries or above 64 MiB')
+                     reason='outside validated float64/scalar dtype domain, below 100 nodes/1000 entries or above 64 MiB')
   # loop over nodes and functions
   cap = np.zeros((Nn,Nf))
   residual_capacity = np.zeros((Nn,Nf))
