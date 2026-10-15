@@ -341,8 +341,8 @@ class WelfareEngine(PlasmaEngine):
           pending.append((i, reservations, send))
       from_gpu=False
       if gpu and len(pending)>=2:
-        from plasma.gpu import node_problem_fits,welfare_plan_batch
-        from_gpu=sum(node_problem_fits(self.nodes[i]) for i,_,_ in pending)>=2
+        from plasma.gpu import dp_batch_eligible,welfare_plan_batch
+        from_gpu=dp_batch_eligible([self.nodes[i] for i,_,_ in pending])
         if from_gpu:
           plans=welfare_plan_batch([(self.nodes[i],r) for i,r,_ in pending])
           for (i,reservations,send),plan in zip(pending,plans):
@@ -350,6 +350,8 @@ class WelfareEngine(PlasmaEngine):
       # A single ready plan is cheaper inline than a process round trip.
       if from_gpu:
         return
+      from utils.compute_backend import record_operation
+      record_operation('plasma_welfare_plan','cpu',len(pending),reason='no eligible independent batch: both CUDA options, >=2 jobs, >=5000 DP candidates and >=200 per job average required')
       if len(pending) == 1:
         i, reservations, send = pending[0]
         with step_time.task(i):
@@ -377,11 +379,13 @@ class WelfareEngine(PlasmaEngine):
     alive = [i for i, node in enumerate(self.nodes) if node.alive]
     from utils.compute_backend import cuda_dp_compute_enabled
     gpu_jobs=0
+    gpu_batch=False
     if cuda_dp_compute_enabled():
-      from plasma.gpu import node_problem_fits
+      from plasma.gpu import node_problem_fits,dp_batch_eligible
       gpu_jobs=sum(node_problem_fits(self.nodes[i]) for i in alive)
+      gpu_batch=dp_batch_eligible([self.nodes[i] for i in alive])
     pool, self.workers = None, 0
-    if self.parallelism and alive and not (gpu_jobs>=2 and gpu_jobs==len(alive)):
+    if self.parallelism and alive and not (gpu_batch and gpu_jobs==len(alive)):
       with parallel_solver_session() as state:
         if state['pool'] is None:
           available = _available_cpu_count() if self.parallelism < 0 else self.parallelism
@@ -390,10 +394,12 @@ class WelfareEngine(PlasmaEngine):
         pool, self.workers = state['pool'], state['workers']
     # initial plans: every alive node optimizes its own RAM at once
     with step_time.parallel_phase() as phase:
-      if gpu_jobs>=2:
+      if gpu_batch:
         from plasma.gpu import welfare_plan_batch
         results=[(plan,0.) for plan in welfare_plan_batch([(self.nodes[i],()) for i in alive])]
       else:
+        from utils.compute_backend import record_operation
+        record_operation('plasma_welfare_plan','cpu',len(alive),reason='initial jobs require both CUDA options, >=2 supported jobs, >=5000 DP candidates and >=200 per job average')
         with step_time.offloaded(self.workers):
           if pool is not None:
             results = pool.map(_timed_plan, [_plan_job(self.nodes[i], ()) for i in alive], chunksize=1)

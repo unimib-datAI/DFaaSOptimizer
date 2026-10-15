@@ -15,6 +15,22 @@ def engine_for(welfare):
                        WelfareOptions(), np.random.default_rng(7))
 
 
+def test_plasma_dp_work_gate_is_driver_free(monkeypatch):
+  import builtins
+  from plasma.gpu import dp_batch_eligible
+  original=builtins.__import__
+  def guarded(name,*args,**kwargs):
+    assert not name.startswith(('numba','cuda'))
+    return original(name,*args,**kwargs)
+  monkeypatch.setattr(builtins,'__import__',guarded)
+  small=_node(ram=1.)
+  large=_node(ram=128.)
+  assert not dp_batch_eligible([small,small])
+  assert not dp_batch_eligible([small]*1000)
+  assert not dp_batch_eligible([large])
+  assert dp_batch_eligible([large,large])
+
+
 @pytest.fixture
 def clock(monkeypatch):
   time = [0.]

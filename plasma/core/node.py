@@ -99,6 +99,9 @@ class PlasmaNode:
     ])
 
   def route_window(self, arrivals: np.ndarray, round_: int) -> np.ndarray:
+    return self._route_window_host(arrivals,round_)
+
+  def _route_window_host(self,arrivals,round_,prepared_weights=None):
     self._arrivals += arrivals
     Nf, deg = self.Nf, self.deg
     desired = np.zeros((Nf, deg), dtype=int)
@@ -142,7 +145,7 @@ class PlasmaNode:
         continue
       weights = target_weights(
         self.D[f], False, nbr_spare[:, f], self.opts.eps_explore
-      )
+      ) if prepared_weights is None else prepared_weights[f].copy()
       weights[LOCAL] = 0.0
       unsplittable = (
         self.opts.rare_function_mode == "unsplittable"

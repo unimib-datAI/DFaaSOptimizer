@@ -1278,7 +1278,7 @@ workers to a homogeneous set, for example on the measured GB10 machine:
 
 ```bash
 taskset -c 5-8 .venv/bin/python experiments/gpu_compute/benchmark.py \
-  --config <config.json> --methods MADEA faas-diffusion faas-dual \
+  --config <config.json> --methods MADEA faas-diffuse faas-dual \
   --parallelism 4 --repeats 10 --output <new-directory>
 ```
 
@@ -1300,3 +1300,34 @@ complete scoring measurements lost, and repair preparation did not establish
 a stable complete-step benefit. Raw prototypes do not imply production coverage.
 See the parent report's `frankwolfe/` directory for cold/warm phase and whole-step
 measurements and all numerical/coverage limits.
+
+### PLASMA GPU and common time budget
+
+Exact-SB PLASMA and independent PLASMA-Welfare plans can use the existing CUDA
+DP only with **both** device options set to `"cuda"` and `use_dp: true`.
+`dp_device: cuda` alone keeps their original CPU path. Production batches need
+at least2 supported integer-memory jobs, at least5000 estimated DP recurrence
+candidates total and at least200 per eligible job on average. Expected small,
+fractional-memory and device/index-limit domains stay CPU with coverage reasons;
+CUDA failures propagate. Curves, hysteresis, random commit, reservations and
+ordered acceptance remain host operations. Welfare uses only initial alive
+nodes and pending jobs in existing conflict-free groups, including with
+parallelism0; all-GPU initial jobs avoid creating a CPU pool.
+
+PLASMA and Welfare now honor `algorithm_time_limit` on CPU and GPU using the
+same step clock. `rounds_per_step` is a maximum; at least one complete round
+runs, stopping between rounds. Initial Welfare plans and all synchronized GPU
+preparation/JIT/transfers/reconstruction consume the budget once, without node
+or core division. A full round is indivisible, so measured time may exceed the
+limit by that round (plus initialization when the first round is mandatory).
+Metrics use the rounds actually completed times W; future events are retained.
+CPU parallel phases keep their original logical accounting.
+
+Routing, heartbeat construction/delivery and window-state updates remain CPU.
+Exact raw CUDA routing/window prototypes lost complete-phase measurements and
+are not enabled in production. Stochastic SB and all routing RNG remain CPU.
+Native PLASMA may retain idle replicas for margin/hysteresis, as before this
+roadmap: its physical constraints differ from the centralized model's additional
+minimal-replica lower bound. Benchmarks report physical feasibility and strict
+centralized compatibility separately; no centralized model/validator was
+changed. See `plasma/feasibility-diagnostic.json` in the parent report.

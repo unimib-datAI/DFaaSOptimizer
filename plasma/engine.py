@@ -56,11 +56,12 @@ class PlasmaEngine:
         levels[j] = level
     return batches
 
-  def _route_node(self, i: int, round_: int, arrivals: np.ndarray) -> None:
+  def _route_node(self, i: int, round_: int, arrivals: np.ndarray,prepared_weights=None) -> None:
     node = self.nodes[i]
     if not node.alive:
       return
-    desired = node.route_window(arrivals[i], round_)
+    desired = (node.route_window(arrivals[i], round_) if prepared_weights is None else
+               node._route_window_host(arrivals[i],round_,prepared_weights))
     for k, j in enumerate(node.params.nbrs):
       for f in range(node.Nf):
         n = int(desired[f, k])
@@ -71,13 +72,25 @@ class PlasmaEngine:
         node.record_forward_results(f, k, n, accepted)
 
   def _route_all(self, round_: int, arrivals: np.ndarray) -> None:
+    from utils.compute_backend import record_operation
+    with step_time.untimed():
+      record_operation('plasma_route_weights','cpu',sum(node.alive for node in self.nodes),
+                       reason='full immutable CUDA prep plus original admission lost at30/160/500 sparse and160 dense; host RNG/admission order retained')
+    return self._route_all_host(round_,arrivals)
+
+  def _route_all_host(self,round_,arrivals,prepared_weights=None):
     for batch in self._negotiation_batches(self._arrival_order()):
       with step_time.parallel_phase():
         for i in step_time.timed(batch):
-          self._route_node(i, round_, arrivals)
+          if prepared_weights is None:self._route_node(i,round_,arrivals)
+          else:self._route_node(i,round_,arrivals,prepared_weights.get(i))
 
   @step_time.parallel
   def _send_heartbeats(self, round_: int) -> None:
+    from utils.compute_backend import record_operation
+    with step_time.untimed():
+      record_operation('plasma_heartbeat','cpu',sum(node.alive for node in self.nodes),
+                       reason='payload is sequence increment and tuple copies; numeric spare/pull already produced in end_window; encoding, loss draws and event insertion retain directed-edge order')
     for node in step_time.timed(self.nodes, key=id):
       if not node.alive:
         continue
@@ -112,6 +125,10 @@ class PlasmaEngine:
         z = np.zeros((Nn, Nf))
         y = np.zeros((Nn, Nn, Nf))
       with step_time.parallel_phase():
+        from utils.compute_backend import record_operation
+        with step_time.untimed():
+          record_operation('plasma_end_window','cpu',sum(node.alive for node in self.nodes),
+                           reason='complete CUDA window prep/sync/reconstruction slower at30/160/500 sparse and160 dense; original conductance/EWMA/reset order retained')
         for i, node in step_time.timed(enumerate(self.nodes), key=lambda item: item[0]):
           if not node.alive:
             continue
@@ -131,8 +148,14 @@ class PlasmaEngine:
       if self.opts.k_sb > 0 and (round_ + 1) % self.opts.k_sb == 0:
         with step_time.parallel_phase():
           from utils.compute_backend import cuda_dp_compute_enabled
+          use_batch=False
           if cuda_dp_compute_enabled():
-            from plasma.gpu import exact_sb_batch
+            from plasma.gpu import exact_sb_batch,dp_batch_eligible
+            use_batch=dp_batch_eligible([node for node in self.nodes if node.alive and node.opts.sbm_method=='exact'])
+            if not use_batch:
+              from utils.compute_backend import record_operation
+              record_operation('plasma_exact_sb','cpu',len(self.nodes),reason='need >=2 supported exact jobs, >=5000 DP candidates total and >=200 per eligible node average')
+          if use_batch:
             exact_sb_batch(self.nodes,round_)
           else:
             for node in step_time.timed(self.nodes, key=id):

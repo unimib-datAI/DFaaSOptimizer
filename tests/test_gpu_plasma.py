@@ -52,7 +52,9 @@ def test_exact_sb_proposals_hysteresis_rng(p_commit,n_hyst):
 @pytest.mark.parametrize('options',[{},dict(dp_device='cuda',use_dp=True),dict(compute_device='cuda'),GPU])
 def test_engine_gate_and_pre_sb_snapshot(options):
   opts=PlasmaOptions(k_sb=1,sbm_method='exact',p_commit=1.,n_hyst=1)
-  cpu=PlasmaEngine(nodes_fixture(opts=opts),opts,np.random.default_rng(3));gpu=deepcopy(cpu)
+  nodes=nodes_fixture(opts=opts)
+  for node in nodes:node.params=replace(node.params,ram_cap=128.)
+  cpu=PlasmaEngine(nodes,opts,np.random.default_rng(3));gpu=deepcopy(cpu)
   before=np.array([node.r.copy() for node in gpu.nodes]);arrivals=np.full((6,3),10)
   expected=cpu.run_rounds(1,arrivals)
   with compute_session(options) as coverage:actual=gpu.run_rounds(1,arrivals)
@@ -137,7 +139,7 @@ def test_welfare_engine_matches_cpu_pool_no_gpu_workers(parallelism,loss,monkeyp
   graph=nx.circular_ladder_graph(6);opts=welfare.WelfareOptions(hb_loss=loss,rounds_per_step=4)
   rng=np.random.default_rng(31);nodes=[]
   for i in range(12):
-    nbrs=tuple(sorted(graph[i]));params=NodeParams(i,nbrs,rng.uniform(0,5,3),rng.uniform(0,2,3),rng.uniform(0,8,(len(nbrs),3)),rng.integers(2,6,3),4.,np.ones(3))
+    nbrs=tuple(sorted(graph[i]));params=NodeParams(i,nbrs,rng.uniform(0,5,3),rng.uniform(0,2,3),rng.uniform(0,8,(len(nbrs),3)),rng.integers(2,6,3),64.,np.ones(3))
     nodes.append(welfare.WelfareNode(params,opts,np.random.default_rng(i)))
   cpu=welfare.WelfareEngine(deepcopy(nodes),opts,np.random.default_rng(31),parallelism=2)
   gpu=welfare.WelfareEngine(deepcopy(nodes),opts,np.random.default_rng(31),parallelism=parallelism)
@@ -148,7 +150,7 @@ def test_welfare_engine_matches_cpu_pool_no_gpu_workers(parallelism,loss,monkeyp
       _messages.append((source,target,operation,payload));return _send(source,target,operation,*payload)
     engine._send=traced
   for epoch in range(3):
-    arrivals=rng.integers(0,20,(12,3));cpu.set_alive(0,epoch!=1);gpu.set_alive(0,epoch!=1)
+    arrivals=rng.integers(200,500,(12,3));cpu.set_alive(0,epoch!=1);gpu.set_alive(0,epoch!=1)
     with parallel_solver_session():expected=cpu.run_rounds(4,arrivals)
     def forbidden(*a,**kw):raise AssertionError('GPU plans must not create CPU workers')
     with monkeypatch.context() as patch,compute_session(GPU) as coverage:
@@ -173,7 +175,7 @@ def test_welfare_cuda_failure_releases_every_offer(monkeypatch):
   nodes=[]
   for source,receiver in ((0,1),(2,3)):
     nodes.extend([_node(source,(receiver,),alpha=(0.,),gamma=(1.,),beta=[[2.]],ram=0.),
-                  _node(receiver,(source,),alpha=(0.,),gamma=(0.,),beta=[[0.]],ram=1.)])
+                  _node(receiver,(source,),alpha=(0.,),gamma=(0.,),beta=[[0.]],ram=128.)])
   for i,node in enumerate(nodes):node.start_window(np.array([10 if i%2==0 else 0]),0)
   for receiver,source in ((1,0),(3,2)):nodes[receiver].on_heartbeat(Heartbeat(source,1,(0.,),(0.,),(10.,)),0)
   engine=WelfareEngine(nodes,WelfareOptions(),np.random.default_rng(0));engine.accepted_trades=0
@@ -193,11 +195,11 @@ def test_welfare_shared_participants_never_widen_batches(monkeypatch):
   from test_plasma_welfare import _node
   from plasma.welfare import WelfareEngine,WelfareOptions
   n=6;opts=WelfareOptions(rounds_per_step=3)
-  nodes=[_node(i,tuple(j for j in range(n) if j!=i),capacity=1.) for i in range(n)]
+  nodes=[_node(i,tuple(j for j in range(n) if j!=i),capacity=1.,ram=64.) for i in range(n)]
   cpu=WelfareEngine(deepcopy(nodes),opts,np.random.default_rng(5),parallelism=2)
   gpu=WelfareEngine(deepcopy(nodes),opts,np.random.default_rng(5),parallelism=0)
   assert all(len(batch)==1 for batch in gpu._negotiation_batches(list(range(n))))
-  arrivals=np.full((n,2),20);expected=cpu.run_rounds(3,arrivals)
+  arrivals=np.full((n,2),2000);expected=cpu.run_rounds(3,arrivals)
   sizes=[];original=adapter.welfare_plan_batch
   def counted(jobs):sizes.append(len(jobs));return original(jobs)
   monkeypatch.setattr(adapter,'welfare_plan_batch',counted)
@@ -205,3 +207,110 @@ def test_welfare_shared_participants_never_widen_batches(monkeypatch):
   assert sizes==[n]
   for key in ('x','y','z','r','xi'):np.testing.assert_array_equal(getattr(actual,key),getattr(expected,key))
   assert (gpu.msg_count,gpu.hb_count,gpu.accepted_trades)==(cpu.msg_count,cpu.hb_count,cpu.accepted_trades)
+
+
+def test_gpu_mixed_phase_counts_cpu_prep_jit_and_device_once(monkeypatch):
+  from plasma.gpu import exact_sb_batch
+  from models import dp_gpu
+  tick=[0.];monkeypatch.setattr(step_time,'perf_counter',lambda:tick[0])
+  kernel=dp_gpu._get_kernel;batch=dp_gpu.minimize_replica_costs_batch
+  def cold():tick[0]+=1.;return kernel()
+  def device(*a,**kw):tick[0]+=.4;return batch(*a,**kw)
+  monkeypatch.setattr(dp_gpu,'_get_kernel',cold);monkeypatch.setattr(dp_gpu,'minimize_replica_costs_batch',device)
+  with compute_session(GPU):
+    clock=step_time.start_step()
+    with step_time.parallel_phase():
+      for i in step_time.timed(range(3)):tick[0]+=.1
+      exact_sb_batch(nodes_fixture(),0)
+    timing=step_time.end_step(clock)
+  assert timing['algorithm_s']==pytest.approx(1.7)
+  assert timing['wall_s']==pytest.approx(1.7)
+
+
+@pytest.mark.parametrize('welfare',[False,True])
+def test_gpu_budget_includes_initial_plans_and_resumes_events(welfare,monkeypatch):
+  from models import dp_gpu
+  from test_plasma_welfare import _node
+  from plasma.welfare import WelfareEngine,WelfareOptions
+  tick=[0.];monkeypatch.setattr(step_time,'perf_counter',lambda:tick[0])
+  batch=dp_gpu.minimize_replica_costs_batch
+  def costly(*a,**kw):tick[0]+=.4;return batch(*a,**kw)
+  monkeypatch.setattr(dp_gpu,'minimize_replica_costs_batch',costly)
+  n=6
+  if welfare:
+    opts=WelfareOptions(W=.5,hb_latency_rounds=2,staleness_rounds=3)
+    nodes=[_node(i,tuple(j for j in range(n) if j!=i),capacity=2.,ram=64.) for i in range(n)]
+    engine=WelfareEngine(nodes,opts,np.random.default_rng(7))
+    for node in nodes:node.opts=opts
+  else:
+    opts=PlasmaOptions(W=.5,k_sb=1,hb_latency_rounds=2,staleness_rounds=3)
+    nodes=nodes_fixture(opts=opts)
+    for node in nodes:node.params=replace(node.params,ram_cap=128.)
+    engine=PlasmaEngine(nodes,opts,np.random.default_rng(7))
+  arrivals=np.full((n,engine.nodes[0].Nf),8);delivered=[]
+  engine.clock.schedule(2,lambda:delivered.append(2))
+  with compute_session(GPU):
+    clock=step_time.start_step();result=engine.run_rounds(5,arrivals,time_limit=.25);timing=step_time.end_step(clock)
+    assert result.completed_rounds==engine.clock.round==1 and result.time_limit_reached
+    assert timing['algorithm_s']==pytest.approx(.4)
+    assert delivered==[] and any(round_==2 for round_,_,_ in engine.clock._queue)
+    for _ in range(2):
+      clock=step_time.start_step();next_result=engine.run_rounds(1,arrivals,time_limit=float('inf'));step_time.end_step(clock)
+      assert next_result.completed_rounds==1
+  assert delivered==[2] and engine.clock.round==3
+  np.testing.assert_array_equal(result.x+result.z+result.y.sum(axis=1),arrivals)
+
+
+@pytest.mark.parametrize('kappa',[1.,2.])
+def test_window_batch_numeric_state_exact_and_fresh(kappa):
+  from plasma.gpu import end_window_batch_cuda
+  nodes=nodes_fixture(8,PlasmaOptions(kappa=kappa));rng=np.random.default_rng(32)
+  for node in nodes:
+    for key in ('D','_phi','_arrivals','_admitted','lam_hat'):
+      arr=getattr(node,key);arr[:]=rng.random(arr.shape)*7
+    node.r[:]=rng.integers(0,8,node.Nf)
+  for shift in (0.,.3):
+    for node in nodes:node._phi+=shift;node._arrivals+=shift
+    cpu=deepcopy(nodes);gpu=deepcopy(nodes)
+    expected=[node.end_window() for node in cpu]
+    actual=end_window_batch_cuda(gpu)
+    for a,b in zip(actual,expected):
+      for key in ('x','z','y','xi'):np.testing.assert_array_equal(getattr(a,key),getattr(b,key))
+    assert_state(cpu,gpu)
+
+
+@pytest.mark.parametrize('n,degree',[(1,0),(4,3),(16,6),(32,6)])
+def test_routing_weights_prototype_preserves_gates(n,degree):
+  from plasma.gpu import target_weights_batch_cuda
+  from plasma.core.routing import target_weights
+  rng=np.random.default_rng(21);D=rng.random((n,5,degree+2));local=rng.integers(0,2,(n,5)).astype(bool)
+  spare=rng.choice([0.,.1,2.],(n,5,degree));eps=.01
+  expected=np.array([[target_weights(D[i,f],local[i,f],spare[i,f],eps) for f in range(5)] for i in range(n)])
+  actual=target_weights_batch_cuda(D,local,spare,eps)
+  np.testing.assert_array_equal(actual,expected)
+
+
+def routing_fixture(n=12,nf=5,degree=2):
+  from plasma.core.types import Heartbeat
+  nodes=[];opts=PlasmaOptions(k_sb=0)
+  for i in range(n):
+    nbrs=tuple(sorted({(i+d)%n for d in range(1,degree//2+1)}|{(i-d)%n for d in range(1,degree//2+1)}))
+    node=PlasmaNode(NodeParams(i,nbrs,np.ones(nf),np.ones(nf),np.full((len(nbrs),nf),3.),np.ones(nf),16.,np.ones(nf)),opts,np.random.default_rng(i))
+    node.r[:]=i%3;node.lam_hat[:]=8.
+    for j in nbrs:node.cache.store(Heartbeat(j,1,tuple(np.full(nf,3.)),tuple(np.ones(nf)),tuple(np.full(nf,2.))),0)
+    nodes.append(node)
+  return PlasmaEngine(nodes,opts,np.random.default_rng(7))
+
+
+def test_route_all_cuda_preparation_keeps_admission_rng_order():
+  from plasma.gpu import route_all_cuda
+  cpu=routing_fixture();gpu=deepcopy(cpu)
+  for round_,load in ((0,8),(1,13)):
+    arrivals=np.full((12,5),load)
+    cpu._route_all(round_,arrivals)
+    with compute_session({'compute_device':'cuda'}):route_all_cuda(gpu,round_,arrivals)
+    assert cpu.msg_count==gpu.msg_count and cpu.rng.bit_generator.state==gpu.rng.bit_generator.state
+    for a,b in zip(cpu.nodes,gpu.nodes):
+      for key in ('_x','_z','_y','_xi','_phi','_pull','_admitted','_arrivals','_recv_from'):
+        np.testing.assert_array_equal(getattr(a,key),getattr(b,key))
+      assert a.rng.bit_generator.state==b.rng.bit_generator.state
