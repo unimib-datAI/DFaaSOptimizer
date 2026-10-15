@@ -167,3 +167,32 @@ def test_external_solver_never_receives_the_algorithm_time_limit():
   actual = solve_agent_problem(model, data, {'use_dp': True, 'TimeLimit': 30,
                                              'algorithm_time_limit': 5}, 'glpk')
   assert actual['termination_condition'] == 'optimal'
+
+
+def test_prepared_helpers_preserve_original_cpu_baseline():
+  import json
+  from pathlib import Path
+  from models import dp_solver, sp
+  from plasma.core.sbm import minimize_replica_costs
+  cases = json.loads((Path(__file__).parent / 'data/gpu_cpu_baseline.json').read_text())
+  for name, ram, expected in cases:
+    data = _data()
+    v = data[None]
+    v['memory_capacity'][2] = ram
+    v.update(y_bar={(m, 2, f): 0. for m in (1, 2, 3) for f in (1, 2)},
+             omega_bar={(2, 1): 3.000000000000004, (2, 2): 0.},
+             x_bar={(2, 1): 0, (2, 2): 1}, r_bar={(2, 1): 1, (2, 2): 1})
+    original = deepcopy(data)
+    model = getattr(sp, name)()
+    problem = dp_solver.prepare_local_problem(model, data)
+    actual = dp_solver.try_solve_local(model, data)
+    if actual is not None:
+      actual.pop('runtime')
+    assert actual == expected
+    if expected is not None:
+      choices = ([0] * len(problem.costs) if problem.direct else
+                 minimize_replica_costs(problem.costs, problem.memory, problem.ram_cap))
+      decoded = dp_solver.finish_local_solution(problem, choices, runtime=123)
+      assert decoded.pop('runtime') == 123
+      assert decoded == expected
+    assert data == original

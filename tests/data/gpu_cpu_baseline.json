@@ -1,0 +1,830 @@
+[
+  [
+    "LSP",
+    0,
+    {
+      "x": [
+        0,
+        0
+      ],
+      "r": [
+        0,
+        0
+      ],
+      "obj": -0.8,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        3,
+        2
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP",
+    4,
+    {
+      "x": [
+        3,
+        1
+      ],
+      "r": [
+        3,
+        1
+      ],
+      "obj": -4.45,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        0,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP",
+    20,
+    {
+      "x": [
+        3,
+        2
+      ],
+      "r": [
+        3,
+        2
+      ],
+      "obj": -5.0,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        0,
+        0
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_capped",
+    0,
+    {
+      "x": [
+        0,
+        0
+      ],
+      "r": [
+        0,
+        0
+      ],
+      "obj": -0.8,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        3,
+        2
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_capped",
+    4,
+    {
+      "x": [
+        3,
+        1
+      ],
+      "r": [
+        3,
+        1
+      ],
+      "obj": -4.45,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        0,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_capped",
+    20,
+    {
+      "x": [
+        3,
+        2
+      ],
+      "r": [
+        3,
+        2
+      ],
+      "obj": -5.0,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        0,
+        0
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_capped_fixedr",
+    0,
+    null
+  ],
+  [
+    "LSP_capped_fixedr",
+    4,
+    {
+      "x": [
+        1,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -2.3833333333333333,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        2,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_capped_fixedr",
+    20,
+    {
+      "x": [
+        1,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -2.3833333333333333,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        2,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_detailed",
+    0,
+    {
+      "x": [
+        0,
+        0
+      ],
+      "r": [
+        0,
+        0
+      ],
+      "obj": 6.0,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "y": [
+        0,
+        2,
+        0,
+        0,
+        3,
+        0
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_detailed",
+    4,
+    {
+      "x": [
+        3,
+        0
+      ],
+      "r": [
+        3,
+        0
+      ],
+      "obj": 8.0,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "y": [
+        0,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_detailed",
+    20,
+    {
+      "x": [
+        3,
+        0
+      ],
+      "r": [
+        3,
+        0
+      ],
+      "obj": 8.0,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "y": [
+        0,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_fixedr",
+    0,
+    null
+  ],
+  [
+    "LSP_fixedr",
+    4,
+    {
+      "x": [
+        1,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -2.3833333333333333,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        2,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_fixedr",
+    20,
+    {
+      "x": [
+        1,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -2.3833333333333333,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        2,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_fixedr_v0",
+    0,
+    null
+  ],
+  [
+    "LSP_fixedr_v0",
+    4,
+    {
+      "x": [
+        1,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -2.3833333333333333,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        2,
+        1
+      ]
+    }
+  ],
+  [
+    "LSP_fixedr_v0",
+    20,
+    {
+      "x": [
+        1,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -2.3833333333333333,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        2,
+        1
+      ]
+    }
+  ],
+  [
+    "LSP_pg",
+    0,
+    {
+      "x": [
+        0,
+        0
+      ],
+      "r": [
+        0,
+        0
+      ],
+      "obj": -0.8,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        3,
+        2
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_pg",
+    4,
+    {
+      "x": [
+        3,
+        1
+      ],
+      "r": [
+        3,
+        1
+      ],
+      "obj": -4.45,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        0,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_pg",
+    20,
+    {
+      "x": [
+        3,
+        2
+      ],
+      "r": [
+        3,
+        2
+      ],
+      "obj": -5.0,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        0,
+        0
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_pg_fixedr",
+    0,
+    null
+  ],
+  [
+    "LSP_pg_fixedr",
+    4,
+    {
+      "x": [
+        1,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -2.3833333333333333,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        2,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_pg_fixedr",
+    20,
+    {
+      "x": [
+        1,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -2.3833333333333333,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        2,
+        1
+      ],
+      "z": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSP_v0",
+    0,
+    {
+      "x": [
+        0,
+        0
+      ],
+      "r": [
+        0,
+        0
+      ],
+      "obj": -0.8,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        3,
+        2
+      ]
+    }
+  ],
+  [
+    "LSP_v0",
+    4,
+    {
+      "x": [
+        3,
+        1
+      ],
+      "r": [
+        3,
+        1
+      ],
+      "obj": -4.45,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        0,
+        1
+      ]
+    }
+  ],
+  [
+    "LSP_v0",
+    20,
+    {
+      "x": [
+        3,
+        2
+      ],
+      "r": [
+        3,
+        2
+      ],
+      "obj": -5.0,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "omega": [
+        0,
+        0
+      ]
+    }
+  ],
+  [
+    "LSPr",
+    0,
+    {
+      "x": [
+        0,
+        0
+      ],
+      "r": [
+        0,
+        0
+      ],
+      "obj": 0.09999999999999998,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "z": [
+        0,
+        2.0
+      ]
+    }
+  ],
+  [
+    "LSPr",
+    4,
+    {
+      "x": [
+        0,
+        2
+      ],
+      "r": [
+        0,
+        2
+      ],
+      "obj": -1.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "z": [
+        0,
+        0.0
+      ]
+    }
+  ],
+  [
+    "LSPr",
+    20,
+    {
+      "x": [
+        0,
+        2
+      ],
+      "r": [
+        0,
+        2
+      ],
+      "obj": -1.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "z": [
+        0,
+        0.0
+      ]
+    }
+  ],
+  [
+    "LSPr_fixedr",
+    0,
+    null
+  ],
+  [
+    "LSPr_fixedr",
+    4,
+    {
+      "x": [
+        0,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -0.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "z": [
+        0,
+        1.0
+      ]
+    }
+  ],
+  [
+    "LSPr_fixedr",
+    20,
+    {
+      "x": [
+        0,
+        1
+      ],
+      "r": [
+        1,
+        1
+      ],
+      "obj": -0.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "z": [
+        0,
+        1.0
+      ]
+    }
+  ],
+  [
+    "LSPr_v0",
+    0,
+    {
+      "x": [
+        0,
+        0
+      ],
+      "r": [
+        0,
+        0
+      ],
+      "obj": -0.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal"
+    }
+  ],
+  [
+    "LSPr_v0",
+    4,
+    {
+      "x": [
+        0,
+        2
+      ],
+      "r": [
+        0,
+        2
+      ],
+      "obj": -1.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal"
+    }
+  ],
+  [
+    "LSPr_v0",
+    20,
+    {
+      "x": [
+        0,
+        2
+      ],
+      "r": [
+        0,
+        2
+      ],
+      "obj": -1.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal"
+    }
+  ],
+  [
+    "LSPr_x",
+    0,
+    null
+  ],
+  [
+    "LSPr_x",
+    4,
+    {
+      "x": [
+        0,
+        1
+      ],
+      "r": [
+        0,
+        1
+      ],
+      "obj": -0.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "z": [
+        0,
+        1.0
+      ]
+    }
+  ],
+  [
+    "LSPr_x",
+    20,
+    {
+      "x": [
+        0,
+        1
+      ],
+      "r": [
+        0,
+        1
+      ],
+      "obj": -0.9,
+      "solver_status": "ok",
+      "solution_exists": true,
+      "termination_condition": "optimal",
+      "z": [
+        0,
+        1.0
+      ]
+    }
+  ]
+]

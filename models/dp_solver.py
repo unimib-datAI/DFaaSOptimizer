@@ -7,6 +7,7 @@ max_j beta[i,j,f] over outgoing neighbors, or offloading is disabled if isolated
 """
 from math import ceil, floor, isfinite, gcd
 from functools import reduce
+from dataclasses import dataclass
 
 import numpy as np
 import pyomo.environ as pyo
@@ -23,11 +24,24 @@ _SUPPORTED = {
 }
 
 
-def try_solve_local(model, data):
-  """Return an exact local solution, or None to retain the Pyomo solve path."""
+@dataclass
+class PreparedLocal:
+  costs: list
+  levels: list
+  memory: list
+  ram_cap: int
+  direct: bool
+  detailed: bool
+  restricted: bool
+  reject: bool
+  destinations: list
+  nn: int
+
+
+def prepare_local_problem(model, data):
+  """Prepare the original cost curves without solving or mutating inputs."""
   if type(model) not in _SUPPORTED or sp_models.PYO_VAR_TYPE is not pyo.NonNegativeIntegers:
     return None
-  started = step_time.now()
   name = model.name
   detailed = type(model) is sp_models.LSP_detailed
   restricted = name.startswith('LSPr')
@@ -161,23 +175,43 @@ def try_solve_local(model, data):
     if (any(a is None for a in chosen)
         or sum(a[3] * m for a, m in zip(chosen, memory)) > ram):
       return None
-    objective = sum(a[0] for a in costs)
-  else:
-    try:
-      replicas = minimize_replica_costs(costs, memory, ram)
-    except ValueError:
-      return None
-    chosen = [levels[f][r] for f, r in enumerate(replicas)]
-    objective = sum(costs[f][r] for f, r in enumerate(replicas))
+  return PreparedLocal(costs, levels, memory, ram, fixed_x or fixed_r,
+                       detailed, restricted, reject, destinations, v['Nn'][None])
+
+
+def finish_local_solution(problem, choices, *, runtime):
+  """Decode valid alternative indices using the common CPU flow reconstruction."""
+  chosen = [problem.levels[f][r] for f, r in enumerate(choices)]
+  objective = sum(problem.costs[f][r] for f, r in enumerate(choices))
+  detailed, restricted, reject = problem.detailed, problem.restricted, problem.reject
+  destinations, nf = problem.destinations, len(problem.costs)
   x, omega, z, r = map(list, zip(*chosen))
   result = dict(x=x, r=r, obj=objective, solver_status='ok', solution_exists=True,
-                termination_condition='optimal', runtime=step_time.now() - started)
+                termination_condition='optimal', runtime=runtime)
   if detailed:
     result['obj'] = -objective
     result['y'] = [omega[f] if j == destinations[f] else 0
-                   for j in range(1, v['Nn'][None] + 1) for f in range(nf)]
+                   for j in range(1, problem.nn + 1) for f in range(nf)]
   elif not restricted:
     result['omega'] = omega
   if reject:
     result['z'] = z
+  return result
+
+
+def try_solve_local(model, data):
+  """Return an exact local solution, or None to retain the Pyomo solve path."""
+  started = step_time.now()
+  problem = prepare_local_problem(model, data)
+  if problem is None:
+    return None
+  if problem.direct:
+    choices = [0] * len(problem.costs)
+  else:
+    try:
+      choices = minimize_replica_costs(problem.costs, problem.memory, problem.ram_cap)
+    except ValueError:
+      return None
+  result = finish_local_solution(problem, choices, runtime=0.)
+  result['runtime'] = step_time.now() - started
   return result
