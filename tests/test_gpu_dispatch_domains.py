@@ -7,6 +7,24 @@ from madea2 import start_replicas_by_value
 from utils.compute_backend import compute_session
 from test_dual_helpers import make_data
 
+
+@pytest.mark.parametrize('dtype', [np.float16, np.float32, np.longdouble])
+@pytest.mark.parametrize('parameter', ['demand', 'alpha', 'incoming_load'])
+def test_local_numeric_unsupported_precision_never_initializes_cuda(dtype, parameter, monkeypatch):
+  from models import local_numeric_gpu, sp
+  from test_gpu_local_numeric import fixtures
+  batch = fixtures()
+  for data in batch:
+    node = data[None]['whoami'][None]
+    data[None][parameter][node, 1] = dtype(data[None][parameter][node, 1])
+  def forbidden():
+    pytest.fail('unsupported scalar precision reached CUDA')
+  monkeypatch.setattr(local_numeric_gpu, '_kernels', forbidden)
+  with compute_session({'compute_device': 'cuda'}) as coverage:
+    result = local_numeric_gpu.try_solve_local_batch_cuda(sp.LSP(), batch)
+  assert result == [None] * len(batch)
+  assert any(row['backend'] == 'cpu' and 'dtype' in row['reason'] for row in coverage)
+
 @pytest.mark.parametrize('domain', ['arrays', 'parameters', 'mixed_parameters'])
 def test_residual_unsupported_dtypes_preserve_cpu_threshold(domain, monkeypatch):
   from models import numeric_gpu

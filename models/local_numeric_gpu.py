@@ -127,10 +127,17 @@ def try_solve_local_batch_cuda(model,data_batch):
   from utils import step_time
   step_time.mark_shared_device()
   parsed=[_prepare_local_parameters(model,d) for d in data_batch]
+  for i, problem in enumerate(parsed):
+    # NumPy scalar arithmetic keeps its precision on CPU. Promoting a float32
+    # capacity here can change floor/ceil decisions, even with float64 kernels.
+    if problem is not None and any(
+        isinstance(value, np.floating) and value.dtype != np.dtype('float64')
+        for row in problem[1] for value in row):
+      parsed[i] = None
   result=[None]*len(parsed)
   if sum(p is not None for p in parsed)<2:
     from utils.compute_backend import record_operation
-    record_operation('local_numeric','cpu',len(parsed),reason='fewer than two eligible problems')
+    record_operation('local_numeric','cpu',len(parsed),reason='fewer than two eligible problems (unsupported data/dtype excluded)')
     return result
   # A model fixes direct/non-direct; retain input order and bounded padded chunks.
   chunk,indices,shape=[],[],(0,0,0)
@@ -155,5 +162,5 @@ def try_solve_local_batch_cuda(model,data_batch):
   from utils.compute_backend import record_operation
   unsupported=sum(p is None or max(_shape(p))>_INT_MAX or _bytes(1,*_shape(p))>_MAX_DEVICE_BYTES for p in parsed)
   if unsupported:
-    record_operation('local_numeric','cpu',unsupported,reason='unsupported data or buffer/index limits')
+    record_operation('local_numeric','cpu',unsupported,reason='unsupported data/dtype or buffer/index limits')
   return result

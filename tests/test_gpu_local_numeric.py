@@ -112,3 +112,41 @@ def test_small_new_curve_batch_uses_existing_dispatch(monkeypatch):
   options={'use_dp':True,'dp_device':'cuda','compute_device':'cuda'}
   with compute_session(options):
     assert len(solve_agent_batch(fixtures()[0],[2,0,1],sp.LSP(),options,'missing_solver'))==3
+
+
+@pytest.mark.parametrize('mixed', [False, True])
+def test_float32_capacity_preserves_cpu_decision_in_public_batch(mixed):
+  from models.local_sp import solve_agent_batch
+  from utils.compute_backend import compute_session
+  n = 30
+  values = {
+    'Nn': {None: n}, 'Nf': {None: 1}, 'whoami': {None: 1},
+    'incoming_load': {(i, 1): 7 for i in range(1, n + 1)},
+    'demand': {(i, 1): np.float32(.3) for i in range(1, n + 1)},
+    'max_utilization': {1: np.float32(.7)}, 'memory_requirement': {1: 1},
+    'memory_capacity': {i: 3 for i in range(1, n + 1)},
+    'alpha': {(i, 1): 1. for i in range(1, n + 1)},
+    'delta': {(i, 1): 0. for i in range(1, n + 1)},
+    'gamma': {(i, 1): 0. for i in range(1, n + 1)},
+  }
+  if mixed:
+    # Python float / float32 still uses float32 arithmetic under NumPy 2.
+    values['max_utilization'][1] = .7
+    for i in (2, 17):
+      values['demand'][i, 1] = .3
+  data = {None: values}
+  original = deepcopy(data)
+  model = sp.LSP()
+  assert try_solve_local(model, data)['x'] == [7]
+  options = {'use_dp': True, 'dp_device': 'cuda', 'compute_device': 'cuda'}
+  with compute_session(options) as coverage:
+    result = solve_agent_batch(data, list(reversed(range(n))), model, options, 'missing_solver')
+  assert list(result) == list(reversed(range(n)))
+  for solution in result.values():
+    assert solution['x'] == [7]
+    assert solution['r'] == [3]
+    assert solution['z'] == [0]
+    assert solution['obj'] == -1.
+  assert data == original
+  assert sum(row['count'] for row in coverage if row['backend'] == 'cuda') == (2 if mixed else 0)
+  assert any(row['backend'] == 'cpu' and 'dtype' in row['reason'] for row in coverage)
