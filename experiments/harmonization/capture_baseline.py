@@ -51,6 +51,7 @@ def centralized(config, parallelism=0, log_on_file=False, disable_plotting=False
 
 def baseline_runners() -> dict:
   """Harmonized methods, the excluded ones by their current entry points, and centralized."""
+  from methods import SEQUENTIAL_METHODS
   import decentralized_bestresponse as br
   import decentralized_potentialgame as pg
   import hierarchical_frankwolfe as hfw
@@ -68,7 +69,7 @@ def baseline_runners() -> dict:
     "hierarchical-madea-level-cycles-pg": madea_pg.run_hierarchical,
     "hierarchical-one-shot-pg": one_shot_pg.run_hierarchical,
   }
-  return {**runners(), **excluded, "centralized": centralized}
+  return {**runners(), **excluded, **SEQUENTIAL_METHODS, "centralized": centralized}
 
 
 def config_for(instance: Path, out: Path, steps: int = 2) -> dict:

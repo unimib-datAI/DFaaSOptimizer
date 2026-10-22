@@ -31,7 +31,7 @@ PAYLOAD_FILES = (
 
 def generation_spec(experiment: Experiment) -> dict:
   config = experiment.config
-  return {
+  spec = {
     "generation_seed": config.get("instance_seed", experiment.seed),
     "limits": config["limits"],
     "max_steps": config["max_steps"],
@@ -39,6 +39,10 @@ def generation_spec(experiment: Experiment) -> dict:
     "max_run_time": config.get("max_run_time", config["max_steps"]),
     "run_time_step": config.get("run_time_step", 1),
   }
+  if (config["limits"].get("instance_type", "random") == "random"
+      or "weights" in config["limits"]):
+    spec["weight_generation"] = "paper-delta-mean-v1"
+  return spec
 
 
 def instance_id(experiment: Experiment) -> str:

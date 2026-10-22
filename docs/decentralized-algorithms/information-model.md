@@ -94,3 +94,35 @@ locale, quindi non vengono filtrate con il residuo MADEA. I wrapper PG che
 eseguono un ciclo MADEA ereditano invece la conferma di quel ciclo.
 Richieste vive verso più venditori possono ancora creare capacità invenduta;
 la conferma non prova convergenza universale e non cambia stop o budget.
+
+## Varianti selective (21/10/2026)
+
+`MADEA-selective` e `MADEA-one-shot-selective` usano LSP_detailed all'inizio e
+mantengono x fisso. Le offerte di capacità restano quelle originali. Dopo l'asta,
+il compratore conferma il residuo e seleziona un solo destinatario per funzione
+tra le richieste di memoria candidate, usando beta propri, prezzi e latenza già
+noti. Il venditore riceve soltanto `(i,j,f)`: nessuna quantità residua o utilità
+privata è aggiunta. L'identità del destinatario è naturalmente osservabile.
+
+I tentativi successivi esplorano gli altri candidati; il conteggio riparte al
+cambiare del residuo e a ogni passo temporale. Gli stop per stallo possono essere
+rinviati finché restano candidati, mai oltre i budget. One-shot-selective conferma
+e gestisce le richieste residue anche dopo un'asta di capacità, mantenendo la sua
+regola di accettazione senza rimpiazzare assegnazioni precedenti. La riduzione dei
+messaggi per round non garantisce una riduzione del totale, da misurare.
+
+## Greedy-RR (21/10/2026)
+
+Metodo senza aste. Il mittente sceglie il vicino usando le proprie beta e la
+capacità annunciata, e invia `(i,j,f,quantità)`. Il destinatario usa solo queste
+richieste e la propria capacità, con accettazione round-robin; non legge beta,
+gamma o alpha dei mittenti. Per le repliche riceve solo `(i,j,f)` e conta i vicini
+richiedenti per funzione; domanda computazionale, RAM e repliche usate nella
+scelta sono locali al destinatario. Nessun prezzo viene scambiato.
+
+Il ruolo mittente/ricevente per funzione è fissato localmente all'inizio del
+passo: un mittente annuncia capacità ricevente zero e rifiuta richieste di memoria
+per la stessa funzione, senza pubblicare un nuovo campo di ruolo. Le conferme
+riguardano solo traffico realmente accettato. Si mantengono x di LSP_detailed e
+flussi già accettati; il budget limita i round. Questa regola può sprecare alcune
+opportunità di scambio, ma previene il ping-pong per costruzione.

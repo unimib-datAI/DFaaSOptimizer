@@ -18,7 +18,8 @@ BASELINE = json.loads((ROOT / "tests/data/harmonization/baseline.json").read_tex
 
 
 def test_registry_covers_the_baseline_and_excludes_sequential_methods():
-  assert set(methods.HARMONIZED) == set(BASELINE)
+  assert set(methods.HARMONIZED) == set(BASELINE) | {"MADEA-detailed", "MADEA-one-shot-detailed",
+                                                     "MADEA-selective", "MADEA-one-shot-selective", "Greedy-RR"}
   assert {"FaaS-MAPG-S", "FaaS-MAPG-R", "faas-br-s", "MADEA-PG", "MAFW-PG"} <= set(methods.EXCLUDED)
   assert not set(methods.HARMONIZED) & set(methods.EXCLUDED)
   for name, runner in methods.HARMONIZED.items():
@@ -36,7 +37,7 @@ def test_benchmark_summary_reads_the_new_format(tmp_path):
 from capture_baseline import DATA, config_for, welfare  # noqa: E402
 
 INSTANCES = sorted(p for p in DATA.iterdir() if (p / "metadata.json").exists())
-NAMES = sorted(methods.HARMONIZED)
+NAMES = sorted(BASELINE)  # historical numerical baselines; detailed variants have their own tests
 
 
 def run_folder(name, instance, parallelism, tmp, **general):

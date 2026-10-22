@@ -259,6 +259,102 @@ Each productive iteration spends at least one indivisible token, so the finite
 initial token budget bounds repetition without an extra convergence threshold.
 The external no-progress stopping rule above applies to both cycle variants.
 
+### Detailed local initialization variants
+
+The method registry exposes `MADEA-detailed` and `MADEA-one-shot-detailed` in
+`HARMONIZED`, and `FaaS-MAPG-R-detailed` in `SEQUENTIAL_METHODS` (explicit selection).
+They select `detailed_init=True` in the corresponding runner. Original entry
+points keep their existing LSP initialization by default.
+
+Only initialization changes to `LSP_detailed`. It uses the node's own outgoing
+beta values and known neighbors, without knowing destination capacities. The
+existing solution merger computes omega as the sum of proposed y; the auction
+starts with zero accepted flows. MADEA/one-shot preserve the initial x, whereas
+PG-R keeps its existing LSP_pg proposals (including delta), inbound commitments,
+capacity caps and beta-aware utility acceptance. PG-R does not guarantee a floor
+on alpha*x simply by sharing the same initialization.
+
+The variants record distinct algorithm names and `local_reference: LSP_detailed`
+in config.json and use distinct objective-column labels. Batched local solves
+support the existing `use_dp: true`, `dp_device: cuda` path and optional
+`compute_device: cuda`; PG sweeps remain sequential. `opt_solution_folder` is
+rejected because a detailed fixed-replica initializer is not implemented.
+
+### Greedy-RR: coordination without auctions
+
+`Greedy-RR` is a separate harmonized method (`decentralized_greedy_rr.run`), not an
+auction variant. Each step starts with LSP_detailed, fixes local x, and discards
+its unaccepted offload proposals. Each node/function with residual load is a
+sender for the whole step: it advertises zero receiving capacity and rejects
+memory requests for that function. This conservative role assignment prevents
+no-ping-pong violations, but may exclude otherwise feasible allocations.
+
+Each round proceeds as follows:
+
+1. A sender requests service from its highest-beta outgoing neighbor with free
+   integer capacity (ties by node ID), up to its own residual load and the
+   advertised capacity. The message is `(i,j,f,quantity)`, without prices or
+   private utility values.
+2. Each receiver/function allocates capacity in round-robin request-sized turns
+   among its senders. A local cursor persists across rounds; complete turns are
+   batched arithmetically to avoid looping over large request counts. Accepted
+   traffic is never displaced.
+3. Remaining demand generates ordinary `(i,j,f)` memory requests to neighbors
+   advertising free RAM. Each receiver counts distinct requesters, prioritizes
+   the most requested function (ties by function ID), and opens one smallest
+   useful replica batch that fits. Unaffordable functions and functions for
+   which it is a sender are skipped. Demand is re-evaluated next round.
+
+Stop on no progress, exhausted iteration/time budget or fully assigned load;
+residual requests go to the cloud. The final solution keeps the detailed local
+processing reference and is eligible for the usual selfish-centralized warm-start
+validation. The method currently supports integer flows and rejects fixed-replica
+`opt_solution_folder` mode. Initialization uses the existing CPU/CUDA local DP
+backend; coordination is CPU sender/receiver-local work. No welfare-optimality or
+runtime advantage over the other methods is assumed. This method is selectable
+through the registry/harness and is not automatically added to existing campaigns.
+
+### Selective memory requests
+
+`MADEA-selective` and `MADEA-one-shot-selective` initialize with `LSP_detailed`
+and preserve that local x, like the corresponding `-detailed` variants. After
+capacity bidding, each sender confirms its remaining demand and sends at most
+one memory request per function. Among the existing candidates it chooses the
+highest own beta minus the advertised price and latency penalty (ties by node ID).
+The transmitted request still contains only `(i,j,f)`; neither beta, gamma nor
+residual quantities are added to memory messages.
+
+A sender tries unvisited candidates on later rounds while its residual demand
+is unchanged. Changed demand resets that pair's attempts; each physical step
+starts fresh. If another candidate remains, soft stops such as a plateau or no
+capacity are deferred, but iteration and time budgets still apply. Exhausting
+candidates does not certify that no better allocation exists.
+
+The one-shot variant also processes confirmed memory requests after a capacity
+auction with unmet demand, while retaining one-shot acceptance (no replacement
+of previous assignments). Original and `-detailed` runners are unchanged unless
+`selective_memory=True` is explicitly selected. Config artifacts record the
+variant name, `local_reference: LSP_detailed`, and `memory_requests: selective`.
+The local initializer retains CUDA support; selection runs on CPU as independent
+sender-local work. Fewer requests per round do not guarantee fewer total rounds
+or messages, nor higher welfare.
+
+### Reusing unchanged one-shot restricted solutions
+
+All flat one-shot variants (original, detailed, selective, MADEA2, MADEA2-b and
+their PG refinements) and the hierarchical one-shot runners reuse the last optimal
+restricted solution when both accepted flows and offloaded totals are unchanged.
+The cache belongs to one physical step with fixed local x and input data. It
+copies arrays to isolate tentative replicas, retries nonoptimal solves, and is
+invalidated by changed flows, including higher-level hierarchical allocations.
+Cache hits report zero solver time; comparison and copying still count as work.
+
+This saves repeated computation without changing auction rules or messages.
+With a binding time budget, the saved work can allow more rounds or PG moves,
+so final results need not match a slower run stopped by its time limit. Existing
+remote runs keep their provisioned code; the optimization takes effect on the
+next campaign provisioning.
+
 ### MADEA-PG: auction initialization and welfare refinement
 
 Local optimization uses the configured Pyomo solver by default. Enable the
@@ -920,8 +1016,10 @@ generate the value of each parameter as follows:
 interval.
 - the values of the parameters `beta` are generated multiplying `alpha` by a 
 `beta_multiplier`, extracted uniformly at random from a `[min,max]` interval.
-- the values of the parameters `delta` are generated multiplying `beta` by a 
-`delta_multiplier`, extracted uniformly at random from a `[min,max]` interval.
+- `beta[i,i,f]` is zero and `delta[i,f]` is the mean of `beta[i,j,f]` over
+all N nodes, including the zero self-entry (the paper's 25.11.22 convention).
+Legacy `delta_multiplier` draws are retained only to preserve the random-number
+stream; their values no longer scale delta.
 - the `gamma` values are extracted uniformly at random from a `[min,max]` 
 interval.
 
@@ -979,7 +1077,12 @@ generated in a `[min,max]` interval (for `edge_network_latency` and
 `edge_bandwidth`), and from a truncated normal distribution with the 
 provided mean and standard deviation (for `input_data`). The resulting value 
 is normalized between 0 and 1.
-- `delta` is the average of `beta` over all receiving nodes.
+- `delta` is the average of `beta` over all N nodes, including the zero self-entry.
+Both weight-generation modes use `generators.generate_data.offload_gain_mean`.
+Any code that changes beta afterwards (for example a latency-based catalogue
+variant) must call this function again before saving the instance.
+Newly generated materialized instances carry `weight_generation: paper-delta-mean-v1`
+in their generation metadata so that old cached instances are not reused silently.
 - `gamma` is generated as 
 `cloud_network_latency + input_data / cloud_bandwidth`.
 

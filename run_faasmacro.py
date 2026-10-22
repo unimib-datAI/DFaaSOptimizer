@@ -292,6 +292,29 @@ def compute_lower_bound(
   return (sp_obj - highest_cost)
 
 
+def cache_fixed_welfare(solve):
+  """Cache the last optimal solve(y, omega) for one step with fixed data and x.
+
+  Create a new wrapper whenever the local problem changes. Copy both the key
+  and the solution: auction rounds mutate flows and tentative replica counts.
+  """
+  cached = None
+
+  def evaluate(y, omega):
+    nonlocal cached
+    if (cached is not None and np.array_equal(y, cached[0])
+        and np.array_equal(omega, cached[1])):
+      solution, objective, condition = deepcopy(cached[2])
+      return solution, objective, condition, 0.0
+    cached = None
+    result = solve(y, omega)
+    if set(str(result[2]).split('-')) == {'optimal'}:
+      cached = (y.copy(), omega.copy(), deepcopy(result[:3]))
+    return result
+
+  return evaluate
+
+
 def compute_social_welfare(
     spr: SPAbstractModel,
     data: dict, 

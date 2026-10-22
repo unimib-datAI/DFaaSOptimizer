@@ -31,6 +31,7 @@ from run_faasmacro import (
   combine_solutions,
   compute_centralized_objective,
   compute_social_welfare,
+  cache_fixed_welfare,
   solve_subproblem,
 )
 from utils.common import load_configuration
@@ -150,6 +151,10 @@ def _solve_step(ctx, t: int, data: dict, *, engine_class, auction_options: dict,
   ) = solve_subproblem(
     sp_data, ctx.agents, sp, ctx.solver_name, ctx.general_options, ctx.parallelism,
   )
+  welfare = cache_fixed_welfare(lambda y, omega: compute_social_welfare(
+    spr, sp_data, ctx.agents, ctx.solver_name, ctx.general_options,
+    y, omega, ctx.parallelism, sp_x,
+  ))
 
   it = 0
   stop_searching = False
@@ -204,10 +209,7 @@ def _solve_step(ctx, t: int, data: dict, *, engine_class, auction_options: dict,
       rmp_omega = compute_offloaded_demand(y)
       fairness += (rmp_omega > 0).astype(fairness.dtype)
 
-      spr_sol, _spr_obj, _spr_tc, spr_runtime = compute_social_welfare(
-        spr, sp_data, ctx.agents, ctx.solver_name, ctx.general_options,
-        y, rmp_omega, ctx.parallelism, sp_x
-      )
+      spr_sol, _spr_obj, _spr_tc, spr_runtime = welfare(y, rmp_omega)
 
       # sp_x = spr_sol[0]
       sp_r = spr_sol[4]
@@ -236,10 +238,7 @@ def _solve_step(ctx, t: int, data: dict, *, engine_class, auction_options: dict,
     rmp_omega = compute_offloaded_demand(y)
 
     if result.accepted_allocations:
-      spr_sol, _spr_obj, _spr_tc, spr_runtime = compute_social_welfare(
-        spr, sp_data, ctx.agents, ctx.solver_name, ctx.general_options,
-        y, rmp_omega, ctx.parallelism, sp_x
-      )
+      spr_sol, _spr_obj, _spr_tc, spr_runtime = welfare(y, rmp_omega)
 
       # sp_x = spr_sol[0]
       sp_r = spr_sol[4]

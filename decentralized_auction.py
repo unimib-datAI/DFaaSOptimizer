@@ -2,6 +2,7 @@ from run_faasmacro import (
   parallel_solver_run,
   compute_centralized_objective,
   compute_social_welfare,
+  cache_fixed_welfare,
   combine_solutions,
   solve_subproblem
 )
@@ -12,11 +13,12 @@ from run_faasmadea import (
   evaluate_bids,  # noqa: F401 (default rules, resolved at call time)
   neigh_dict_to_matrix,  # noqa: F401 (re-exported: hierarchical_auction.runner)
   RULE_NAMES,
+  confirm_memory_bid_batch,
   relative_objective_gap,
   start_additional_replicas,  # noqa: F401 (default rules, resolved at call time)
 )
 from utils.common import load_configuration
-from models.sp import LSP, LSPr_x
+from models.sp import LSP_detailed, LSP, LSPr_x
 
 from collections import deque
 from functools import partial
@@ -26,7 +28,8 @@ import pandas as pd
 import numpy as np
 import argparse
 import os
-from utils import run_frame, run_log, step_time
+from utils import communication, run_frame, run_log, step_time
+from utils.selective_memory import SelectiveMemory
 
 log = run_log.logger(__name__)
 
@@ -69,29 +72,42 @@ def run(
     log_on_file: bool = False,
     disable_plotting: bool = False,
     *, refine_welfare: bool = False, rules: dict | None = None,
+    detailed_init: bool = False, selective_memory: bool = False,
   ):
   # local rules (define_bids, evaluate_bids, start_additional_replicas): MADEA's by default
+  if config.get('communication_metrics', False) and (refine_welfare or rules is not None):
+    raise ValueError('communication metrics unsupported for refinement or custom rules')
   rules = rules if rules is not None else {name: globals()[name] for name in RULE_NAMES}
+  if selective_memory:
+    detailed_init = True
+  method = "MADEA-one-shot-selective" if selective_memory else "MADEA-one-shot-detailed"
+  if detailed_init:
+    if "opt_solution_folder" in config:
+      raise ValueError("LSP_detailed initialization does not support opt_solution_folder")
+    config = {**config, "algorithm": method, "local_reference": "LSP_detailed"}
+  if selective_memory:
+    config = {**config, "memory_requests": "selective"}
   refinement = []  # refinement.csv rows of the whole run (PG)
   folder = run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="One-shot-PG" if refine_welfare else "FaaS-MADeA(1s)", outputs=run_frame.LSP_OUTPUTS,
-    solve_step=partial(_solve_step, rules=rules, refinement=refinement if refine_welfare else None),
+    method=method if detailed_init else "One-shot-PG" if refine_welfare else "FaaS-MADeA(1s)", outputs=run_frame.LSP_OUTPUTS,
+    solve_step=partial(_solve_step, rules=rules, detailed_init=detailed_init, selective_memory=selective_memory, refinement=refinement if refine_welfare else None),
   )
   if refine_welfare:
     pd.DataFrame(refinement).to_csv(os.path.join(folder, "refinement.csv"), index=False)
   return folder
 
 
-def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_frame.StepResult:
+def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement, detailed_init=False, selective_memory=False) -> run_frame.StepResult:
   """One-shot auction rounds (a fixed reference is not used); with ``refinement``
   (PG) the bounded potential-game refinement of the centralized incumbent."""
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
+  memory_selector = SelectiveMemory() if selective_memory else None
   auction_options = ctx.solver_options["auction"]
   loadt = data[None]["incoming_load"]
   started_at = step_time.now()
   # -- solve subproblem
-  sp = LSP()
+  sp = LSP_detailed() if detailed_init else LSP()
   spr = LSPr_x()
   sp_data = deepcopy(data)
   (
@@ -99,6 +115,10 @@ def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_fram
   ) = solve_subproblem(
     sp_data, ctx.agents, sp, ctx.solver_name, ctx.general_options, ctx.parallelism
   )
+  welfare = cache_fixed_welfare(lambda y, omega: compute_social_welfare(
+    spr, sp_data, ctx.agents, ctx.solver_name, ctx.general_options,
+    y, omega, ctx.parallelism, sp_x,
+  ))
   with step_time.untimed():
     log.debug("    sp: DONE  (%s; obj = %s; runtime = %s)", tc["tot"], obj["tot"], sp_runtime["tot"])
   # define target operating point and initial prices
@@ -120,6 +140,8 @@ def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_fram
   fairness = np.zeros((Nn,Nf))
   odev_queue = deque(maxlen=ctx.config.get("patience", 1))
   while not stop_searching:
+    communication.begin_round(it)
+    communication.announce(ctx.neighborhood, Nf)
     with step_time.untimed():
       log.info("    it = %s", it)
     # compute residual computational capacity
@@ -159,6 +181,7 @@ def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_fram
     # sellers accept/reject bids
     a = np.zeros((Nn,Nf))
     if len(bids) > 0:
+      communication.requests('capacity_request', bids)
       s = step_time.now()
       auction_y, p, _, _ = rules["evaluate_bids"](
         bids,
@@ -177,6 +200,7 @@ def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_fram
       with step_time.untimed():
         log.debug("        evaluate_bids: DONE; runtime = %s)", e - s)
       # update effective load, number of replicas and fairness matrix
+      communication.capacity_replies(bids, auction_y)
       y += auction_y
       rmp_omega = np.zeros((Nn,Nf))
       for n in range(Nn):
@@ -185,17 +209,7 @@ def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_fram
           if rmp_omega[n,f] > 0:
             fairness[n,f] += 1
       # -- solve "restricted problem"
-      spr_sol, spr_obj, spr_tc, spr_runtime = compute_social_welfare(
-        spr,
-        sp_data,
-        ctx.agents,
-        ctx.solver_name,
-        ctx.general_options,
-        y,
-        rmp_omega,
-        ctx.parallelism,
-        sp_x
-      )
+      spr_sol, spr_obj, spr_tc, spr_runtime = welfare(y, rmp_omega)
       with step_time.untimed():
         log.debug(
           "        solve 'restricted problem': DONE (%s; obj: %s; runtime = %s)",
@@ -214,8 +228,13 @@ def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_fram
             "        solution updated: DONE (auct_y = %s; omega = %s; x: %s; r = %s; rho = %s)",
             auction_y.tolist(), omega.tolist(), sp_x.tolist(), sp_r.tolist(), sp_rho.tolist(),
           )
-    else:
+    if len(bids) == 0 or memory_selector is not None:
+      if memory_selector is not None:
+        with step_time.parallel_phase():
+          memory_bids = confirm_memory_bid_batch(memory_bids, omega, tolerance=tolerance)
+        memory_bids = memory_selector.select(memory_bids, omega, p, sp_data, ctx.latency, auction_options)
       # tentatively start additional replicas
+      communication.requests('memory_request', memory_bids)
       s = step_time.now()
       a, sp_rho = rules["start_additional_replicas"](
         memory_bids, sp_r, sp_data, sp_rho
@@ -271,6 +290,8 @@ def _solve_step(ctx, t: int, data: dict, *, rules: dict, refinement) -> run_fram
       time_limit = ctx.time_limit,
       plateau_tolerance = ctx.config.get("plateau_tolerance")
     )
+    if memory_selector is not None and memory_selector.retry(it, ctx.max_iterations, total_runtime, ctx.time_limit):
+      stop_searching, why_stop_searching = False, None
     e = step_time.now()
     with step_time.untimed():
       log.debug(

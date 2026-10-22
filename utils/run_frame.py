@@ -23,7 +23,7 @@ from functools import cached_property
 
 import pandas as pd
 
-from utils import run_log, step_time
+from utils import communication, run_log, step_time
 from utils.compute_backend import compute_session
 from utils.common import checkpoint_due, run_steps, run_timestamp
 
@@ -158,10 +158,12 @@ def run(config: dict, parallelism: int, *, log_on_file: bool, disable_plotting: 
         solve_step, outputs: dict) -> str:
   from run_centralized_model import get_current_load, init_complete_solution, save_checkpoint, update_data
   from utils.centralized import check_feasibility, decode_solution
-  with open_context(config, parallelism, log_on_file=log_on_file) as ctx:
+  with open_context(config, parallelism, log_on_file=log_on_file) as ctx, \
+      communication.session(config.get('communication_metrics', False), method, ctx.folder):
     ctx.complete = {name: init_complete_solution() for name in outputs}
     terminations, rows, centralized = [], [], False
     for t in ctx.steps:
+      communication.begin_step(t)
       log.info("t = %d", t)
       data = update_data(ctx.base_data, {"incoming_load": get_current_load(ctx.traces, ctx.agents, t)})
       clock = step_time.start_step()
@@ -190,6 +192,7 @@ def run(config: dict, parallelism: int, *, log_on_file: bool, disable_plotting: 
       terminations.append(result.termination)
       log.info("    TOTAL RUNTIME [s] = %s (wallclock: %s)", row["algorithm_s"], row["wall_s"])
     _write_outputs(ctx, outputs, method, terminations, rows, disable_plotting, centralized)
+    communication.finish()
     log.info("All solutions saved in: %s", ctx.folder)
     return ctx.folder
 

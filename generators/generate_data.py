@@ -312,6 +312,17 @@ def generate_neighborhood(
   return neighborhood, graph
 
 
+def offload_gain_mean(beta: np.ndarray) -> np.ndarray:
+  """Zero self-forwarding rewards in-place, then average over all N nodes.
+
+  Call again after any transformation of beta, before serializing an instance.
+  This is the delta convention used by the paper's 25.11.22 generator.
+  """
+  nodes = np.arange(beta.shape[0])
+  beta[nodes, nodes, :] = 0.
+  return beta.mean(axis=1)
+
+
 def generate_weights(
     Nn: int, Nf: int, limits: dict, rng: np.random.Generator, graph: nx.Graph
   ) -> Tuple[list, np.array, np.array, np.array]:
@@ -460,7 +471,10 @@ def generate_weights(
       gamma[Nn - 1,f] = (
         0.0 if gamma_range == 0 else (gamma[Nn - 1,f] - min_g) / gamma_range
       )
-    delta = beta.mean(axis = 1)
+  # Keep the historical delta_multiplier draws above to preserve the RNG stream:
+  # changing it would also change subsequent beta/gamma and resource samples.
+  # The final delta always derives from the final beta, without that multiplier.
+  delta = offload_gain_mean(beta)
   return alpha, beta, gamma, delta
 
 

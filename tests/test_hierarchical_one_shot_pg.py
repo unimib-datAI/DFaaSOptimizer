@@ -25,7 +25,7 @@ def test_hierarchical_pg_preserves_incumbent_and_accepts_without_global_observer
   config = json.loads((Path(__file__).resolve().parents[1] /
                        'experiments/madea_pg_compact/config.json').read_text())
   config.update(seed=7, max_steps=2, max_run_time=2, run_time_step=1,
-                verbose=0, checkpoint_interval=1, solver_name='glpk',
+                verbose=0, checkpoint_interval=1, solver_name='appsi_highs',
                 max_hierarchy_depth=3, base_solution_folder=str(tmp_path / 'runs'))
   config['solver_options']['general']['algorithm_time_limit'] = 30  # modelled-time budget
   config['limits']['Nn'] = {'min': 10, 'max': 10}
@@ -112,6 +112,7 @@ def test_new_replicas_are_auctioned_before_stopping_with_disabled_pg(tmp_path):
   data[None]['incoming_load'] = {(1, 1): 5, (2, 1): 0}
   data[None]['memory_capacity'][1] = 0
   config = _materialized_config(tmp_path, data)
+  config['solver_name'] = 'appsi_highs'
   config['max_hierarchy_depth'] = 1
   config['solver_options'] = {'madea_pg': {'time_limit': 0}}
   folder = Path(run_hierarchical(config, 0, log_on_file=True, disable_plotting=True))
@@ -132,7 +133,7 @@ def test_hierarchy_stops_stalled_rounds_but_preserves_price_progress_and_pg_time
   config = json.loads((Path(__file__).resolve().parents[1] /
                        'experiments/madea_pg_compact/config.json').read_text())
   config.update(seed=7, max_steps=1, max_run_time=1, run_time_step=1,
-                checkpoint_interval=1, solver_name='glpk', max_iterations=10,
+                checkpoint_interval=1, solver_name='appsi_highs', max_iterations=10,
                 base_solution_folder=str(tmp_path / 'runs'))
   config['solver_options']['general']['algorithm_time_limit'] = 30  # modelled-time budget
   config['limits']['Nn'] = {'min': 40, 'max': 40}

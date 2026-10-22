@@ -14,7 +14,7 @@ from utils.faasmacro import (
   relative_objective_gap
 )
 from utils.common import load_configuration
-from models.sp import LSP, LSP_fixedr, LSPr_x
+from models.sp import LSP_detailed, LSP, LSP_fixedr, LSPr_x
 from models.model import PYO_VAR_TYPE
 
 from collections import deque
@@ -26,6 +26,8 @@ import numpy as np
 import argparse
 import os
 from utils import run_frame, run_log, step_time
+from utils.selective_memory import SelectiveMemory
+from utils import communication
 
 log = run_log.logger(__name__)
 
@@ -690,6 +692,7 @@ def run_madea_cycle(
     state: MadeaState, *, sp_x, sp_omega, sp_data, data, agents, loadt,
     neighborhood, latency, config, auction_options, parallelism,
     started_at, auction_time_limit=None, rules: dict | None = None,
+    memory_selector=None,
   ) -> MadeaState:
   """Run the production MADEA loop to its actual stopping criterion.
 
@@ -731,6 +734,10 @@ def run_madea_cycle(
   odev_queue = deque(maxlen=patience)
   cached_welfare = None
   while not stop_searching:
+    communication.begin_round(state.iterations + it)
+    communication.announce(neighborhood, Nf)
+    if memory_selector is not None:
+      memory_selector.pending = False
     with step_time.untimed():
       log.info("    it = %s", it)
     # compute residual computational capacity
@@ -776,6 +783,7 @@ def run_madea_cycle(
     rmp_omega = np.zeros((Nn,Nf))
     additional_replicas = np.zeros((Nn,Nf))
     if len(bids) > 0:
+      communication.requests('capacity_request', bids)
       s = step_time.now()
       auction_y, p, additional_replicas, n_auctions = rules["evaluate_bids"](
         bids,
@@ -801,6 +809,7 @@ def run_madea_cycle(
           rt / max(n_auctions, 1), n_auctions, rt,
         )
       # update effective load, number of replicas and fairness matrix
+      communication.capacity_replies(bids, auction_y)
       y += auction_y
       rmp_omega = compute_offloaded_demand(y)
       fairness += (rmp_omega > 0).astype(fairness.dtype)
@@ -855,7 +864,13 @@ def run_madea_cycle(
     if len(memory_candidates) > 0:
       with step_time.parallel_phase():
         memory_bids = confirm_memory_bid_batch(memory_candidates, omega, tolerance=tolerance, confirm=confirm_memory_bids)
+    if memory_selector is not None:
+      # Observe residual changes even when the capacity auction already opened
+      # replicas; in that case do not mark any unsent request as attempted.
+      candidates = memory_bids.iloc[:0] if (additional_replicas > 0).any() else memory_bids
+      memory_bids = memory_selector.select(candidates, omega, p, sp_data, latency, auction_options)
     if len(memory_bids) > 0 and not (additional_replicas > 0).any():
+      communication.requests('memory_request', memory_bids)
       # tentatively start additional replicas
       s = step_time.now()
       additional_replicas, sp_rho = rules["start_additional_replicas"](
@@ -921,6 +936,8 @@ def run_madea_cycle(
       time_limit,
       plateau_tolerance = config.get("plateau_tolerance")
     )
+    if memory_selector is not None and memory_selector.retry(it, max_iterations, total_runtime, time_limit):
+      stop_searching, why_stop_searching = False, None
     e = step_time.now()
     with step_time.untimed():
       log.debug(
@@ -953,12 +970,24 @@ def run(
     log_on_file: bool = False, 
     disable_plotting: bool = False,
     *, refine_welfare: bool = False, rules: dict | None = None,
+    detailed_init: bool = False, selective_memory: bool = False,
   ):
+  if config.get('communication_metrics', False) and (refine_welfare or rules is not None):
+    raise ValueError('communication metrics unsupported for refinement or custom rules')
+  if selective_memory:
+    detailed_init = True
+  method = "MADEA-selective" if selective_memory else "MADEA-detailed"
+  if detailed_init:
+    if "opt_solution_folder" in config:
+      raise ValueError("LSP_detailed initialization does not support opt_solution_folder")
+    config = {**config, "algorithm": method, "local_reference": "LSP_detailed"}
+  if selective_memory:
+    config = {**config, "memory_requests": "selective"}
   refinement = []  # refinement.csv rows of the whole run (PG)
   folder = run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="FaaS-MADeA-PG" if refine_welfare else "FaaS-MADeA", outputs=run_frame.LSP_OUTPUTS,
-    solve_step=partial(_solve_step, rules=rules,
+    method=method if detailed_init else "FaaS-MADeA-PG" if refine_welfare else "FaaS-MADeA", outputs=run_frame.LSP_OUTPUTS,
+    solve_step=partial(_solve_step, rules=rules, detailed_init=detailed_init, selective_memory=selective_memory,
                        refinement=refinement if refine_welfare else None),
   )
   if refine_welfare:
@@ -966,14 +995,14 @@ def run(
   return folder
 
 
-def _solve_step(ctx, t: int, data: dict, *, rules, refinement) -> run_frame.StepResult:
+def _solve_step(ctx, t: int, data: dict, *, rules, refinement, detailed_init=False, selective_memory=False) -> run_frame.StepResult:
   """Local planning, one MADEA cycle and, with ``refinement`` (PG), the bounded
   potential-game refinement of the centralized incumbent."""
   Nn, Nf = ctx.Nn, ctx.Nf
   started_at = step_time.now()
   fixed = ctx.reference is not None
   sp_data = ctx.step_data(data, t)
-  sp = LSP_fixedr() if fixed else LSP()
+  sp = LSP_detailed() if detailed_init else LSP_fixedr() if fixed else LSP()
   (
     sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, sp_U, obj, tc, sp_runtime
   ) = solve_subproblem(
@@ -993,6 +1022,7 @@ def _solve_step(ctx, t: int, data: dict, *, rules, refinement) -> run_frame.Step
     agents=ctx.agents, loadt=data[None]["incoming_load"], neighborhood=ctx.neighborhood,
     latency=ctx.latency, config=ctx.config, auction_options=ctx.solver_options["auction"],
     parallelism=ctx.parallelism, started_at=started_at, rules=rules,
+    memory_selector=SelectiveMemory() if selective_memory else None,
   )
   if refinement is not None:
     from madea_pg import refine_solution

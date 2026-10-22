@@ -6,11 +6,11 @@ from run_faasmadea import (
   compute_residual_capacity,
   start_additional_replicas,
 )
-from utils import run_frame, step_time
+from utils import communication, run_frame, step_time
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.model import PYO_VAR_TYPE
-from models.sp import LSP, LSP_fixedr, LSP_pg, LSP_pg_fixedr
+from models.sp import LSP_detailed, LSP, LSP_fixedr, LSP_pg, LSP_pg_fixedr
 from models.local_sp import dp_enabled, try_solve_local
 
 from copy import deepcopy
@@ -208,6 +208,7 @@ def node_move(
   Nf = sp_data[None]["Nf"][None]
   memory_bids = {"i": [], "j": [], "f": []}
   neighbours = set(int(j) for j in np.nonzero(neighborhood[i, :])[0])
+  communication.pg_visit(i, neighbours, Nf)
   z = compute_z(x, y, sp_data)
   u_old = compute_node_utility(i, x, y, z, sp_data)
   # residual capacity visible to i, with its own row released
@@ -246,6 +247,7 @@ def node_move(
   delta_u = u_new - u_old
   accepted = delta_u > epsilon
   if accepted:
+    communication.pg_commit(i, y[i, :, :], new_row)
     x[i, :] = x_row
     y[i, :, :] = new_row
     r[i, :] = r_row
@@ -367,19 +369,24 @@ def _run(
     order: str,
     method_name: str,
     options_key: str,
+    detailed_init: bool = False,
     log_on_file: bool = False,
     disable_plotting: bool = False,
   ) -> str:
+  if detailed_init:
+    if "opt_solution_folder" in config:
+      raise ValueError("LSP_detailed initialization does not support opt_solution_folder")
+    config = {**config, "algorithm": method_name, "local_reference": "LSP_detailed"}
   options = dict(config["solver_options"].get(options_key, {}))
   return run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
     method=method_name, outputs=run_frame.LSP_OUTPUTS,
-    solve_step=partial(_solve_step, epsilon=options.get("epsilon", 1e-6), order=order,
+    solve_step=partial(_solve_step, detailed_init=detailed_init, epsilon=options.get("epsilon", 1e-6), order=order,
                        rng=np.random.default_rng(config["seed"])),
   )
 
 
-def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng) -> run_frame.StepResult:
+def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng, detailed_init=False) -> run_frame.StepResult:
   """One step: sequential sweeps run on the step clock (wall time minus observers);
   the local initialization is a parallel phase."""
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
@@ -387,7 +394,7 @@ def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng) -> 
   loadt = data[None]["incoming_load"]
   fixed = ctx.reference is not None
   sp_data = ctx.step_data(data, t)
-  sp = LSP_fixedr() if fixed else LSP()
+  sp = LSP_detailed() if detailed_init else LSP_fixedr() if fixed else LSP()
   pg_model = LSP_pg_fixedr() if fixed else LSP_pg()
   (
     sp_data, sp_x, _, _, _, sp_r, sp_rho, _, _, _, sp_runtime
@@ -412,6 +419,7 @@ def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng) -> 
       sp_data, x, y, compute_z(x, y, sp_data)
     )
   while not stop_searching:
+    communication.begin_round(it)
     if not fixed:
       rho = compute_rho(r, sp_data)
     n_accepted, delta_phi, memory_bids, _ = (
@@ -421,6 +429,7 @@ def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng) -> 
       )
     )
     additional_replicas = np.zeros((Nn, Nf))
+    communication.requests('memory_request', memory_bids)
     if len(memory_bids) > 0 and not fixed:
       # accepted moves in the sweep re-decide r and consume memory slack:
       # recompute rho before the market or it would allocate stale slack
@@ -462,9 +471,10 @@ def run_pg_s(config, parallelism, log_on_file=False, disable_plotting=False):
               log_on_file=log_on_file, disable_plotting=disable_plotting)
 
 
-def run_pg_r(config, parallelism, log_on_file=False, disable_plotting=False):
+def run_pg_r(config, parallelism, log_on_file=False, disable_plotting=False, *, detailed_init=False):
   return _run(config, parallelism, order="random",
-              method_name="FaaS-MAPG-R", options_key="pg_r",
+              method_name="FaaS-MAPG-R-detailed" if detailed_init else "FaaS-MAPG-R",
+              options_key="pg_r", detailed_init=detailed_init,
               log_on_file=log_on_file, disable_plotting=disable_plotting)
 
 

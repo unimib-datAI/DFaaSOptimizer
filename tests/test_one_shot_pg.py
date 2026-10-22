@@ -21,7 +21,7 @@ def test_one_shot_pg_preserves_baseline_and_uses_local_acceptance(tmp_path, monk
   config = json.loads((Path(__file__).resolve().parents[1] /
                        'experiments/madea_pg_compact/config.json').read_text())
   config.update(seed=7, max_steps=2, max_run_time=2, run_time_step=1,
-                verbose=0, checkpoint_interval=1, solver_name='glpk',
+                verbose=0, checkpoint_interval=1, solver_name='appsi_highs',
                 base_solution_folder=str(tmp_path / 'runs'))
   config['limits']['Nn'] = {'min': 10, 'max': 10}
   config['limits']['Nf'] = {'min': 3, 'max': 3}

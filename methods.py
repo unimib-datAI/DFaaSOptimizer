@@ -15,7 +15,9 @@ import decentralized_diffusion
 import decentralized_dual
 import decentralized_frankwolfe
 import decentralized_gcaa
+import decentralized_greedy_rr
 import decentralized_powerd
+import decentralized_potentialgame
 import hierarchical_frankwolfe
 import madea2
 import run_faasmacro
@@ -26,7 +28,12 @@ from plasma import welfare
 from plasma.runner import run as plasma_run
 
 HARMONIZED = {
+  "Greedy-RR": decentralized_greedy_rr.run,
   "MADEA": run_faasmadea.run, "MADEA-one-shot": decentralized_auction.run,
+  "MADEA-detailed": partial(run_faasmadea.run, detailed_init=True),
+  "MADEA-one-shot-detailed": partial(decentralized_auction.run, detailed_init=True),
+  "MADEA-selective": partial(run_faasmadea.run, selective_memory=True),
+  "MADEA-one-shot-selective": partial(decentralized_auction.run, selective_memory=True),
   "MADEA2": madea2.run, "MADEA2-b": madea2.run_b,
   "MADEA2-one-shot": madea2.run_one_shot, "MADEA2-b-one-shot": madea2.run_one_shot_b,
   "FaaS-MAFW": decentralized_frankwolfe.run, "FaaS-MAFW-b": hierarchical_frankwolfe.run_mafw_b,
@@ -42,9 +49,16 @@ HARMONIZED = {
   "faas-gcaa": decentralized_gcaa.run, "faas-dual": decentralized_dual.run,
 }
 
+# Explicitly selectable, excluded from the parallel "all" selection.
+SEQUENTIAL_METHODS = {
+  "FaaS-MAPG-R": decentralized_potentialgame.run_pg_r,
+  "FaaS-MAPG-R-detailed": partial(decentralized_potentialgame.run_pg_r, detailed_init=True),
+}
+
 SEQUENTIAL = "nodes act one at a time in a network-wide order (Gauss-Seidel better-response sweeps)"
 PG_REFINED = "parallel phase followed by a potential-game refinement that passes a turn through all nodes"
 EXCLUDED = {
+  "FaaS-MAPG-R-detailed": SEQUENTIAL,
   "FaaS-MAPG-S": SEQUENTIAL, "FaaS-MAPG-R": SEQUENTIAL,
   "faas-br-s": SEQUENTIAL, "faas-br-r": SEQUENTIAL, "faas-br-o": SEQUENTIAL,
   "MADEA-PG": PG_REFINED, "one-shot-pg": PG_REFINED, "one-shot2-pg": PG_REFINED,
