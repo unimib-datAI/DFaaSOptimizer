@@ -58,7 +58,14 @@ def _global_decisions(start, data, x, base_r):
   d=data[None]
   load=np.array([[d['incoming_load'][n+1,f+1] for f in range(x.shape[1])]
                  for n in range(x.shape[0])])
-  return dict(x=x,y=start['y'],z=load-x-start['y'].sum(axis=1),r=base_r+start['r'])
+  demand=np.array([[d['demand'][n+1,f+1] for f in range(x.shape[1])] for n in range(x.shape[0])])
+  utilization=np.array([d['max_utilization'][f+1] for f in range(x.shape[1])])
+  served=x+start['y'].sum(axis=0)
+  required=np.divide(demand*served,utilization,out=np.zeros_like(served,dtype=float),where=utilization>0)
+  # LRMP permits arbitrary unused extra replicas. Normalize only the exported
+  # global decision, after independently checking the native coordinator rows.
+  replicas=np.maximum(0,np.ceil(required-1e-9)).astype(np.int64)
+  return dict(x=x,y=start['y'],z=load-x-start['y'].sum(axis=1),r=replicas)
 
 
 def _check_coordinator(instance):
@@ -85,7 +92,8 @@ def solve(path,time_limit,threads=1,gap=1e-3,detailed=True,warm_start=None,
   options={'use_dp':True,'threads':1}
   with parallel_solver_session():
     local=solve_subproblem(data if detailed else raw,list(range(nn)),
-      LSP_detailed() if detailed else LSP(),'appsi_highs',options,parallelism)
+      LSP_detailed() if detailed else LSP(),'appsi_highs',options,parallelism,
+      pi=data[None]['pi'] if detailed else None)
     sp_data,x,sp_y,z,omega,r,rho,_,_,tc,_=local
     if set(str(tc['tot']).split('-')) != {'optimal'}:
       raise ValueError('local reference was not solved optimally')
@@ -144,7 +152,12 @@ def solve(path,time_limit,threads=1,gap=1e-3,detailed=True,warm_start=None,
   bound=result.best_objective_bound if result else None
   if bound is not None and not np.isfinite(bound):bound=None
   objective=result.best_feasible_objective if result else None
-  proven=bool(result and source=='solver' and bound is not None and objective is not None and abs(bound-objective)<=1e-6)
+  d=data[None]
+  incumbent_objective=float(sum(d['beta'].get((int(i)+1,int(j)+1,int(f)+1),.9)*float(chosen['y'][i,j,f]) /
+    (d['incoming_load'][int(i)+1,int(f)+1] or 1) for i,j,f in zip(*np.nonzero(chosen['y'])))
+    -sum(d['gamma'][n+1,f+1]*(omega[n,f]-chosen['y'][n,:,f].sum()) /
+      (d['incoming_load'][n+1,f+1] or 1) for n in range(nn) for f in range(nf)))
+  proven=bool(result and source=='solver' and bound is not None and objective is not None and abs(bound-incumbent_objective)<=1e-6)
   if solution_file:
     save_decisions(solution_file,chosen,dict(metadata,welfare=welfare,solution_source=source))
   return dict(status='ok',feasible=True,welfare=welfare,nodes=nn,functions=nf,
@@ -154,8 +167,9 @@ def solve(path,time_limit,threads=1,gap=1e-3,detailed=True,warm_start=None,
     mip_rel_gap=gap,solver_threads=threads,solver_log=str(log_file) if log_file else None,
     termination=str(result.termination_condition) if result else 'TerminationCondition.maxTimeLimit',
     bound=bound,bound_scope='coordinator',solver_objective=objective,
-    rel_gap_to_bound=((bound-objective)/abs(bound) if bound else (0. if objective==0 else None))
-      if objective is not None and bound is not None else None,
+    incumbent_coordinator_objective=incumbent_objective,
+    rel_gap_to_bound=((bound-incumbent_objective)/abs(bound) if bound else (0. if incumbent_objective==0 else None))
+      if bound is not None else None,
     proven_optimal=proven,proven_optimal_scope='coordinator',solution_source=source,
     solution_file=str(solution_file) if solution_file else None,solver_solution_rejected=rejected,
     warm_start=dict(seed_info,accepted=True,adapted_welfare=adapted_welfare) if seed_info else None,

@@ -103,3 +103,43 @@ def test_solver_releases_global_highs_thread_scheduler(monkeypatch,tmp_path,adap
     assert row['solution_exists'] and row['obj']==1,row
   finally:
     highspy.Highs.resetGlobalScheduler(True)
+
+
+def test_spare_coordinator_replicas_are_tightened_before_global_validation(monkeypatch,tmp_path):
+  data=tiny_data();data[None]['memory_capacity'][2]=5
+  sd=bind_instance(monkeypatch,tmp_path,data)
+  output=tmp_path/'solution.npz'
+  row=sd.solve(tmp_path,5,threads=1,detailed=True,solution_file=output)
+  assert row['welfare']==pytest.approx(1.95) and row['solution_source']=='solver',row
+  with np.load(output,allow_pickle=False) as artifact:
+    assert artifact['r'][1,0]==2
+
+
+def test_rejected_solver_incumbent_gap_uses_returned_solution(monkeypatch,tmp_path):
+  sd=bind_instance(monkeypatch,tmp_path,tiny_data())
+  original=sd._check_coordinator;calls=[]
+  def reject_loaded(instance):
+    original(instance);calls.append(1)
+    if len(calls)>1:raise ValueError('simulated invalid solver incumbent')
+  monkeypatch.setattr(sd,'_check_coordinator',reject_loaded)
+  row=sd.solve(tmp_path,5,threads=1,detailed=True)
+  assert row['solution_source']=='local_only' and row['welfare']==pytest.approx(1.1)
+  assert row['rel_gap_to_bound']==pytest.approx((.45-(-.4))/.45),row
+  assert row['incumbent_coordinator_objective']==pytest.approx(-.4)
+  assert not row['proven_optimal']
+
+
+def test_detailed_local_prices_match_the_exact_central_reference(monkeypatch,tmp_path):
+  data={None:{'Nn':{None:2},'Nf':{None:2},
+    'incoming_load':{(1,1):1,(1,2):10,(2,1):0,(2,2):0},
+    'demand':{(n,f):1. for n in (1,2) for f in (1,2)},
+    'max_utilization':{1:1.,2:1.},'memory_requirement':{1:1,2:1},
+    'memory_capacity':{1:1,2:1},'neighborhood':{(1,2):1,(2,1):1},
+    'alpha':{(1,1):.5,(1,2):2.,(2,1):1.,(2,2):1.},
+    'beta':{(1,2,1):.4,(1,2,2):.9},'pi':{1:1.,2:0.}}}
+  sd=bind_instance(monkeypatch,tmp_path,data)
+  target=tmp_path/'solution.npz'
+  row=sd.solve(tmp_path,0,threads=1,detailed=True,solution_file=target)
+  assert row['status']=='ok'
+  with np.load(target,allow_pickle=False) as saved:
+    np.testing.assert_array_equal(saved['x'][0],[1,0])
