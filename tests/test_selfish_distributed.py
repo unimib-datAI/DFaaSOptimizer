@@ -143,3 +143,42 @@ def test_detailed_local_prices_match_the_exact_central_reference(monkeypatch,tmp
   assert row['status']=='ok'
   with np.load(target,allow_pickle=False) as saved:
     np.testing.assert_array_equal(saved['x'][0],[1,0])
+
+
+def reusable_seed(path,name,data,**metadata):
+  from utils.warm_start import evaluated_data_and_floors,data_fingerprint,save_decisions,file_sha256
+  evaluated,floors=evaluated_data_and_floors(data)
+  root=Path(__file__).resolve().parents[1]
+  files=('models/selfish.py','models/model.py','models/sp.py','models/local_sp.py','models/dp_solver.py','utils/warm_start.py')
+  info=dict(instance=name,step=0,data_sha256=data_fingerprint(evaluated),
+    algorithm='MADEA-detailed',welfare=1.95,minimum_local_gain=floors.tolist(),
+    reference_code_sha256={f:file_sha256(root/f) for f in files},
+    reuse_local_reference='LSP_detailed')
+  info.update(metadata)
+  save_decisions(path,decisions(),info)
+
+
+def test_certified_madea_seed_skips_both_initial_reference_solves(monkeypatch,tmp_path):
+  data=tiny_data();data[None]['gamma']={(1,1):.8,(2,1):.8}
+  sd=bind_instance(monkeypatch,tmp_path,data)
+  seed=tmp_path/'seed.npz';reusable_seed(seed,tmp_path.name,data)
+  def forbidden(*args,**kwargs):raise AssertionError('initial LSP_detailed must be reused')
+  monkeypatch.setattr(sd,'evaluated_data_and_floors',forbidden)
+  monkeypatch.setattr(sd,'solve_subproblem',forbidden)
+  row=sd.solve(tmp_path,5,threads=1,detailed=True,warm_start=seed,solution_file=tmp_path/'out.npz')
+  assert row['welfare']>=1.95-1e-6
+  assert row['local_reference_reused'] and row['warm_start']['adapted_welfare']==pytest.approx(1.95)
+
+
+@pytest.mark.parametrize('invalid', ['algorithm','reference','coefficients','floor'])
+def test_reused_reference_rejects_uncertified_or_incompatible_seed(monkeypatch,tmp_path,invalid):
+  data=tiny_data()
+  if invalid!='coefficients':data[None]['gamma']={(1,1):.8,(2,1):.8}
+  sd=bind_instance(monkeypatch,tmp_path,data)
+  seed=tmp_path/'seed.npz'
+  changes={}
+  if invalid=='algorithm':changes['algorithm']='FaaS-MAPG-R-detailed'
+  if invalid=='reference':changes['reference_code_sha256']={}
+  if invalid=='floor':changes['minimum_local_gain']=[100.,100.]
+  reusable_seed(seed,tmp_path.name,data,**changes)
+  with pytest.raises(ValueError):sd.solve(tmp_path,0,detailed=True,warm_start=seed)
