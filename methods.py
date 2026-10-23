@@ -71,3 +71,9 @@ CENTRALIZED = {
   "centralized": {},  # LoadManagementModel
   "selfish-centralized": {"selfish": True},  # docs/selfish-centralized.md: each node keeps its local optimum's gain
 }
+
+# Explicit solver baselines with parallel local subproblems and one MIP coordinator.
+COORDINATED = {
+  'selfish-distributed': {'detailed': False},
+  'selfish-distributed-detailed': {'detailed': True},
+}

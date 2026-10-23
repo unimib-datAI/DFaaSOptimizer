@@ -1,0 +1,75 @@
+"""One coordinator solve with historical or protected detailed local decisions."""
+import sys
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'experiments/madea_pg_compact'))
+from test_warm_start import tiny_data, decisions
+
+
+def bind_instance(monkeypatch,tmp_path,data):
+  import selfish_distributed as sd
+  monkeypatch.setattr(sd,'load_materialized_instance',lambda path:(data,{},list(range(data[None]['Nn'][None])),None))
+  monkeypatch.setattr(sd,'get_current_load',lambda traces,agents,t:data[None]['incoming_load'])
+  (tmp_path/'metadata.json').write_text('{}')
+  return sd
+
+
+def seed_for(path,name,data):
+  from utils.warm_start import evaluated_data_and_floors,data_fingerprint,save_decisions
+  evaluated,_=evaluated_data_and_floors(data)
+  save_decisions(path,decisions(),{'instance':name,'step':0,'data_sha256':data_fingerprint(evaluated),'algorithm':'MADEA-detailed','welfare':1.95})
+
+
+def test_projection_uses_extra_replicas_and_respects_new_omega_bounds():
+  from selfish_distributed import coordinator_start
+  from utils.warm_start import evaluated_data_and_floors
+  data,_=evaluated_data_and_floors(tiny_data())
+  local=dict(x=np.array([[1],[1]]),r=np.array([[1],[1]]),omega=np.array([[1],[0]]))
+  projected=coordinator_start(decisions(),data,**local)
+  np.testing.assert_array_equal(projected['r'],[[0],[1]])
+  assert projected['y'][0,1,0]==1
+  local['omega'][:]=0
+  repaired=coordinator_start(decisions(),data,**local)
+  assert repaired['y'].sum()==0 and repaired['r'].sum()==0
+
+
+def test_detailed_keeps_local_x_and_labels_coordinator_bound(monkeypatch,tmp_path):
+  sd=bind_instance(monkeypatch,tmp_path,tiny_data())
+  seed=tmp_path/'seed.npz';seed_for(seed,tmp_path.name,tiny_data())
+  target=tmp_path/'solution.npz'
+  row=sd.solve(tmp_path,5,threads=1,detailed=True,warm_start=seed,solution_file=target)
+  assert row['status']=='ok' and row['welfare']==pytest.approx(1.95)
+  assert row['warm_start']['accepted']
+  assert row['bound_scope']=='coordinator' and row['proven_optimal_scope']=='coordinator'
+  assert row['local_reference']=='LSP_detailed' and row['restricted_model']=='LSPr_x'
+  with np.load(target,allow_pickle=False) as result:
+    np.testing.assert_array_equal(result['x'],[[1],[1]])
+    assert result['r'][1,0]==2
+
+
+def test_detailed_uses_central_defaults_while_historical_keeps_native_model(monkeypatch,tmp_path):
+  data={None:{'Nn':{None:2},'Nf':{None:2},
+    'incoming_load':{(1,1):1,(1,2):10,(2,1):0,(2,2):0},
+    'demand':{(n,f):1. for n in (1,2) for f in (1,2)},
+    'max_utilization':{1:1.,2:1.},'memory_requirement':{1:1,2:1},
+    'memory_capacity':{1:1,2:0},'neighborhood':{},
+    'alpha':{(1,1):.1,(1,2):2.,(2,1):1.,(2,2):1.}}}
+  sd=bind_instance(monkeypatch,tmp_path,data)
+  for detailed,expected in [(True,[[1,0],[0,0]]),(False,[[0,1],[0,0]])]:
+    target=tmp_path/f'{detailed}.npz'
+    row=sd.solve(tmp_path,5,threads=1,detailed=detailed,solution_file=target)
+    assert row['status']=='ok',row
+    with np.load(target,allow_pickle=False) as result:
+      np.testing.assert_array_equal(result['x'],expected)
+
+
+def test_zero_budget_retains_adapted_feasible_start(monkeypatch,tmp_path):
+  sd=bind_instance(monkeypatch,tmp_path,tiny_data())
+  seed=tmp_path/'seed.npz';seed_for(seed,tmp_path.name,tiny_data())
+  row=sd.solve(tmp_path,0,threads=1,detailed=True,warm_start=seed)
+  assert row['status']=='ok' and row['welfare']==pytest.approx(1.95)
+  assert row['solution_source']=='warm_start' and not row['proven_optimal']
+  assert row['bound'] is None
