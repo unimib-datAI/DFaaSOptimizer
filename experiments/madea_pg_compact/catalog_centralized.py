@@ -38,9 +38,10 @@ def _array(var, shape):
 
 
 def solve(path, time_limit, threads=1, gap=1e-6, selfish=False, log_file=None,
-          warm_start=None, warm_start_sha256=None, solution_file=None):
+          warm_start=None, warm_start_sha256=None, solution_file=None, instance_name=None):
   from utils.warm_start import (data_fingerprint, evaluated_data_and_floors,
-    initialize_variables, load_start, save_decisions, validate_decisions)
+    initialize_variables, load_start, save_decisions, solution_nodes, validate_decisions)
+  instance_name = instance_name or Path(path).name
   data, traces, agents, graph = families.load_materialized_instance(path)
   data = update_data(data, {'incoming_load': get_current_load(traces, list(agents), 0)})
   Nn, Nf = data[None]['Nn'][None], data[None]['Nf'][None]
@@ -57,7 +58,7 @@ def solve(path, time_limit, threads=1, gap=1e-6, selfish=False, log_file=None,
     data, floors = evaluated_data_and_floors(data)
     local = time.perf_counter()-validation_started
     seed, seed_info = load_start(warm_start, data, warm_start_sha256,
-                                floors if selfish else None, Path(path).name)
+                                floors if selfish else None, instance_name)
     validation = time.perf_counter()-validation_started
     if solution_file:
       save_decisions(solution_file, seed, dict(seed_info, solution_source='warm_start'))
@@ -80,7 +81,7 @@ def solve(path, time_limit, threads=1, gap=1e-6, selfish=False, log_file=None,
       local = time.perf_counter()-local_started
     if selfish:
       # A partially populated reference is never silently accepted.
-      values = [instance.minimum_local_gain[n].value for n in instance.N]
+      values = [pyo.value(instance.minimum_local_gain[n], exception=False) for n in instance.N]
       if all(v is not None for v in values):
         floors = np.array(values)
       else:
@@ -101,7 +102,10 @@ def solve(path, time_limit, threads=1, gap=1e-6, selfish=False, log_file=None,
     opt.highs_options.update({'threads': threads, 'mip_rel_gap': gap, 'random_seed': 0})
     if log_file:
       opt.highs_options[_solver_option_name('appsi_highs', 'LogFile')] = log_file
-    result = opt.solve(instance)
+    try:
+      result = opt.solve(instance)
+    finally:
+      highspy.Highs.resetGlobalScheduler(True)
     data = evaluated
     if result.best_feasible_objective is not None:
       result.solution_loader.load_vars()
@@ -136,11 +140,12 @@ def solve(path, time_limit, threads=1, gap=1e-6, selfish=False, log_file=None,
   relative_gap = ((bound-welfare)/abs(bound) if bound else (0. if welfare == 0 else None)) if bound is not None else None
   row['proven_optimal'] = bool(source == 'solver' and bound is not None and abs(bound-welfare)<=1e-6)
   if solution_file:
-    save_decisions(solution_file, chosen, dict(instance=Path(path).name, step=0,
+    save_decisions(solution_file, chosen, dict(instance=instance_name, step=0,
       algorithm='selfish-centralized' if selfish else 'centralized', welfare=welfare,
       data_sha256=data_fingerprint(data), solution_source=source))
   return dict(row, status='ok', welfare=welfare, feasible=True, solution_source=source,
-              solution_file=str(solution_file) if solution_file else None, rel_gap_to_bound=relative_gap)
+              solution_file=str(solution_file) if solution_file else None, rel_gap_to_bound=relative_gap,
+              node_metrics=solution_nodes(chosen,data))
 
 
 if __name__ == '__main__':

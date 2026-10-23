@@ -18,7 +18,7 @@ from run_centralized_model import get_current_load, update_data
 from run_faasmacro import (combine_solutions, compute_social_welfare,
   parallel_solver_session, prepare_master_data, solve_subproblem)
 from utils.warm_start import (data_fingerprint, evaluated_data_and_floors,
-  initialize_variables, load_start, save_decisions, validate_decisions)
+  initialize_variables, load_start, save_decisions, solution_nodes, validate_decisions)
 
 
 def coordinator_start(seed, data, x, r, omega):
@@ -70,7 +70,8 @@ def _check_coordinator(instance):
 
 
 def solve(path,time_limit,threads=1,gap=1e-3,detailed=True,warm_start=None,
-          warm_start_sha256=None,solution_file=None,log_file=None):
+          warm_start_sha256=None,solution_file=None,log_file=None,instance_name=None):
+  instance_name = instance_name or Path(path).name
   overall=time.perf_counter()
   raw,traces,agents,_=load_materialized_instance(path)
   raw=update_data(raw,{'incoming_load':get_current_load(traces,list(agents),0)})
@@ -79,7 +80,7 @@ def solve(path,time_limit,threads=1,gap=1e-3,detailed=True,warm_start=None,
   seed,seed_info=(None,None)
   if warm_start is not None:
     seed,seed_info=load_start(warm_start,data,warm_start_sha256,
-                             floors if detailed else None,Path(path).name)
+                             floors if detailed else None,instance_name)
   parallelism=threads if threads>1 else 0
   options={'use_dp':True,'threads':1}
   with parallel_solver_session():
@@ -93,7 +94,7 @@ def solve(path,time_limit,threads=1,gap=1e-3,detailed=True,warm_start=None,
     chosen,welfare=validate_decisions(_global_decisions(start,data,x,r),data,floors if detailed else None)
     adapted_welfare=welfare
     source='warm_start' if seed is not None else 'local_only'
-    metadata=dict(instance=Path(path).name,step=0,
+    metadata=dict(instance=instance_name,step=0,
       algorithm='selfish-distributed-detailed' if detailed else 'selfish-distributed',
       data_sha256=data_fingerprint(data))
     if solution_file:
@@ -112,7 +113,10 @@ def solve(path,time_limit,threads=1,gap=1e-3,detailed=True,warm_start=None,
         opt.config.load_solution=False;opt.config.warmstart=True
         opt.highs_options.update(threads=threads,mip_rel_gap=gap,random_seed=0)
         if log_file:opt.highs_options['log_file']=str(log_file)
-        result=opt.solve(instance)
+        try:
+          result=opt.solve(instance)
+        finally:
+          highspy.Highs.resetGlobalScheduler(True)
         if result.best_feasible_objective is not None:
           result.solution_loader.load_vars()
           try:
@@ -150,7 +154,9 @@ def solve(path,time_limit,threads=1,gap=1e-3,detailed=True,warm_start=None,
     mip_rel_gap=gap,solver_threads=threads,solver_log=str(log_file) if log_file else None,
     termination=str(result.termination_condition) if result else 'TerminationCondition.maxTimeLimit',
     bound=bound,bound_scope='coordinator',solver_objective=objective,
-    rel_gap_to_bound=((bound-objective)/abs(bound) if bound else None) if objective is not None else None,
+    rel_gap_to_bound=((bound-objective)/abs(bound) if bound else (0. if objective==0 else None))
+      if objective is not None and bound is not None else None,
     proven_optimal=proven,proven_optimal_scope='coordinator',solution_source=source,
     solution_file=str(solution_file) if solution_file else None,solver_solution_rejected=rejected,
-    warm_start=dict(seed_info,accepted=True,adapted_welfare=adapted_welfare) if seed_info else None)
+    warm_start=dict(seed_info,accepted=True,adapted_welfare=adapted_welfare) if seed_info else None,
+    node_metrics=solution_nodes(chosen,data))

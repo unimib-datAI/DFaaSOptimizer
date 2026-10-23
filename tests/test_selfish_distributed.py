@@ -73,3 +73,33 @@ def test_zero_budget_retains_adapted_feasible_start(monkeypatch,tmp_path):
   assert row['status']=='ok' and row['welfare']==pytest.approx(1.95)
   assert row['solution_source']=='warm_start' and not row['proven_optimal']
   assert row['bound'] is None
+
+
+def test_zero_coordinator_objective_has_zero_optimal_gap(monkeypatch,tmp_path):
+  data=tiny_data();data[None]['memory_capacity']={1:3,2:4}
+  sd=bind_instance(monkeypatch,tmp_path,data)
+  row=sd.solve(tmp_path,5,threads=1,detailed=True)
+  assert row['status']=='ok' and row['bound']==0
+  assert row['rel_gap_to_bound']==0
+
+
+@pytest.mark.parametrize('adapter',['centralized','distributed'])
+def test_solver_releases_global_highs_thread_scheduler(monkeypatch,tmp_path,adapter):
+  import pyomo.environ as pyo
+  from models import model as module
+  from models.model import BaseAbstractModel
+  if adapter=='distributed':
+    solve=bind_instance(monkeypatch,tmp_path,tiny_data()).solve
+  else:
+    from test_warm_start import fake_instance
+    solve=fake_instance(monkeypatch,tmp_path).solve
+  assert solve(tmp_path,5,threads=2)['status']=='ok'
+  monkeypatch.setattr(module,'_SOLVER_CACHE',{})
+  m=pyo.ConcreteModel();m.x=pyo.Var(bounds=(0,1),domain=pyo.NonNegativeIntegers)
+  m.OBJ=pyo.Objective(expr=m.x,sense=pyo.maximize)
+  import highspy
+  try:
+    row=BaseAbstractModel().solve(m,{'threads':1},'appsi_highs')
+    assert row['solution_exists'] and row['obj']==1,row
+  finally:
+    highspy.Highs.resetGlobalScheduler(True)

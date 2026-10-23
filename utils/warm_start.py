@@ -38,11 +38,13 @@ def evaluated_data_and_floors(data):
 def data_fingerprint(data):
   """Stream canonical evaluated parameters; do not serialize a dense N²F dictionary twice."""
   h = hashlib.sha256()
-  for name in sorted(data[None]):
+  parameters = dict(data[None])
+  parameters.setdefault('pi', {f:0 for f in range(1, int(parameters['Nf'][None])+1)})
+  for name in sorted(parameters):
     if name == 'minimum_local_gain':
       continue
     h.update((name+'\n').encode())
-    for index, value in sorted(data[None][name].items(), key=lambda x: str(x[0])):
+    for index, value in sorted(parameters[name].items(), key=lambda x: str(x[0])):
       if isinstance(value, (int, float, np.number)):
         value = float(value)
       h.update((json.dumps([index, value], separators=(',', ':'), allow_nan=False)+'\n').encode())
@@ -118,3 +120,19 @@ def initialize_variables(instance, arrays):
       roles = arrays['y'].sum(axis=axis)>0
       for n, f in getattr(instance, name):
         getattr(instance, name)[n, f].value = int(roles[n-1, f-1])
+
+
+def solution_nodes(arrays, data):
+  """Compact per-source traffic/utility records for existing offline fairness metrics."""
+  import math
+  d=data[None];nn,nf=arrays['x'].shape;nodes=[]
+  for n in range(nn):
+    loads=[d['incoming_load'][n+1,f+1] for f in range(nf)]
+    demand=float(sum(loads));local=float(arrays['x'][n].sum())
+    forwarded=float(arrays['y'][n].sum());cloud=float(arrays['z'][n].sum())
+    utility=math.fsum((d['alpha'][n+1,f+1]*arrays['x'][n,f]
+      +math.fsum(d['beta'].get((n+1,j+1,f+1),0)*float(arrays['y'][n,j,f]) for j in range(nn))
+      -d['gamma'][n+1,f+1]*arrays['z'][n,f])/(loads[f] or 1) for f in range(nf))
+    nodes.append(dict(step=0,node=n,demand=demand,local=local,forwarded=forwarded,cloud=cloud,
+      utility=float(utility),service=(local+forwarded)/demand if demand else None))
+  return nodes

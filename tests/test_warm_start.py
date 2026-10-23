@@ -132,3 +132,52 @@ def test_valid_seed_is_saved_before_global_model_build(monkeypatch, tmp_path):
     catalog.solve(tmp_path,5,selfish=True,warm_start=start,solution_file=solution)
   with np.load(solution,allow_pickle=False) as saved:
     assert saved['y'][0,1,0] == 1
+
+
+def test_exported_nodes_preserve_service_and_true_beta_utility():
+  from utils.warm_start import solution_nodes,evaluated_data_and_floors
+  data,_=evaluated_data_and_floors(tiny_data())
+  rows=solution_nodes(decisions(),data)
+  assert [r['demand'] for r in rows]==[2,1]
+  assert [r['local'] for r in rows]==[1,1]
+  assert [r['forwarded'] for r in rows]==[1,0]
+  assert [r['service'] for r in rows]==[1,1]
+  assert [r['utility'] for r in rows]==pytest.approx([.95,1.])
+
+
+def test_incomplete_local_reference_is_no_solution_not_uninitialized_error(monkeypatch,tmp_path):
+  from models.selfish import SelfishLoadManagementModel
+  catalog=fake_instance(monkeypatch,tmp_path)
+  def expired(*args,**kwargs):raise TimeoutError('local deadline')
+  monkeypatch.setattr(SelfishLoadManagementModel,'compute_local_gain_floors',expired)
+  row=catalog.solve(tmp_path,5,selfish=True)
+  assert row['status']=='no_solution' and row['welfare'] is None
+
+
+def test_nonselfish_export_can_be_reused_when_selfish_feasible(monkeypatch,tmp_path):
+  from utils.warm_start import evaluated_data_and_floors,load_start
+  catalog=fake_instance(monkeypatch,tmp_path)
+  target=tmp_path/'unconstrained.npz'
+  result=catalog.solve(tmp_path,5,selfish=False,solution_file=target)
+  assert result['status']=='ok'
+  data,floors=evaluated_data_and_floors(tiny_data())
+  arrays,_=load_start(target,data,floors=floors,instance_name=tmp_path.name)
+  assert arrays['y'][0,1,0]==1
+
+
+def test_shared_highs_wrapper_can_change_thread_count_in_same_process(monkeypatch):
+  import highspy
+  import pyomo.environ as pyo
+  from models import model as module
+  from models.model import BaseAbstractModel
+  monkeypatch.setattr(module,'_SOLVER_CACHE',{})
+  highspy.Highs.resetGlobalScheduler(True)
+  try:
+    for threads in (0,1,2):
+      model=pyo.ConcreteModel();model.x=pyo.Var([1,2],domain=pyo.NonNegativeIntegers,bounds=(0,1))
+      model.cap=pyo.Constraint(expr=sum(model.x.values())<=1.5)
+      model.OBJ=pyo.Objective(expr=sum(model.x.values()),sense=pyo.maximize)
+      result=BaseAbstractModel().solve(model,{'threads':threads,'presolve':'off'},'appsi_highs')
+      assert result['solution_exists'] and result['obj']==1,(threads,result)
+  finally:
+    highspy.Highs.resetGlobalScheduler(True)
