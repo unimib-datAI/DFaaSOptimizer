@@ -669,6 +669,16 @@ class LSP_pg(LSP):
     return model.omega[f] <= model.omega_ub[f]
 
 
+class LSP_pg_fixedx(LSP_pg):
+  """PG proposal with local service pinned to its detailed initialization."""
+  def __init__(self):
+    super().__init__()
+    self.name = "LSP_pg_fixedx"
+    self.model.x_bar = pyo.Param(self.model.N, self.model.F, within=PYO_PARAM_TYPE)
+    self.model.fix_x = pyo.Constraint(
+      self.model.F, rule=lambda model, f: model.x[f] == model.x_bar[model.whoami, f])
+
+
 class LSP_pg_fixedr(LSP_pg):
   def __init__(self):
     super().__init__()

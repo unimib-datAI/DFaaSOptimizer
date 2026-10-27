@@ -19,7 +19,7 @@ from plasma.core.sbm import minimize_replica_costs
 _SUPPORTED = {
   sp_models.LSP, sp_models.LSP_detailed, sp_models.LSP_v0, sp_models.LSP_fixedr,
   sp_models.LSP_fixedr_v0, sp_models.LSP_capped, sp_models.LSP_capped_fixedr,
-  sp_models.LSP_pg, sp_models.LSP_pg_fixedr,
+  sp_models.LSP_pg, sp_models.LSP_pg_fixedr, sp_models.LSP_pg_fixedx,
   sp_models.LSPr, sp_models.LSPr_v0, sp_models.LSPr_x, sp_models.LSPr_fixedr,
 }
 
@@ -45,7 +45,7 @@ def _prepare_local_parameters(model, data):
   name = model.name
   detailed = type(model) is sp_models.LSP_detailed
   restricted = name.startswith('LSPr')
-  fixed_x = name == 'LSPr_x'
+  fixed_x = name in ('LSPr_x', 'LSP_pg_fixedx')
   fixed_r = '_fixedr' in name
   reject = not name.endswith('_v0')
   capped = 'capped' in name or name.startswith('LSP_pg')
@@ -150,7 +150,7 @@ def prepare_local_problem(model, data):
   problem, parameters = parsed
   levels, costs, memory, ram = problem.levels, problem.costs, problem.memory, problem.ram_cap
   restricted, reject = problem.restricted, problem.reject
-  fixed_x = model.name == 'LSPr_x'
+  fixed_x = model.name in ('LSPr_x', 'LSP_pg_fixedx')
   fixed_r = '_fixedr' in model.name
   for f, row in enumerate(parameters, 1):
     (load, capacity, alpha, delta, gamma, pi, inbound, ub, omega_fixed,

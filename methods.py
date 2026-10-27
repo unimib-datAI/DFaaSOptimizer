@@ -53,12 +53,14 @@ HARMONIZED = {
 SEQUENTIAL_METHODS = {
   "FaaS-MAPG-R": decentralized_potentialgame.run_pg_r,
   "FaaS-MAPG-R-detailed": partial(decentralized_potentialgame.run_pg_r, detailed_init=True),
+  "FaaS-MAPG-R-detailed-fixed-x": partial(decentralized_potentialgame.run_pg_r, detailed_init=True, fixed_x=True),
 }
 
 SEQUENTIAL = "nodes act one at a time in a network-wide order (Gauss-Seidel better-response sweeps)"
 PG_REFINED = "parallel phase followed by a potential-game refinement that passes a turn through all nodes"
 EXCLUDED = {
   "FaaS-MAPG-R-detailed": SEQUENTIAL,
+  "FaaS-MAPG-R-detailed-fixed-x": SEQUENTIAL,
   "FaaS-MAPG-S": SEQUENTIAL, "FaaS-MAPG-R": SEQUENTIAL,
   "faas-br-s": SEQUENTIAL, "faas-br-r": SEQUENTIAL, "faas-br-o": SEQUENTIAL,
   "MADEA-PG": PG_REFINED, "one-shot-pg": PG_REFINED, "one-shot2-pg": PG_REFINED,

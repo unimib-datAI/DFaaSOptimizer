@@ -10,11 +10,12 @@ from utils import communication, run_frame, step_time
 from utils.faasmacro import compute_centralized_objective
 from utils.common import load_configuration
 from models.model import PYO_VAR_TYPE
-from models.sp import LSP_detailed, LSP, LSP_fixedr, LSP_pg, LSP_pg_fixedr
+from models.sp import LSP_detailed, LSP, LSP_fixedr, LSP_pg, LSP_pg_fixedr, LSP_pg_fixedx
 from models.local_sp import dp_enabled, try_solve_local
 
 from copy import deepcopy
 from functools import partial
+from pathlib import Path
 from typing import Callable, Tuple
 import pandas as pd
 import numpy as np
@@ -111,7 +112,7 @@ def propose_node_move(
   required += [("memory_requirement", f) for f in range(1, Nf + 1)]
   required += [(parameter, (owner, f)) for parameter in ("incoming_load", "demand")
                for f in range(1, Nf + 1)]
-  if (dp_enabled(general_solver_options) and type(model) in (LSP_pg, LSP_pg_fixedr)
+  if (dp_enabled(general_solver_options) and type(model) in (LSP_pg, LSP_pg_fixedr, LSP_pg_fixedx)
       and all(key in values.get(parameter, {}) for parameter, key in required)):
     # Only own parameters and committed inbound totals enter the local DP.
     # Remapping to one node avoids copying the network and rebuilding Nn² flows.
@@ -145,6 +146,8 @@ def propose_node_move(
         (1, f): values.get("r_bar", {}).get((owner, f), 0)
         for f in range(1, Nf + 1)
       }
+    if type(model) is LSP_pg_fixedx:
+      local["x_bar"] = {(1, f): values["x_bar"][owner, f] for f in range(1, Nf + 1)}
     solution = try_solve_local(model, {None: local})
     if solution is not None:
       return (
@@ -370,23 +373,28 @@ def _run(
     method_name: str,
     options_key: str,
     detailed_init: bool = False,
+    fixed_x: bool = False,
     log_on_file: bool = False,
     disable_plotting: bool = False,
   ) -> str:
+  if fixed_x and not detailed_init:
+    raise ValueError("fixed_x requires LSP_detailed initialization")
   if detailed_init:
     if "opt_solution_folder" in config:
       raise ValueError("LSP_detailed initialization does not support opt_solution_folder")
     config = {**config, "algorithm": method_name, "local_reference": "LSP_detailed"}
+  if fixed_x:
+    config = {**config, "pg_fixed_x": True}
   options = dict(config["solver_options"].get(options_key, {}))
   return run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
     method=method_name, outputs=run_frame.LSP_OUTPUTS,
-    solve_step=partial(_solve_step, detailed_init=detailed_init, epsilon=options.get("epsilon", 1e-6), order=order,
+    solve_step=partial(_solve_step, detailed_init=detailed_init, fixed_x=fixed_x, epsilon=options.get("epsilon", 1e-6), order=order,
                        rng=np.random.default_rng(config["seed"])),
   )
 
 
-def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng, detailed_init=False) -> run_frame.StepResult:
+def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng, detailed_init=False, fixed_x=False) -> run_frame.StepResult:
   """One step: sequential sweeps run on the step clock (wall time minus observers);
   the local initialization is a parallel phase."""
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
@@ -395,13 +403,16 @@ def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng, det
   fixed = ctx.reference is not None
   sp_data = ctx.step_data(data, t)
   sp = LSP_detailed() if detailed_init else LSP_fixedr() if fixed else LSP()
-  pg_model = LSP_pg_fixedr() if fixed else LSP_pg()
+  pg_model = LSP_pg_fixedx() if fixed_x else LSP_pg_fixedr() if fixed else LSP_pg()
   (
     sp_data, sp_x, _, _, _, sp_r, sp_rho, _, _, _, sp_runtime
   ) = solve_subproblem(
     sp_data, ctx.agents, sp, ctx.solver_name, ctx.general_options, ctx.parallelism
   )
   x = np.array(sp_x, dtype=float)
+  if fixed_x:
+    sp_data[None]["x_bar"] = {(i + 1, f + 1): float(x[i, f])
+                              for i in range(Nn) for f in range(Nf)}
   r = np.array(sp_r, dtype=float)
   rho = np.array(np.zeros_like(sp_rho) if fixed else sp_rho, dtype=float)
   y = np.zeros((Nn, Nn, Nf))
@@ -418,6 +429,16 @@ def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng, det
     phi_prev = compute_centralized_objective(
       sp_data, x, y, compute_z(x, y, sp_data)
     )
+  diagnostics = ctx.config.get("pg_diagnostics", False)
+  if diagnostics:
+    initial_runtime = step_time.current_modelled()
+    with step_time.untimed():
+      initial_x = x.copy()
+      state_path = Path(ctx.folder) / f"pg_initial_state{'' if t == 0 else f'-{t}'}.npz"
+      np.savez_compressed(state_path, x=x, r=r)
+      trace = [dict(step=t, sweep=0, welfare=phi_prev, accepted_moves=0,
+                    new_replicas=0, x_changed_entries=0, x_l1_from_initial=0.,
+                    algorithm_s=initial_runtime, termination="initialization")]
   while not stop_searching:
     communication.begin_round(it)
     if not fixed:
@@ -451,8 +472,20 @@ def _solve_step(ctx, t: int, data: dict, *, epsilon: float, order: str, rng, det
       it, ctx.max_iterations, n_accepted,
       int(additional_replicas.sum()), total_runtime, time_limit,
     )
+    if diagnostics:
+      with step_time.untimed():
+        distance = np.abs(x - initial_x)
+        trace.append(dict(step=t, sweep=it + 1, welfare=phi, accepted_moves=n_accepted,
+                          new_replicas=int(additional_replicas.sum()),
+                          x_changed_entries=int(np.count_nonzero(distance > tolerance)),
+                          x_l1_from_initial=float(distance.sum()), algorithm_s=total_runtime,
+                          termination=why_stop_searching or ""))
     if not stop_searching:
       it += 1
+  if diagnostics:
+    with step_time.untimed():
+      path = Path(ctx.folder) / "pg_diagnostics.csv"
+      pd.DataFrame(trace).to_csv(path, mode="a", header=not path.exists(), index=False)
   csol, objective = run_frame.snapshot(
     sp_data, Nn, Nf, sp_data, loadt, x, r, rho,
     None, y, None, None, None, None
@@ -471,10 +504,13 @@ def run_pg_s(config, parallelism, log_on_file=False, disable_plotting=False):
               log_on_file=log_on_file, disable_plotting=disable_plotting)
 
 
-def run_pg_r(config, parallelism, log_on_file=False, disable_plotting=False, *, detailed_init=False):
+def run_pg_r(config, parallelism, log_on_file=False, disable_plotting=False, *, detailed_init=False, fixed_x=False):
+  method = "FaaS-MAPG-R-detailed" if detailed_init else "FaaS-MAPG-R"
+  if fixed_x:
+    method += "-fixed-x"
   return _run(config, parallelism, order="random",
-              method_name="FaaS-MAPG-R-detailed" if detailed_init else "FaaS-MAPG-R",
-              options_key="pg_r", detailed_init=detailed_init,
+              method_name=method,
+              options_key="pg_r", detailed_init=detailed_init, fixed_x=fixed_x,
               log_on_file=log_on_file, disable_plotting=disable_plotting)
 
 
