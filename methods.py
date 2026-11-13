@@ -39,6 +39,7 @@ HARMONIZED = {
   "FaaS-MAFW": decentralized_frankwolfe.run, "FaaS-MAFW-b": hierarchical_frankwolfe.run_mafw_b,
   "hierarchical-MAFW": partial(hierarchical_frankwolfe.run, hierarchy=True, refine_welfare=False),
   "hierarchical-madea": madea_level_cycles_runner.run,
+  "hierarchical-madea-detailed": partial(madea_level_cycles_runner.run, detailed_init=True),
   "hierarchical-madea-cycles": madea_cycles_runner.run,
   "hierarchical-madea-legacy": madea_runner.run,
   "hierarchical-one-shot": partial(runner.run, engine_class=IterativeHierarchicalAuctionEngine),

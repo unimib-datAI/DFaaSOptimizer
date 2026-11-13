@@ -13,11 +13,13 @@ def run(
     parallelism: int = -1,
     log_on_file: bool = False,
     disable_plotting: bool = False,
+    *, detailed_init: bool = False,
   ) -> str:
   return _run(
     config, parallelism, log_on_file, disable_plotting,
     engine_class=IterativeHierarchicalAuctionEngine,
-    result_name="HierarchicalMADeALevelCycles",
+    result_name="hierarchical-madea-detailed" if detailed_init else "HierarchicalMADeALevelCycles",
+    detailed_init=detailed_init,
   )
 
 
