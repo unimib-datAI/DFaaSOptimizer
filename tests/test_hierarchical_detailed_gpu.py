@@ -28,7 +28,7 @@ def test_hierarchical_detailed_cpu_gpu_parity_and_coverage(tmp_path):
   outputs = {}
   for device in ('cpu', 'cuda'):
     config = config_for(source, tmp_path / device, steps=1)
-    config.update(max_iterations=3, max_cycles=2, max_hierarchy_depth=3)
+    config.update(max_iterations=3, max_cycles=2, max_hierarchy_depth=3, communication_metrics=True)
     config['solver_options']['general'].update(
       use_dp=True, dp_device=device, compute_device=device, algorithm_time_limit=1e5)
     folder = Path(methods.HARMONIZED['hierarchical-madea-detailed'](
@@ -38,7 +38,10 @@ def test_hierarchical_detailed_cpu_gpu_parity_and_coverage(tmp_path):
     solution, replicas, detailed, *_ = load_solution(str(folder), 'LSPc')
     arrays = encode_solution(len(agents), data[None]['Nf'][None], solution, detailed, replicas, 0)
     validate_centralized_solution(*arrays[:4], current)
-    outputs[device] = (arrays[:4], pd.read_csv(folder / 'obj.csv').to_numpy())
+    metrics = json.loads((folder / 'communication.json').read_text())
+    assert metrics['complete'] and metrics['messages'] > 0
+    outputs[device] = (arrays[:4], pd.read_csv(folder / 'obj.csv').to_numpy(),
+                       pd.read_csv(folder / 'communication.csv'))
     if device == 'cuda':
       coverage = json.loads((folder / 'compute_coverage.json').read_text())
       assert not coverage['zero_coverage']
@@ -47,6 +50,7 @@ def test_hierarchical_detailed_cpu_gpu_parity_and_coverage(tmp_path):
   for cpu, gpu in zip(outputs['cpu'][0], outputs['cuda'][0]):
     np.testing.assert_allclose(cpu, gpu, rtol=1e-9, atol=1e-9)
   np.testing.assert_allclose(outputs['cpu'][1], outputs['cuda'][1], rtol=1e-9, atol=1e-9)
+  pd.testing.assert_frame_equal(outputs['cpu'][2], outputs['cuda'][2])
 
 
 if __name__ == "__main__":
@@ -54,4 +58,4 @@ if __name__ == "__main__":
   output = Path(sys.argv[1])
   output.mkdir(parents=True, exist_ok=False)
   test_hierarchical_detailed_cpu_gpu_parity_and_coverage(output)
-  print("PASS: CPU/GPU allocations, welfare, feasibility and CUDA coverage")
+  print("PASS: CPU/GPU allocations, welfare, feasibility, communication counts and CUDA coverage")

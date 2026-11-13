@@ -15,7 +15,7 @@ from typing import cast
 import numpy as np
 
 from hierarchical_auction.flow_mapper import apply_allocations
-from utils import step_time
+from utils import communication, step_time
 from hierarchical_auction.pricing import (
   compute_effective_bid,
   compute_structure_price,
@@ -158,6 +158,7 @@ class HierarchicalAuctionEngine:
     fairness: FloatArray,
   ) -> LevelResult:
     """One existing auction round, without advancing or rebuilding structures."""
+    communication.hierarchy_state(structures, self._num_nodes, self._num_functions)
     self._aggregate_residual_demand(structures, current_omega)
     self._populate_indicative_tokens(structures, token_manager)
 
@@ -166,7 +167,7 @@ class HierarchicalAuctionEngine:
     fair_w = self._options.get("fairness_weight", 0.0)
     eps = self._options.get("epsilon", 1e-4)
 
-    self._generate_level_requests(
+    requests = self._generate_level_requests(
       buyer_structures=structures,
       all_structures=structures,
       current_y=current_y,
@@ -182,6 +183,7 @@ class HierarchicalAuctionEngine:
       level=level,
     )
 
+    communication.hierarchy_requests(requests, self._num_nodes, self._num_functions)
     level_accepted: list[AcceptedAllocation] = []
     # Buyer demand is shared across overlapping structures and sellers.
     remaining_demand = current_omega.copy()
@@ -194,6 +196,7 @@ class HierarchicalAuctionEngine:
           token_manager.commit(accepted)
           level_accepted.extend(accepted)
 
+    communication.hierarchy_results(requests, level_accepted)
     if not level_accepted:
       return LevelResult(current_y, current_omega)
     current_y, current_omega = apply_allocations(

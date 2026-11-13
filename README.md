@@ -288,6 +288,9 @@ Set both `dp_device: cuda` and `compute_device: cuda` with `use_dp: true`
 for batched GPU local solves and supported numerical phases. Hierarchy control
 remains on CPU; small or unsupported batches retain the existing CPU paths.
 Inspect `compute_coverage.json` to verify actual CUDA use.
+`communication_metrics: true` is supported, including higher-level state,
+offers, decisions and shared-ledger synchronization; see the
+[communication model](docs/decentralized-algorithms/communication-accounting.md).
 
 A real-device CPU/GPU parity and feasibility check is available in
 `tests/test_hierarchical_detailed_gpu.py`; set `DFAAS_TEST_CUDA=1` and

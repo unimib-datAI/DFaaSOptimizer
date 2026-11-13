@@ -2,7 +2,8 @@
 
 Enable `communication_metrics: true` in the solver configuration. Supported
 methods are MADEA-detailed, MADEA-one-shot-detailed, MADEA-selective,
-MADEA-one-shot-selective, FaaS-MAPG-R-detailed and Greedy-RR. Unsupported methods
+MADEA-one-shot-selective, FaaS-MAPG-R-detailed, its fixed-x variant, Greedy-RR
+and hierarchical-madea-detailed. Unsupported methods
 fail explicitly instead of publishing partial totals as complete measurements.
 
 The implementation simulates nodes in one process/shared memory. These counters
@@ -31,7 +32,7 @@ does not change the actual auction decisions or switch `unit_bids` off. Offers
 from different rounds cannot be merged because later offers depend on replies.
 
 `items` counts typed records in these batches, not bytes or scalar fields.
-`request_units` counts the workload quantity represented by capacity offers or
+`request_units` counts workload quantities in capacity/token offers, hierarchical commits or
 the absolute quantity changed by PG commits; repeated offers count again. It
 is not the number of successfully served requests. Memory requests do not
 acquire a quantity field merely for accounting: their `request_units` is zero.
@@ -55,6 +56,49 @@ termination detection, barriers, topology discovery, routing and failure recover
 are not implemented distributed protocols here and are excluded for all methods.
 When comparing coordination costs, report PG control separately from data
 messages; do not interpret it as a complete network implementation overhead.
+
+## Hierarchical MADEA detailed
+
+The same batched-delivery convention now covers `hierarchical-madea-detailed`.
+Its production MADEA rounds retain the preceding counters. Each *executed*
+higher-level auction round adds the exchanges below, including repeated rounds
+at the same level and the last round with no accepted allocation. Hierarchy
+construction is derived locally from the assumed-known topology. The initial
+residual-demand check and global stopping/barrier detection retain the global
+termination exclusion above; no hierarchy exchange is recorded when no auction
+level is entered.
+
+This is an explicit logical realization of shared-memory accesses, not a claim
+that the engine implements distributed RPCs. Structures are rooted at their
+existing physical node IDs and can overlap. All function records for one
+sender/receiver pair are batched *within a phase and one hierarchy round*.
+Self-deliveries are local; overlapping memberships do not create duplicate
+snapshots to the same root, but different roots receive separate deliveries.
+
+| Kind | Deliveries and records |
+|---|---|
+| `hierarchy_state` | Before each round, each node in a root's own structure or any adjacent structure sends that root a fresh snapshot. One record per function bundles residual demand, owned tokens, node price, fairness and current sending/receiving roles. Static beta/latency/topology remain assumed known. |
+| `hierarchy_role_handoff` | Request generation visits roots in the engine's order and modifies shared role flags. Each consecutive root pair transfers a ledger of cumulative proposed roles (one record per node/function), combined with the recipient's fresh snapshot. This charges the shared-state serialization, even if a root emits no offer. |
+| `hierarchy_request` | Actual token requests, root → physical seller. One item per submitted offer, identifying original buyer, function, tokens, quantity and bid. Different overlapping roots remain distinct offer sources. Units count quantities in remote offers. |
+| `hierarchy_demand_state` | The first seller with requests receives each requested buyer/function's residual demand, batched per buyer. This initializes the shared demand ledger; unused entries are irrelevant. Sellers are visited in the implementation's ascending node order. |
+| `hierarchy_demand_handoff` | Between consecutive sellers with requests, transfer the shared remaining-demand ledger: one record per node/function. The next seller sees previous debits before accepting requests, preventing overlapping structures from spending the same buyer demand twice. |
+| `hierarchy_reply` | Each requesting root receives a decision from the seller, including rejections and zero allocations. One item per remote submitted offer, regardless of acceptance. Local root/seller decisions require no message. |
+| `hierarchy_commit` | Accepted flows: seller → original buyer, one record per changed function, merging allocations across structures. Units count the accepted quantity communicated. The seller already owns its updated token state; other roots refresh state at the next round. |
+
+Role and demand ledger handoffs carry state and are included in `data_messages`;
+no additional scheduler grants are assumed. `control_messages` continues to
+report the separately defined PG turn grants. Metadata and membership exchanges
+for topology discovery, routing hops and fault recovery remain excluded for all
+methods. A global ordered ledger is a modelling assumption of the hierarchical
+accounting, **not evidence of a fully distributed implementation**.
+
+Higher-level counters use separate `hierarchy_*` kinds, so they do not duplicate
+MADEA capacity/memory messages. They are attached to the current MADEA round
+index: repeated hierarchy rounds or levels may accumulate in one CSV row, but
+their message counts are added per execution, never deduplicated across rounds.
+No new CSV columns or changes to previously supported methods are introduced.
+Only this registered hierarchy variant is enabled; other hierarchy/PG variants
+remain unsupported until their whole communication path is accounted for.
 
 ## Artifacts and timing
 
