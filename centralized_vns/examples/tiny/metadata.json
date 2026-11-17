@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "description": "Handcrafted two-node fixed-x regression fixture, not a benchmark input.",
+  "files": {
+    "base_instance_data.json": "46a11123af3f6fdb769988941c53120257631eabcc731880051dcc99b57f0e87",
+    "input_requests_traces.json": "b9907ab7dbb2837793e2c421eff3d9e5e1b139c358fe3d949f93310d716ca310",
+    "load_limits.json": "718edcfb19ea337725c2f9fdf7e22f44beb1a8e9f4c9fcc6ffb27d4e70b6c96f",
+    "graph.json": "f871ab6d8139a417d3c3cfd93504cad6c4535872c4ff2f5198620933d6f91e1e"
+  }
+}
