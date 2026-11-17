@@ -148,8 +148,17 @@ class Options:
       raise ValueError('seed must be in [0, 2147483646)')
     if not math.isfinite(self.time_limit) or self.time_limit<=0:
       raise ValueError('time_limit must be positive and finite')
-    if self.backend not in ('cpu','cuda'):
-      raise ValueError('backend must be cpu or cuda')
+    if self.backend not in ('cpu','cuda','metal'):
+      raise ValueError('backend must be cpu, cuda or metal')
+
+
+def select_candidate(moves,gains,level):
+  gains=np.asarray(gains,dtype=np.float64)
+  valid=np.isfinite(gains)&np.any(moves[:,:,1]!=0,axis=1)
+  if not np.any(valid):
+    return -1
+  # argmax keeps the first index, including exact ties and shaking order.
+  return int(np.argmax(valid if level==3 else np.where(valid,gains,-np.inf)))
 
 
 class CPU:
@@ -172,26 +181,24 @@ class CPU:
         generate_move(o.seed,iteration,index,c,level,self.moves,s.y,s.incoming,s.rejected,
                       p.x,p.capacity,p.memory,p.ram,p.src,p.dst,p.fun,p.starts)
         gains.append(score_move(index,c,self.moves,s.y,s.incoming,s.rejected,*p.arrays()))
-      # Shaking selects a nonempty feasible destruction, even if it loses welfare.
-      chosen=-1;gain=-math.inf
-      for c,g in enumerate(gains):
-        nonempty=np.any(self.moves[index,c,:,1]!=0)
-        if math.isfinite(g) and nonempty and (chosen<0 or g>gain):
-          chosen,gain=c,g
-          if level==3:
-            break
-      if chosen>=0 and (gain>1e-12 or level==3):
-        apply_move(p,s,index,self.moves[index,chosen])
-        self.value[index]+=gain
-        if self.value[index]>self.best[index]+1e-12:
-          self.best[index]=self.value[index];self.best_y[index]=s.y[index]
-        self.level[index]=0;self.stale[index]=0
-      else:
-        self.level[index]=(self.level[index]+1)%3;self.stale[index]+=1
-        if level==3:
-          self.stale[index]=0
+      self.accept(index,level,gains)
     self.evaluated+=o.pool_size*o.candidates
     return self.best.copy()
+
+  def accept(self,index,level,gains):
+    # Shared float64 ordering and archive updates for CPU and hybrid Metal.
+    chosen=select_candidate(self.moves[index],gains,level)
+    gain=gains[chosen] if chosen>=0 else -math.inf
+    if chosen>=0 and (gain>1e-12 or level==3):
+      apply_move(self.p,self.state,index,self.moves[index,chosen])
+      self.value[index]+=gain
+      if self.value[index]>self.best[index]+1e-12:
+        self.best[index]=self.value[index];self.best_y[index]=self.state.y[index]
+      self.level[index]=0;self.stale[index]=0
+    else:
+      self.level[index]=(self.level[index]+1)%3;self.stale[index]+=1
+      if level==3:
+        self.stale[index]=0
 
   def result(self):
     index=int(np.argmax(self.best))
@@ -204,6 +211,9 @@ def solve(p,options=None):
   if o.backend=='cuda':
     from .gpu import CUDA
     engine=CUDA(p,o)
+  elif o.backend=='metal':
+    from .metal import Metal
+    engine=Metal(p,o)
   else:
     engine=CPU(p,o)
   trace=[dict(iteration=0,elapsed_s=time.perf_counter()-start,best_welfare=p.base_welfare)]

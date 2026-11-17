@@ -1,0 +1,82 @@
+{
+  "created_utc": "2026-11-17T15:48:19.279924+00:00",
+  "platform": "macOS-27.2.1-arm64-arm-64bit",
+  "environment": {
+    "python": "3.10.19 (main, Feb  4 2026, 00:02:50) [Clang 21.1.4 ]",
+    "numpy": "2.2.6",
+    "pytest": "9.2.0"
+  },
+  "simulator_environment": {
+    "python": "3.10.19 (main, Feb  4 2026, 00:02:50) [Clang 21.1.4 ]",
+    "numpy": "2.2.6",
+    "numba": "0.63.1"
+  },
+  "tests": {
+    "cpu-tests.log": {
+      "passed": 88,
+      "sha256": "4bef2edf2380c1586653e43e64a0e1673068e3e5f30836c8f99dca2b77ecc90d",
+      "summary": "88 passed, 26 skipped in 1.32s"
+    },
+    "fixed-cudasim.log": {
+      "passed": 23,
+      "sha256": "3a12447a9f1a05dc228ec2aed335101c740726368fb978b68126f96083162077",
+      "summary": "23 passed in 85.03s (0:01:25)"
+    },
+    "xstage-cudasim.log": {
+      "passed": 60,
+      "sha256": "ac2b35e714780ecbc661cd36f75def78630b1db84486e8bbd60ca0cb407c7500",
+      "summary": "60 passed in 13.80s"
+    },
+    "calibration-tests.log": {
+      "passed": 23,
+      "sha256": "dfc5d7b8004b6c084857ed00cec669edd654154d0900924ad37d0461201cac92",
+      "summary": "23 passed in 0.14s"
+    }
+  },
+  "cli_smoke": {
+    "welfare": [
+      1.0,
+      2.6666666666666665,
+      2.6666666666666665
+    ],
+    "fixed_artifact_unchanged": true,
+    "standalone_matches_integrated": true,
+    "feasible": true
+  },
+  "source_sha256": {
+    "centralized_vns/moves.py": "f08838ab69019ae779f652867291c5973b103594a91313936b945083ede7ac23",
+    "centralized_vns/benchmark.py": "08ff3c6d12cfa454c80ade728f0d75e7183181ff8630c27a98ceeae6250fd382",
+    "centralized_vns/metal.metal": "d990c34034e54087127896a29d062a4856786bab22da483ab9a338d403bdad28",
+    "centralized_vns/io.py": "da0ee67d936dcbd4978ed9b7700382082827febb5b2fd7f18800f1ce6c42339f",
+    "centralized_vns/__init__.py": "c7eb532e0640a3b54f442d26d6151bf1693d484d0e6589229bda5805d873cb92",
+    "centralized_vns/core.py": "315ac131a9d5bb360712adf3a6f3e136146d2eed7d4ecc196a7bc9a44c698fb3",
+    "centralized_vns/gpu.py": "8cc9a1bbb1c0b6e869c0bc243d7a3eb8478060e53a5d83a26a383ccc571646e5",
+    "centralized_vns/metal.py": "070934e00bdbb71943fbc17ba5a65e36753eecb817bc4014a09f4b846f52b12f",
+    "centralized_vns/__main__.py": "51bdaa1042452c74c7bb35847810bb540d00a531444b867d33e437202a922f4e",
+    "centralized_vns_r/moves.py": "6be65bc945d796d2b12a596e7648ae0772524d734c9eb798f2756ee2fd724fb8",
+    "centralized_vns_r/metal.metal": "bb864044ac33bb127c6bbdbd62caa6af28110bed0548aa788f0d660243258476",
+    "centralized_vns_r/io.py": "97c7e6d55f7abe90252da759d7ee1b9c4395fc908e0852575afd5d3fa8c519c5",
+    "centralized_vns_r/refine.py": "eda5cf1cefe948ccba4835121dd3182dc4ae264cc676c24b5d3cc5185d5a2a93",
+    "centralized_vns_r/__init__.py": "7610c88ab656341047b751e8b5d40e861f9973ff35c8f6bda13d8ef244d7d1f0",
+    "centralized_vns_r/core.py": "220fa89e709136d82b51e9ef49005658c9e67edab5fc7a99e05dfde3997a2301",
+    "centralized_vns_r/xstage.py": "94cc63deb2a507fb4685917a023235ca8b5dde12c806d859da51519fcea02b24",
+    "centralized_vns_r/gpu.py": "1cfa49c812e082c3645dd345363cba7f9ff9343bac9ec2835ebc696f1a669e72",
+    "centralized_vns_r/metal.py": "49c4956b418ea508219193a42f69b1bee7a4bf49efa723becf315ca6ce2e5f13",
+    "centralized_vns_r/__main__.py": "7fc5456c333975a3618d4254189f487ea1dcc08ee9e0ee701d56d2b1bb766303",
+    "centralized_vns_spark/__init__.py": "87ff622022ec79d7b3421c562c79fc705a178b14b820ae4c4e5c64b20edc0e0b",
+    "centralized_vns_spark/xstage.py": "5e262c3c0e366980f991d9893d379e2624fff08b34e3b0a86e84f8341268c3ac",
+    "centralized_vns_spark/gpu.py": "1703541940c5b2fedba4f9a12340e2b3becda486f54c6a310af59a25122ac5da",
+    "centralized_vns_spark/calibrate.py": "1bf0af625987e2b319de0367fd911917b83dbc7aacb57bbac511a84f2c2e91ea",
+    "centralized_vns_spark/__main__.py": "3de77eb9a7b0959bcfdce50a79c244dd63221b5d61a21e677883f46938650cbe"
+  },
+  "real_cuda_validated": false,
+  "performance_measured": false,
+  "prior_solver_sources_unchanged": true,
+  "review_findings_fixed": [
+    "pairwise floor/objective reductions",
+    "calibration initial batch and overruns",
+    "nonfinite initial/final objectives",
+    "all shaking candidates evaluated",
+    "replica range before integer conversion"
+  ]
+}

@@ -1,6 +1,6 @@
 # Centralized fixed-x population VNS
 
-Phase 1 implementation: a CPU reference and optional resident CUDA search.
+CPU reference, optional resident CUDA search, and hybrid Apple Metal search.
 All new algorithm code, tests, example and documentation are in this directory.
 Existing LSP/DP modules are imported; no existing method or campaign is changed.
 
@@ -18,7 +18,7 @@ python3.10 -m venv .venv-vns
 
 The existing solver `.venv/bin/python` can also run these commands. The minimal
 requirements do not install CUDA, RL, Gurobi or the dispatcher. CPU imports do
-not load Numba. An Apple GPU is not a CUDA device; use CPU on the Mac.
+not load Numba or MLX. On Apple Silicon, use CPU or the optional Metal backend below.
 The example is a handcrafted regression fixture, not a benchmark result.
 Choose a new output path for each run: existing directories are never overwritten.
 
@@ -80,6 +80,52 @@ floating products to avoid int64 wraparound; any feasible integer sum is at most
 RAM (2^40) and exactly representable. The full checker independently reconstructs
 flows, replicas, conservation, roles and welfare from the final sparse allocation.
 
+## Apple GPU (MLX / Metal)
+
+On an Apple Silicon Mac with GPU access, from the repository root:
+
+```bash
+.venv-vns/bin/python -m pip install -r centralized_vns/requirements-metal.txt
+.venv-vns/bin/python -m pytest centralized_vns/tests -q
+.venv-vns/bin/python -m centralized_vns centralized_vns/examples/tiny \
+  --backend metal --output /tmp/vns-tiny-metal \
+  --pool-size 4 --candidates 32 --iterations 50
+```
+
+Metal generates candidates and checks their feasibility on the real Apple GPU.
+It uses integer arithmetic, with replica memory costs and insertion spaces
+computed in float64 on CPU. Gain accumulation, selection, tie breaking, accepted
+state and archives stay on CPU in float64. The accepted move is checked again by
+the CPU reference. This hybrid backend aims to preserve CPU decisions, rather
+than substituting float32 arithmetic. It transfers state and candidate arrays
+each iteration; it is not fully GPU-resident. LSP initialization remains on CPU.
+
+The memory-cost lookup has shape `(nodes, functions, max_function_total_load+1)`.
+`--max-device-mib` rejects oversized estimated live GPU arrays before constructing
+the table or population. It excludes runtime/JIT overhead and allocator caches;
+tables have host copies too. Large-load instances may exceed the cap even when
+the CPU backend fits. There is no silent fallback. Sandboxed/headless processes
+may not have GPU access even on an Apple Silicon machine.
+
+Run the paired comparison on a materialized instance:
+
+```bash
+.venv-vns/bin/python -m centralized_vns.benchmark /path/to/materialized-instance \
+  --output /tmp/vns-cpu-metal-comparison --pool-sizes 4 32 \
+  --candidates 64 --iterations 100 --seeds 4850 4851 4852 --repeats 3
+```
+
+The benchmark uses fixed iteration counts, without a wall-time cutoff. It records
+two initial warmup steps separately (including lazy kernel compilation), starts
+each measured run with a fresh state, alternates CPU/Metal order, and requires
+exact equality of final flows, rejections, replicas and per-trajectory archive
+traces. Outputs contain both allocations, raw setup/search times, input/source
+hashes, versions and hardware. DP initialization is shared and timed separately.
+Search timing includes transfers, CPU acceptance and GPU synchronization;
+`setup_and_search_s` also includes engine/table construction. Speedups compare
+the existing Python CPU reference with hybrid Metal, not an optimized native CPU.
+Different wall-time cutoffs can yield different iteration counts and solutions.
+
 ## CUDA, when a server is available
 
 Use the repository's optional GPU versions (`numba==0.68.0`,
@@ -94,8 +140,10 @@ python -m centralized_vns /path/to/materialized-instance \
 
 Population, caches, candidate buffers and archives remain on device. Candidate
 creation and feasibility/gain evaluation are parallel over population × candidates.
-A separate kernel selects and applies one move per trajectory. Selection is serial
-within a trajectory in phase 1; benchmark before introducing a parallel reduction.
+A separate kernel uses one 64-thread block per trajectory for deterministic
+candidate reduction and parallel archive copying. Thread zero applies the four
+move entries in order. Exact ties use the lowest candidate index; shaking uses
+the first finite nonempty candidate. Real CUDA speedup remains to be measured.
 Each iteration copies only one incumbent scalar per trajectory to the host; the
 final winning allocation is copied once. No full candidate-solution copies exist.
 
@@ -115,6 +163,12 @@ no driver. This command is for Linux, not a required Mac setup. Simulator equali
 does not prove device compilation, numerical agreement on hardware, or speedup.
 CPU-only environments skip GPU tests when Numba is absent.
 
+The CPU/Metal acceptance path uses NumPy float64 selection instead of a Python
+candidate scan. This preserves candidate order and fixed-iteration decisions;
+wall-time-limited runs can complete more iterations and reach different solutions.
+See [Spark sizing and visited-state memory](../docs/superpowers/specs/2026-11-17-vns-spark-sizing-and-tabu.md)
+for the calibration protocol and the proposed bounded tabu experiment.
+
 ## Budgets and reproducibility
 
 `--time-limit` is a **search wall-time** budget including engine construction/JIT;
@@ -122,7 +176,7 @@ it is checked between iterations, so one iteration may overrun it. Input loading
 and LSP initialization are recorded separately and in total wall time. It is not
 the distributed modelled-time clock used in older campaign comparisons.
 
-For reproducible CPU/CUDA trajectory tests use an iteration limit and a generous
+For reproducible CPU/GPU trajectory tests use an iteration limit and a generous
 wall budget. A binding wall limit depends on machine speed. Candidate generation
 uses integer deterministic streams keyed by seed, iteration, trajectory and slot;
 tie breaking is candidate order. Real-device floating-point differences still
