@@ -77,6 +77,7 @@ CENTRALIZED = {
 
 # Explicit solver baselines with parallel local subproblems and one MIP coordinator.
 COORDINATED = {
+  'scip-vns-cuda': {},
   'selfish-distributed': {'detailed': False},
   'selfish-distributed-detailed': {'detailed': True},
 }
