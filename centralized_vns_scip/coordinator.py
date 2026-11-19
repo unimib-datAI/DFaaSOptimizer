@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from time import monotonic
+import json
 import math
 import numpy as np
 
@@ -55,23 +56,66 @@ def solve(
   data, floors, arrays, info, local = reused
   x, _, _, omega, replicas, _ = local
   p = coordinator_problem(data, x, omega)
+  previous_upper = None
+  initial_welfare = info["welfare"]
+  source = info["algorithm"]
+  with np.load(warm_start, allow_pickle=False) as archive:
+    if "scip_record" in archive:
+      selected = json.loads(str(archive["scip_record"]))
+      idx, q = archive["scip_indices"], archive["scip_values"]
+      shape = arrays["y"].shape
+      if (
+        selected["instance"] != instance_name
+        or idx.dtype.kind not in "iu"
+        or idx.shape != (len(q), 3)
+        or q.ndim != 1
+        or np.any(idx < 0)
+        or np.any(idx >= shape)
+        or len(np.unique(idx, axis=0)) != len(idx)
+        or not np.all(np.isfinite(q))
+        or np.any(q != np.rint(q))
+        or np.any(q <= 0)
+      ):
+        raise ValueError("invalid selected warm-start flows")
+      arrays["y"].fill(0)
+      arrays["y"][tuple(idx.T)] = q
+      previous_upper = selected["upper"]
+      initial_welfare = selected["welfare"]
+      source = selected["source"]
+    else:
+      selected = None
   flow = arrays["y"][p.src, p.dst, p.fun]
   if int(flow.sum()) != int(arrays["y"].sum()):
     raise ValueError("warm start routes flow outside coordinator arcs")
   seed = Record("initial", flow, p.check(flow))
   np.testing.assert_array_equal(p.check(np.zeros_like(flow))["replicas"], replicas)
+  if selected is not None:
+    if not math.isclose(seed.welfare, selected["objective"], rel_tol=1e-10, abs_tol=1e-6):
+      raise ValueError("selected coordinator objective mismatch")
+    _, measured = validate_decisions(
+      dict(x=x, y=arrays["y"], z=seed.checked["z"], r=seed.checked["replicas"]), data, floors
+    )
+    if abs(measured - initial_welfare) > 1e-6 or measured < info["welfare"] - 1e-6:
+      raise ValueError("selected welfare mismatch")
+    if previous_upper is not None and (
+      not math.isfinite(previous_upper) or previous_upper < seed.welfare - 1e-7
+    ):
+      raise ValueError("invalid previous coordinator bound")
   start = monotonic()
   best = seed
   stats = {}
   nodes = 0
   status = "optimal"
   upper = seed.welfare
-  if flow.size:
+  if previous_upper is not None and previous_upper - seed.welfare <= gap * abs(seed.welfare):
+    status = "archived_gap"
+    upper = previous_upper
+  elif flow.size:
     shared = Model(p)
     solver, variables = build(shared, log_file, gap)
     if not solver.addSol(solution(solver, variables, shared.lift(seed))):
       raise ValueError("SCIP rejected verified warm start")
-    upper = shared.upper
+    upper = min(shared.upper, previous_upper) if previous_upper is not None else shared.upper
     left = time_limit - (monotonic() - start)
     if left > 0:
       plugin = NodeCUDA(
@@ -106,7 +150,7 @@ def solve(
   chosen, welfare = validate_decisions(
     dict(x=x, y=dense, z=best.checked["z"], r=best.checked["replicas"]), data, floors
   )
-  if welfare < info["welfare"] - 1e-6:
+  if welfare < initial_welfare - 1e-6:
     raise ArithmeticError("welfare below archived incumbent")
   save_decisions(
     solution_file,
@@ -124,7 +168,9 @@ def solve(
     status="ok",
     termination=status,
     welfare=welfare,
-    initial_welfare=info["welfare"],
+    initial_welfare=initial_welfare,
+    initial_source=source,
+    archived_coordinator_bound=previous_upper,
     warm_start_sha256=warm_start_sha256,
     input_sha256=hashes,
     gpu=stats,

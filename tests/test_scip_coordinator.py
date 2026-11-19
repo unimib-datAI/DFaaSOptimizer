@@ -40,3 +40,27 @@ def test_gpu_rejects_out_of_box_moves():
   pool.hi.copy_to_device((p.load-p.x)[p.src,p.fun])
   pool.advance(3,1)
   assert pool.result().sum()>0
+
+
+def test_combined_start_reuses_bound_on_fixed_x_objective(tmp_path, monkeypatch):
+  import json
+  data = tiny_data()
+  data[None]['gamma'] = {(1,1):.8, (2,1):.8}
+  seed = tmp_path/'original.npz'
+  reusable_seed(seed,'tiny',data)
+  with np.load(seed) as s:
+    payload = dict(s)
+  idx=np.argwhere(payload['y'])
+  record=dict(instance='tiny',source='new_coordinator',objective=.45,upper=.4501,welfare=1.95)
+  merged=tmp_path/'combined.npz'
+  np.savez_compressed(merged, **payload, scip_indices=idx, scip_values=payload['y'][tuple(idx.T)],
+                      scip_record=json.dumps(record))
+  monkeypatch.setattr(coordinator,'load_instance',lambda path,step:(data,{}))
+  def no_model(*args):
+    raise AssertionError('target already certified')
+  monkeypatch.setattr(coordinator,'Model',no_model)
+  row=coordinator.solve(tmp_path,10,1,.001,tmp_path/'log',tmp_path/'sol.npz',
+                        merged,file_sha256(merged),'tiny')
+  assert row['termination']=='archived_gap' and row['gap_target_met'] and not row['proven_optimal']
+  assert row['initial_coordinator_objective']==pytest.approx(.45)
+  assert row['bound']==.4501 and row['nodes_processed']==0
