@@ -1,6 +1,7 @@
 """One certified step-zero, fixed-x coordinator job for Ray Dispatcher."""
 
 from dataclasses import replace
+from pathlib import Path
 from time import monotonic
 import json
 import math
@@ -40,6 +41,7 @@ def solve(
   warm_start,
   warm_start_sha256,
   instance_name,
+  refine_local=False,
 ):
   from numba import cuda
   from pyscipopt import SCIP_HEURTIMING
@@ -152,8 +154,11 @@ def solve(
   )
   if welfare < initial_welfare - 1e-6:
     raise ArithmeticError("welfare below archived incumbent")
+  fixed_file = (
+    Path(solution_file).parent / "fixed_x/solution.npz" if refine_local else solution_file
+  )
   save_decisions(
-    solution_file,
+    fixed_file,
     chosen,
     dict(
       instance=instance_name,
@@ -164,7 +169,7 @@ def solve(
       seed_sha256=warm_start_sha256,
     ),
   )
-  return dict(
+  fixed_report = dict(
     status="ok",
     termination=status,
     welfare=welfare,
@@ -186,4 +191,56 @@ def solve(
     solver_threads=1,
     nodes_processed=nodes,
     solver_elapsed_s=monotonic() - start,
+  )
+
+  if not refine_local:
+    return fixed_report
+
+  from centralized_vns_spark.xstage import refine_x
+
+  # Restore all arcs and the true alpha: both the fixed-x domain and its objective were restricted.
+  full = from_data(data, x)
+  start_flow = chosen["y"][full.src, full.dst, full.fun]
+  settings = dict(iterations=1_000_000, time_limit=300.0, max_device_bytes=4 * 1024**3)
+  Path(fixed_file).with_name("result.json").write_text(json.dumps(fixed_report, allow_nan=False))
+  refined = refine_x(full, start_flow, **settings)
+  refined_y = np.zeros_like(chosen["y"])
+  refined_y[full.src, full.dst, full.fun] = refined["y"]
+  final, final_welfare = validate_decisions(
+    dict(x=refined["x"], y=refined_y, z=refined["z"], r=refined["replicas"]), data, floors
+  )
+  if (
+    not math.isclose(refined["initial_welfare"], welfare, rel_tol=0.0, abs_tol=1e-6)
+    or not math.isclose(refined["welfare"], final_welfare, rel_tol=0.0, abs_tol=1e-6)
+    or final_welfare < welfare - 1e-9
+  ):
+    raise ArithmeticError("variable-x welfare validation failed")
+  save_decisions(
+    solution_file,
+    final,
+    dict(
+      instance=instance_name,
+      step=0,
+      algorithm="scip-vns-rx-cuda",
+      welfare=final_welfare,
+      data_sha256=info["data_sha256"],
+      seed_sha256=warm_start_sha256,
+    ),
+  )
+  return dict(
+    status="ok",
+    welfare=final_welfare,
+    fixed_x=fixed_report,
+    variable_x=dict(
+      algorithm=refined["algorithm"],
+      backend=refined["backend"],
+      welfare=final_welfare,
+      welfare_gain=final_welfare - welfare,
+      changed_x_cells=int(np.count_nonzero(final["x"] != x)),
+      attempted=refined["attempted"],
+      accepted=refined["accepted"],
+      elapsed_s=refined["elapsed_s"],
+      termination=refined["termination_reason"],
+      options=settings,
+    ),
   )

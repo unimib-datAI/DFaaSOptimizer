@@ -42,7 +42,8 @@ def test_gpu_rejects_out_of_box_moves():
   assert pool.result().sum()>0
 
 
-def test_combined_start_reuses_bound_on_fixed_x_objective(tmp_path, monkeypatch):
+@pytest.mark.parametrize("with_rx", [False, True])
+def test_combined_start_reuses_bound_on_fixed_x_objective(tmp_path, monkeypatch, with_rx):
   import json
   data = tiny_data()
   data[None]['gamma'] = {(1,1):.8, (2,1):.8}
@@ -60,7 +61,15 @@ def test_combined_start_reuses_bound_on_fixed_x_objective(tmp_path, monkeypatch)
     raise AssertionError('target already certified')
   monkeypatch.setattr(coordinator,'Model',no_model)
   row=coordinator.solve(tmp_path,10,1,.001,tmp_path/'log',tmp_path/'sol.npz',
-                        merged,file_sha256(merged),'tiny')
+                        merged,file_sha256(merged),'tiny',refine_local=with_rx)
+  if with_rx:
+    assert row['variable_x']['attempted']>0
+    assert row['welfare']>=row['fixed_x']['welfare']-1e-9
+    with np.load(tmp_path/'fixed_x/solution.npz') as fixed,np.load(tmp_path/'sol.npz') as final:
+      np.testing.assert_array_equal(fixed['x'],payload['x'])
+      assert set(final.files)>= {'x','y','z','r'}
+    assert 'bound' not in row['variable_x']
+    row=row['fixed_x']
   assert row['termination']=='archived_gap' and row['gap_target_met'] and not row['proven_optimal']
   assert row['initial_coordinator_objective']==pytest.approx(.45)
   assert row['bound']==.4501 and row['nodes_processed']==0
