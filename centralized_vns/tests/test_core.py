@@ -59,7 +59,7 @@ def test_no_edges_and_zero_iterations():
 
 
 @pytest.mark.parametrize('kwargs',[{'pool_size':0},{'candidates':0},{'seed':-1},
-  {'iterations':-1},{'time_limit':float('nan')},{'backend':'metal'}])
+  {'iterations':-1},{'time_limit':float('nan')},{'backend':'invalid'}])
 def test_invalid_options(kwargs):
   with pytest.raises(ValueError): solve(tiny(),Options(**kwargs))
 

@@ -7,9 +7,10 @@ from .moves import generate_move, score_move
 
 @lru_cache(maxsize=1)
 def kernels():
+  global cuda
   from numba import cuda as cuda_module
   # CUDA simulator resolves the CUDA module in kernel globals.
-  globals()['cuda']=cuda_module
+  cuda=cuda_module
   generate=cuda_module.jit(device=True)(generate_move)
   score=cuda_module.jit(device=True)(score_move)
 
@@ -26,12 +27,16 @@ def kernels():
 
   @cuda_module.jit
   def accept(shake_after,levels,stale,moves,gains,y,inc,z,value,best,best_y,src,dst,fun):
-    p=cuda.grid(1)
+    p=cuda.blockIdx.x
+    lane=cuda.threadIdx.x
     if p>=y.shape[0]:
       return
+    choices=cuda.shared.array(64,np.int64)
+    scores=cuda.shared.array(64,np.float64)
+    improved=cuda.shared.array(1,np.int64)
     level=3 if stale[p]>=shake_after*3 else levels[p]
     chosen=-1;gain=-math.inf
-    for c in range(gains.shape[1]):
+    for c in range(lane,gains.shape[1],cuda.blockDim.x):
       nonempty=False
       for a in range(4):
         if moves[p,c,a,1]!=0:
@@ -41,23 +46,42 @@ def kernels():
         chosen,gain=c,g
         if level==3:
           break
-    if chosen>=0 and (gain>1e-12 or level==3):
-      for a in range(4):
-        e,q=moves[p,chosen,a,0],moves[p,chosen,a,1]
-        if e>=0:
-          y[p,e]+=q
-          inc[p,dst[e],fun[e]]+=q
-          z[p,src[e],fun[e]]-=q
-      value[p]+=gain
-      if value[p]>best[p]+1e-12:
-        best[p]=value[p]
-        for e in range(y.shape[1]):
-          best_y[p,e]=y[p,e]
-      levels[p]=0;stale[p]=0
-    else:
-      levels[p]=(levels[p]+1)%3;stale[p]+=1
-      if level==3:
-        stale[p]=0
+    choices[lane]=chosen;scores[lane]=gain
+    cuda.syncthreads()
+    width=cuda.blockDim.x//2
+    while width>0:
+      if lane<width:
+        other=choices[lane+width];g=scores[lane+width]
+        chosen=choices[lane];gain=scores[lane]
+        # Compare indices explicitly: lane order is not candidate order after striding.
+        if other>=0 and (chosen<0 or (level==3 and other<chosen) or
+            (level!=3 and (g>gain or (g==gain and other<chosen)))):
+          choices[lane]=other;scores[lane]=g
+      cuda.syncthreads()
+      width//=2
+    if lane==0:
+      improved[0]=0
+      chosen=choices[0];gain=scores[0]
+      if chosen>=0 and (gain>1e-12 or level==3):
+        # Four updates stay ordered, including repeated edges within a compound move.
+        for a in range(4):
+          e,q=moves[p,chosen,a,0],moves[p,chosen,a,1]
+          if e>=0:
+            y[p,e]+=q
+            inc[p,dst[e],fun[e]]+=q
+            z[p,src[e],fun[e]]-=q
+        value[p]+=gain
+        if value[p]>best[p]+1e-12:
+          best[p]=value[p];improved[0]=1
+        levels[p]=0;stale[p]=0
+      else:
+        levels[p]=(levels[p]+1)%3;stale[p]+=1
+        if level==3:
+          stale[p]=0
+    cuda.syncthreads()
+    if improved[0]:
+      for e in range(lane,y.shape[1],cuda.blockDim.x):
+        best_y[p,e]=y[p,e]
   return cuda_module,candidates,accept
 
 
@@ -89,7 +113,7 @@ class CUDA:
     self.candidate_kernel[(o.pool_size*o.candidates+63)//64,64](
       o.seed,iteration,o.shake_after,self.level,self.stale,self.moves,self.gains,
       self.y,self.inc,self.z,*self.data,self.starts)
-    self.accept_kernel[(o.pool_size+63)//64,64](
+    self.accept_kernel[o.pool_size,64](
       o.shake_after,self.level,self.stale,self.moves,self.gains,
       self.y,self.inc,self.z,self.value,self.best,self.best_y,*self.data[5:8])
     self.evaluated+=o.pool_size*o.candidates

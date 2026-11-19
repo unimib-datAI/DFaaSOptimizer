@@ -1,0 +1,524 @@
+{
+  "hardware": {
+    "python": "3.10.19",
+    "platform": "macOS-27.2.1-arm64-arm-64bit",
+    "numpy": "2.2.6",
+    "mlx": "0.32.4",
+    "device": {
+      "device_name": "Apple M3 Pro",
+      "max_recommended_working_set_size": 14302248960,
+      "memory_size": 19327352832,
+      "architecture": "applegpu_g15s",
+      "max_buffer_length": 10726686720,
+      "resource_limit": 499000
+    }
+  },
+  "protocol": "256 trajectories, 30 iterations, seed 4850, two repetitions in alternating order",
+  "total_pairs_verified": 28,
+  "selected_pairs": 24,
+  "arrays_and_traces_exact": true,
+  "replaced_measurements": "Original cubic C=256/512 overlapped test execution; clean repeats replace them.",
+  "speedup_comparison": "Previous hybrid Metal with serial Python acceptance vs updated hybrid Metal; not CPU vs GPU.",
+  "summary": [
+    {
+      "family": "ether-iiot",
+      "candidates": 256,
+      "original_s": 4.393960374494782,
+      "updated_s": 0.9619078540126793,
+      "speedup": 4.567963923119047,
+      "candidates_per_s": 2043937.98407855
+    },
+    {
+      "family": "ether-iiot",
+      "candidates": 512,
+      "original_s": 7.8784417290007696,
+      "updated_s": 1.0960150419850834,
+      "speedup": 7.188260586945479,
+      "candidates_per_s": 3587687.9872726384
+    },
+    {
+      "family": "ether-iiot",
+      "candidates": 1024,
+      "original_s": 14.915307312010555,
+      "updated_s": 1.2275203749886714,
+      "speedup": 12.150761499293408,
+      "candidates_per_s": 6406671.661211798
+    },
+    {
+      "family": "ether-iiot",
+      "candidates": 2048,
+      "original_s": 29.34744904152467,
+      "updated_s": 1.5096127704891842,
+      "speedup": 19.44038207361928,
+      "candidates_per_s": 10418989.76179381
+    },
+    {
+      "family": "eua-melbourne",
+      "candidates": 256,
+      "original_s": 4.005185104528209,
+      "updated_s": 0.633445416984614,
+      "speedup": 6.322857498273593,
+      "candidates_per_s": 3103787.551829039
+    },
+    {
+      "family": "eua-melbourne",
+      "candidates": 512,
+      "original_s": 7.523144645994762,
+      "updated_s": 0.7042762500059325,
+      "speedup": 10.68209334892578,
+      "candidates_per_s": 5583263.669571247
+    },
+    {
+      "family": "eua-melbourne",
+      "candidates": 1024,
+      "original_s": 14.248145062010735,
+      "updated_s": 0.8456667085119989,
+      "speedup": 16.848416661785347,
+      "candidates_per_s": 9299550.19021352
+    },
+    {
+      "family": "eua-melbourne",
+      "candidates": 2048,
+      "original_s": 28.340371645987034,
+      "updated_s": 1.1454978124820627,
+      "speedup": 24.740659770077748,
+      "candidates_per_s": 13730833.72889138
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "candidates": 256,
+      "original_s": 4.0503765204921365,
+      "updated_s": 0.628548792010406,
+      "speedup": 6.4440128944279,
+      "candidates_per_s": 3127967.1920321663
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "candidates": 512,
+      "original_s": 7.430848645977676,
+      "updated_s": 0.6817870829836465,
+      "speedup": 10.899075138617599,
+      "candidates_per_s": 5767431.061896955
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "candidates": 1024,
+      "original_s": 14.47748079203302,
+      "updated_s": 0.8399433750018943,
+      "speedup": 17.236258089422243,
+      "candidates_per_s": 9362916.875178954
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "candidates": 2048,
+      "original_s": 27.913782666495536,
+      "updated_s": 1.1103238124633208,
+      "speedup": 25.140217973500103,
+      "candidates_per_s": 14165813.453198899
+    }
+  ],
+  "quality_protocol": "64 trajectories, 15 s including warm engine setup, two seeds 4850/4851; one exact historical input",
+  "quality_summary": [
+    {
+      "candidates": 256,
+      "before_mean_welfare": 10184.976478162636,
+      "after_mean_welfare": 10188.007574883703,
+      "after_min_welfare": 10187.43101963308,
+      "after_max_welfare": 10188.584130134324,
+      "before_iterations": [
+        488,
+        474
+      ],
+      "after_iterations": [
+        3928,
+        3880
+      ],
+      "historical_comparisons": [
+        {
+          "algorithm": "FaaS-MAPG-R-detailed",
+          "historical_welfare": 10124.772641152007,
+          "difference_pct": 0.6245565799144703
+        },
+        {
+          "algorithm": "FaaS-MAPG-R-detailed-fixed-x",
+          "historical_welfare": 10141.636795492179,
+          "difference_pct": 0.4572317104881485
+        },
+        {
+          "algorithm": "Greedy-RR",
+          "historical_welfare": 10134.279286524636,
+          "difference_pct": 0.5301638808248299
+        },
+        {
+          "algorithm": "MADEA-detailed",
+          "historical_welfare": 10136.164076353538,
+          "difference_pct": 0.5114705932109942
+        },
+        {
+          "algorithm": "MADEA-one-shot-detailed",
+          "historical_welfare": 10182.281684535568,
+          "difference_pct": 0.05623386315103396
+        },
+        {
+          "algorithm": "MADEA-one-shot-selective",
+          "historical_welfare": 10180.885530779982,
+          "difference_pct": 0.06995505530622559
+        },
+        {
+          "algorithm": "MADEA-selective",
+          "historical_welfare": 10142.062647059092,
+          "difference_pct": 0.45301364646896936
+        },
+        {
+          "algorithm": "centralized",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.07793610843623844
+        },
+        {
+          "algorithm": "selfish-centralized",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.07793610843623844
+        },
+        {
+          "algorithm": "selfish-distributed-detailed",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.07793610843623844
+        }
+      ]
+    },
+    {
+      "candidates": 512,
+      "before_mean_welfare": 10185.905768359738,
+      "after_mean_welfare": 10189.998455650031,
+      "after_min_welfare": 10189.9679766255,
+      "after_max_welfare": 10190.028934674565,
+      "before_iterations": [
+        249,
+        245
+      ],
+      "after_iterations": [
+        3391,
+        3394
+      ],
+      "historical_comparisons": [
+        {
+          "algorithm": "FaaS-MAPG-R-detailed",
+          "historical_welfare": 10124.772641152007,
+          "difference_pct": 0.6442200413756982
+        },
+        {
+          "algorithm": "FaaS-MAPG-R-detailed-fixed-x",
+          "historical_welfare": 10141.636795492179,
+          "difference_pct": 0.4768624743034522
+        },
+        {
+          "algorithm": "Greedy-RR",
+          "historical_welfare": 10134.279286524636,
+          "difference_pct": 0.5498088966176873
+        },
+        {
+          "algorithm": "MADEA-detailed",
+          "historical_welfare": 10136.164076353538,
+          "difference_pct": 0.5311119560710509
+        },
+        {
+          "algorithm": "MADEA-one-shot-detailed",
+          "historical_welfare": 10182.281684535568,
+          "difference_pct": 0.07578626631576935
+        },
+        {
+          "algorithm": "MADEA-one-shot-selective",
+          "historical_welfare": 10180.885530779982,
+          "difference_pct": 0.08951013978595324
+        },
+        {
+          "algorithm": "MADEA-selective",
+          "historical_welfare": 10142.062647059092,
+          "difference_pct": 0.4726435860149092
+        },
+        {
+          "algorithm": "centralized",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.058409923981483924
+        },
+        {
+          "algorithm": "selfish-centralized",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.058409923981483924
+        },
+        {
+          "algorithm": "selfish-distributed-detailed",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.058409923981483924
+        }
+      ]
+    },
+    {
+      "candidates": 1024,
+      "before_mean_welfare": 10135.372031254708,
+      "after_mean_welfare": 10189.522761100201,
+      "after_min_welfare": 10189.302708610152,
+      "after_max_welfare": 10189.74281359025,
+      "before_iterations": [
+        127,
+        126
+      ],
+      "after_iterations": [
+        2706,
+        2716
+      ],
+      "historical_comparisons": [
+        {
+          "algorithm": "FaaS-MAPG-R-detailed",
+          "historical_welfare": 10124.772641152007,
+          "difference_pct": 0.6395217180978241
+        },
+        {
+          "algorithm": "FaaS-MAPG-R-detailed-fixed-x",
+          "historical_welfare": 10141.636795492179,
+          "difference_pct": 0.47217196369433445
+        },
+        {
+          "algorithm": "Greedy-RR",
+          "historical_welfare": 10134.279286524636,
+          "difference_pct": 0.5451149806875888
+        },
+        {
+          "algorithm": "MADEA-detailed",
+          "historical_welfare": 10136.164076353538,
+          "difference_pct": 0.526418912960791
+        },
+        {
+          "algorithm": "MADEA-one-shot-detailed",
+          "historical_welfare": 10182.281684535568,
+          "difference_pct": 0.07111447894463385
+        },
+        {
+          "algorithm": "MADEA-one-shot-selective",
+          "historical_welfare": 10180.885530779982,
+          "difference_pct": 0.08483771175018529
+        },
+        {
+          "algorithm": "MADEA-selective",
+          "historical_welfare": 10142.062647059092,
+          "difference_pct": 0.46795327235402695
+        },
+        {
+          "algorithm": "centralized",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.0630754467396577
+        },
+        {
+          "algorithm": "selfish-centralized",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.0630754467396577
+        },
+        {
+          "algorithm": "selfish-distributed-detailed",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.0630754467396577
+        }
+      ]
+    },
+    {
+      "candidates": 2048,
+      "before_mean_welfare": 9947.626212233901,
+      "after_mean_welfare": 10189.5298490214,
+      "after_min_welfare": 10189.506233792688,
+      "after_max_welfare": 10189.553464250112,
+      "before_iterations": [
+        65,
+        65
+      ],
+      "after_iterations": [
+        1958,
+        1961
+      ],
+      "historical_comparisons": [
+        {
+          "algorithm": "FaaS-MAPG-R-detailed",
+          "historical_welfare": 10124.772641152007,
+          "difference_pct": 0.6395917238298132
+        },
+        {
+          "algorithm": "FaaS-MAPG-R-detailed-fixed-x",
+          "historical_welfare": 10141.636795492179,
+          "difference_pct": 0.4722418530163752
+        },
+        {
+          "algorithm": "Greedy-RR",
+          "historical_welfare": 10134.279286524636,
+          "difference_pct": 0.5451849207494197
+        },
+        {
+          "algorithm": "MADEA-detailed",
+          "historical_welfare": 10136.164076353538,
+          "difference_pct": 0.5264888400174916
+        },
+        {
+          "algorithm": "MADEA-one-shot-detailed",
+          "historical_welfare": 10182.281684535568,
+          "difference_pct": 0.07118408928756814
+        },
+        {
+          "algorithm": "MADEA-one-shot-selective",
+          "historical_welfare": 10180.885530779982,
+          "difference_pct": 0.084907331639128
+        },
+        {
+          "algorithm": "MADEA-selective",
+          "historical_welfare": 10142.062647059092,
+          "difference_pct": 0.468023158741504
+        },
+        {
+          "algorithm": "centralized",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.06300592974040065
+        },
+        {
+          "algorithm": "selfish-centralized",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.06300592974040065
+        },
+        {
+          "algorithm": "selfish-distributed-detailed",
+          "historical_welfare": 10195.95390457488,
+          "difference_pct": -0.06300592974040065
+        }
+      ]
+    }
+  ],
+  "revisit_observation": {
+    "instance": "/Users/micheleciavotta/Downloads/dfaas-edge-experiments/output/vns-macbook-candidates-20261117/reference-input/synthetic-planar-cubic-n500-s1__huawei-d1-f5-n500-t144x10m-ln1.6-0.5-s1-s1-dmean-v1",
+    "input_sha256": {
+      "base_instance_data.json": "c1946e45b4e662659c9e9e6b40bea916fdee00700cb1df4e7d6333e0b1f4dd3a",
+      "load_limits.json": "044bb98ec77ce27c69527827cf150eb3fcbf073d0ef7017d265e33c612b5d758",
+      "input_requests_traces.json": "dccae6b01e9436a371709a46054557cdb86e69bcd2c7feed95ef0bcf852cdd89",
+      "graph.json": "b478930574f038254fea1e975d3deca4874a908267315a4464e5ef0e78bed4a9"
+    },
+    "options": {
+      "pool_size": 64,
+      "candidates": 512,
+      "iterations": 1000,
+      "seed": 4850,
+      "time_limit": 300.0,
+      "backend": "metal",
+      "shake_after": 3,
+      "max_device_bytes": 2147483648
+    },
+    "fingerprint": "BLAKE2b-128 full allocations; collisions not independently verified",
+    "meaning": "changed allocations only; no candidate filtering; global counts include own-trajectory repeats",
+    "counts": {
+      "changed_states": 23125,
+      "same_as_previous": 40875,
+      "trajectory_revisits": 336,
+      "trajectory_revisits_within_64": 336,
+      "global_revisits": 352
+    },
+    "cumulative_buckets": [
+      {
+        "iteration": 100,
+        "changed_states": 6400,
+        "same_as_previous": 0,
+        "trajectory_revisits": 0,
+        "trajectory_revisits_within_64": 0,
+        "global_revisits": 16
+      },
+      {
+        "iteration": 200,
+        "changed_states": 12749,
+        "same_as_previous": 51,
+        "trajectory_revisits": 0,
+        "trajectory_revisits_within_64": 0,
+        "global_revisits": 16
+      },
+      {
+        "iteration": 300,
+        "changed_states": 15242,
+        "same_as_previous": 3958,
+        "trajectory_revisits": 16,
+        "trajectory_revisits_within_64": 16,
+        "global_revisits": 32
+      },
+      {
+        "iteration": 400,
+        "changed_states": 16390,
+        "same_as_previous": 9210,
+        "trajectory_revisits": 54,
+        "trajectory_revisits_within_64": 54,
+        "global_revisits": 70
+      },
+      {
+        "iteration": 500,
+        "changed_states": 17554,
+        "same_as_previous": 14446,
+        "trajectory_revisits": 107,
+        "trajectory_revisits_within_64": 107,
+        "global_revisits": 123
+      },
+      {
+        "iteration": 600,
+        "changed_states": 18661,
+        "same_as_previous": 19739,
+        "trajectory_revisits": 158,
+        "trajectory_revisits_within_64": 158,
+        "global_revisits": 174
+      },
+      {
+        "iteration": 700,
+        "changed_states": 19766,
+        "same_as_previous": 25034,
+        "trajectory_revisits": 193,
+        "trajectory_revisits_within_64": 193,
+        "global_revisits": 209
+      },
+      {
+        "iteration": 800,
+        "changed_states": 20869,
+        "same_as_previous": 30331,
+        "trajectory_revisits": 242,
+        "trajectory_revisits_within_64": 242,
+        "global_revisits": 258
+      },
+      {
+        "iteration": 900,
+        "changed_states": 21997,
+        "same_as_previous": 35603,
+        "trajectory_revisits": 289,
+        "trajectory_revisits_within_64": 289,
+        "global_revisits": 305
+      },
+      {
+        "iteration": 1000,
+        "changed_states": 23125,
+        "same_as_previous": 40875,
+        "trajectory_revisits": 336,
+        "trajectory_revisits_within_64": 336,
+        "global_revisits": 352
+      }
+    ],
+    "step_s": 4.80513435829198,
+    "observation_s": 2.924247430753894,
+    "welfare": 10188.536793926014,
+    "trajectory_revisit_fraction": 0.01452972972972973,
+    "recent_64_revisit_fraction": 0.01452972972972973
+  },
+  "source_sha256": {
+    "moves.py": "f08838ab69019ae779f652867291c5973b103594a91313936b945083ede7ac23",
+    "benchmark.py": "08ff3c6d12cfa454c80ade728f0d75e7183181ff8630c27a98ceeae6250fd382",
+    "metal.metal": "d990c34034e54087127896a29d062a4856786bab22da483ab9a338d403bdad28",
+    "io.py": "da0ee67d936dcbd4978ed9b7700382082827febb5b2fd7f18800f1ce6c42339f",
+    "__init__.py": "c7eb532e0640a3b54f442d26d6151bf1693d484d0e6589229bda5805d873cb92",
+    "core.py": "315ac131a9d5bb360712adf3a6f3e136146d2eed7d4ecc196a7bc9a44c698fb3",
+    "gpu.py": "8cc9a1bbb1c0b6e869c0bc243d7a3eb8478060e53a5d83a26a383ccc571646e5",
+    "metal.py": "070934e00bdbb71943fbc17ba5a65e36753eecb817bc4014a09f4b846f52b12f",
+    "__main__.py": "51bdaa1042452c74c7bb35847810bb540d00a531444b867d33e437202a922f4e"
+  },
+  "raw_artifacts": "output/vns-parallel-selection-20261117/",
+  "limitations": [
+    "CUDA simulator only; no real CUDA timing/compilation.",
+    "Two repetitions and two quality seeds are exploratory, not a general optimum.",
+    "Visited-state fingerprints are observational and not collision-verified; no tabu filter enabled.",
+    "Historical times/hardware/budgets differ; no historical runtime speedup claim."
+  ]
+}
