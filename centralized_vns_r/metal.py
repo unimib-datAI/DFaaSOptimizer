@@ -59,12 +59,13 @@ class Metal(ReferenceMetal):
       output_dtypes=[mx.int64,mx.bool_],stream=mx.gpu)
     mx.eval(*outputs)
     self.moves=np.array(outputs[0]);valid=np.array(outputs[1])
-    gains=np.zeros((o.pool_size,o.candidates),dtype=np.float64)
-    if len(p.src):
-      for a in range(4):
-        edges=self.moves[:,:,a,0];q=self.moves[:,:,a,1]
-        gains+=np.where(edges>=0,q*p.reward[np.maximum(edges,0)],0.)
-    gains[~valid]=-np.inf
+    gains=np.full((o.pool_size,o.candidates),-np.inf,dtype=np.float64)
+    feasible=self.moves[valid]
+    scores=np.zeros(len(feasible),dtype=np.float64)
+    for a in range(4):
+      edges=feasible[:,a,0];active=edges>=0
+      scores[active]+=feasible[active,a,1]*p.reward[edges[active]]
+    gains[valid]=scores
     for index in range(o.pool_size):
       self.accept(index,levels[index],gains[index])
     self.evaluated+=o.pool_size*o.candidates

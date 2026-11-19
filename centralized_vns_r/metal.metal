@@ -69,6 +69,16 @@ if (ne>0) {
   }
 }
 for(long a=0;a<4;a++) {moves[idx*8+a*2]=edges[a];moves[idx*8+a*2+1]=delta[a];}
+#ifdef FRONTIER_REQUIRE_CHANGE
+bool changed=false;
+for(long a=0;a<4 && !changed;a++) {
+  if(edges[a]<0 || delta[a]==0) continue;
+  long net=delta[a];
+  for(long b=0;b<4;b++) if(a!=b && edges[a]==edges[b]) net+=delta[b];
+  changed=net!=0;
+}
+if(!changed) {valid[idx]=false;return;}
+#endif
 bool feasible=true;
 for(long a=0;a<4 && feasible;a++) {
   long e=edges[a]; if(e<0) continue;

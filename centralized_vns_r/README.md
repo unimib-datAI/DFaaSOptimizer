@@ -119,3 +119,20 @@ compare methods at equal total budgets when claiming quality advantages.
 New neighborhoods and x changes alter search trajectories. CPU/backend parity
 is checked within VNS-R, not between original VNS and VNS-R. CUDASIM does not
 prove real CUDA compilation or speedup. No remote job is launched by these tools.
+
+### Welfare bounds with HiGHS
+
+From the solver root, pass a fixed-stage solution for the same instance and step:
+
+```bash
+python -m centralized_vns_r.bounds INSTANCE fixed_x/solution.npz --mip-seconds 60 --log
+```
+
+The default solves the continuous relaxation. Supplying a MIP time limit also
+runs HiGHS branch-and-cut with integral service, flows and replicas and binary
+sender flags per node/function. Add `--variable-x` to allow local service to
+change subject to its input per-node gain floor. The reported upper bound is
+the smaller of the LP bound and any finite MIP dual bound, converted back to
+welfare including the rejection constant. The time limit applies to MIP search
+only. The input solution supplies the feasible lower bound. Logging exposes
+HiGHS cut and node activity. All bounds use floating-point solver tolerances.

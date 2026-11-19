@@ -9,6 +9,8 @@ from .moves import generate_move,incoming_index
 
 
 class CPU(ReferenceCPU):
+  score = staticmethod(score_move)
+
   def __init__(self,p,o):
     super().__init__(p,o)
     self.in_edges,self.in_starts=incoming_index(p)
@@ -21,7 +23,7 @@ class CPU(ReferenceCPU):
       for c in range(o.candidates):
         generate_move(o.seed,iteration,index,c,level,self.moves,s.y,s.incoming,s.rejected,
           p.x,p.capacity,p.memory,p.ram,p.src,p.dst,p.fun,p.starts,self.in_edges,self.in_starts)
-        gains.append(score_move(index,c,self.moves,s.y,s.incoming,s.rejected,*p.arrays()))
+        gains.append(self.score(index,c,self.moves,s.y,s.incoming,s.rejected,*p.arrays()))
       self.accept(index,level,gains)
     self.evaluated+=o.pool_size*o.candidates
     return self.best.copy()
