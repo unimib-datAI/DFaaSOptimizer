@@ -37,57 +37,115 @@ def _array(var, shape):
   return np.array([pyo.value(var[idx]) for idx in var], dtype=float).reshape(shape)
 
 
-def solve(path, time_limit, threads=1, gap=1e-6, selfish=False, log_file=None):
+def solve(path, time_limit, threads=1, gap=1e-6, selfish=False, log_file=None,
+          warm_start=None, warm_start_sha256=None, solution_file=None, instance_name=None):
+  from utils.warm_start import (data_fingerprint, evaluated_data_and_floors,
+    initialize_variables, load_start, save_decisions, solution_nodes, validate_decisions)
+  instance_name = instance_name or Path(path).name
   data, traces, agents, graph = families.load_materialized_instance(path)
   data = update_data(data, {'incoming_load': get_current_load(traces, list(agents), 0)})
   Nn, Nf = data[None]['Nn'][None], data[None]['Nf'][None]
-  started = time.perf_counter()
-  deadline = started + time_limit
-  model = SelfishLoadManagementModel() if selfish else LoadManagementModel()
-  instance = model.generate_instance(data)
+  overall_started = time.perf_counter()
+  seed = None
+  seed_info = None
+  floors = None
   local = 0.0
-  timed_out = False
-  if selfish:
-    local_started = time.perf_counter()
-    try:
-      model.compute_local_gain_floors(
-        instance, {'use_dp': True}, 'appsi_highs', deadline=deadline,
-      )
-    except TimeoutError:
-      timed_out = True
-    local = time.perf_counter() - local_started
-  build = time.perf_counter() - started
+  validation = 0.0
+  if warm_start is not None:
+    # Validate before spending memory/time on the global MIP. This phase is
+    # recorded separately from the optimization budget and inside the job deadline.
+    validation_started = time.perf_counter()
+    data, floors = evaluated_data_and_floors(data)
+    local = time.perf_counter()-validation_started
+    seed, seed_info = load_start(warm_start, data, warm_start_sha256,
+                                floors if selfish else None, instance_name)
+    validation = time.perf_counter()-validation_started
+    if solution_file:
+      save_decisions(solution_file, seed, dict(seed_info, solution_source='warm_start'))
+  started = time.perf_counter()
+  deadline = started+time_limit
+  model = SelfishLoadManagementModel() if selfish else LoadManagementModel()
+  instance = None
   result = None
-  if not timed_out and build < time_limit:
-    # HiGHS keeps one thread scheduler per process: an earlier solve (e.g. a local floor that fell
-    # back to HiGHS) would make this one, with its own thread count, fail
+  candidate = None
+  candidate_welfare = None
+  rejected = None
+  if time_limit > 0:
+    instance = model.generate_instance(data)
+    if selfish and seed is None:
+      local_started = time.perf_counter()
+      try:
+        model.compute_local_gain_floors(instance, {'use_dp': True}, 'appsi_highs', deadline=deadline)
+      except TimeoutError:
+        pass
+      local = time.perf_counter()-local_started
+    if selfish:
+      # A partially populated reference is never silently accepted.
+      values = [pyo.value(instance.minimum_local_gain[n], exception=False) for n in instance.N]
+      if all(v is not None for v in values):
+        floors = np.array(values)
+      else:
+        instance = None
+  build = time.perf_counter()-started
+  if instance is not None and time.perf_counter() < deadline:
+    evaluated = {None: {p.name:p.extract_values() for p in instance.component_objects(pyo.Param)}}
+    if seed is not None:
+      initialize_variables(instance, seed)
+      if solution_file:
+        save_decisions(solution_file, seed, dict(seed_info, solution_source='warm_start'))
     highspy.Highs.resetGlobalScheduler(True)
     opt = Highs()
-    opt.config.time_limit = max(0.0, deadline - time.perf_counter())
+    opt.config.time_limit = max(0.0, deadline-time.perf_counter())
     opt.config.load_solution = False
     opt.config.stream_solver = False
+    opt.config.warmstart = seed is not None
     opt.highs_options.update({'threads': threads, 'mip_rel_gap': gap, 'random_seed': 0})
-    if log_file:  # the solver's own log, written as it runs: a killed solve keeps its incumbents
+    if log_file:
       opt.highs_options[_solver_option_name('appsi_highs', 'LogFile')] = log_file
-    result = opt.solve(instance)
-  wall = time.perf_counter() - started
-  row = dict(model=model.name, nodes=Nn, functions=Nf,
-             termination=str(result.termination_condition) if result else 'TerminationCondition.maxTimeLimit',
-             mip_rel_gap=gap, solver_log=log_file, build_seconds=build, local_reference_seconds=local, wall_seconds=wall,
-             bound=result.best_objective_bound if result else None,
-             solver_objective=result.best_feasible_objective if result else None,
-             input_hash=hashlib.sha256((Path(path) / 'metadata.json').read_bytes()).hexdigest())
-  if result is None or result.best_feasible_objective is None:
-    return dict(row, status='no_solution', welfare=None, feasible=False)
-  result.solution_loader.load_vars()
-  x = np.rint(_array(instance.x, (Nn, Nf)))
-  y = np.rint(_array(instance.y, (Nn, Nn, Nf)))
-  z = np.rint(_array(instance.z, (Nn, Nf)))
-  r = np.rint(_array(instance.r, (Nn, Nf)))
-  validate_centralized_solution(x, y, z, r, data)
-  welfare = compute_centralized_objective(data, x, y, z)
-  return dict(row, status='ok', welfare=welfare, feasible=True,
-              rel_gap_to_bound=(row['bound'] - welfare) / abs(row['bound']) if row['bound'] else None)
+    try:
+      result = opt.solve(instance)
+    finally:
+      highspy.Highs.resetGlobalScheduler(True)
+    data = evaluated
+    if result.best_feasible_objective is not None:
+      result.solution_loader.load_vars()
+      try:
+        arrays = {name:_array(getattr(instance, name), shape) for name,shape in
+                  [('x',(Nn,Nf)),('y',(Nn,Nn,Nf)),('z',(Nn,Nf)),('r',(Nn,Nf))]}
+        candidate, candidate_welfare = validate_decisions(arrays, data, floors if selfish else None)
+      except ValueError as error:
+        if seed is None:
+          raise
+        rejected = str(error)
+  bound = result.best_objective_bound if result else None
+  if bound is not None and not np.isfinite(bound):
+    bound = None
+  termination = str(result.termination_condition) if result else 'TerminationCondition.maxTimeLimit'
+  row = dict(model=model.name, nodes=Nn, functions=Nf, termination=termination,
+    mip_rel_gap=gap, solver_log=str(log_file) if log_file else None,
+    solver_threads=threads, build_seconds=build, local_reference_seconds=local,
+    warm_start_validation_seconds=validation, wall_seconds=time.perf_counter()-overall_started,
+    bound=bound, solver_objective=result.best_feasible_objective if result else None,
+    input_hash=hashlib.sha256((Path(path)/'metadata.json').read_bytes()).hexdigest(),
+    warm_start=dict(seed_info, accepted=True) if seed_info else None,
+    solver_solution_rejected=rejected, proven_optimal=False)
+  chosen, welfare, source = candidate, candidate_welfare, 'solver'
+  if seed is not None and (candidate is None or candidate_welfare < seed_info['welfare']-1e-6):
+    chosen, welfare, source = seed, seed_info['welfare'], 'warm_start'
+  if chosen is None:
+    return dict(row, status='no_solution', welfare=None, feasible=False,
+                solution_source=None, rel_gap_to_bound=None)
+  if bound is not None and bound < welfare-1e-6:
+    row['bound'] = bound = None
+  relative_gap = ((bound-welfare)/abs(bound) if bound else (0. if welfare == 0 else None)) if bound is not None else None
+  row['proven_optimal'] = bool(source == 'solver' and bound is not None and abs(bound-welfare)<=1e-6)
+  if solution_file:
+    save_decisions(solution_file, chosen, dict(instance=instance_name, step=0,
+      algorithm='selfish-centralized' if selfish else 'centralized', welfare=welfare,
+      data_sha256=data_fingerprint(data), solution_source=source))
+  return dict(row, status='ok', welfare=welfare, feasible=True, solution_source=source,
+              solution_file=str(solution_file) if solution_file else None, rel_gap_to_bound=relative_gap,
+              node_metrics=solution_nodes(chosen,data))
 
 
 if __name__ == '__main__':
