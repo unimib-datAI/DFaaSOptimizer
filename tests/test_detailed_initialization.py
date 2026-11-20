@@ -10,7 +10,7 @@ import pyomo.environ as pyo
 from models.selfish import SelfishLoadManagementModel
 
 import methods
-from hierarchical_auction import madea_cycles_runner
+from hierarchical_auction import madea_cycles_runner, runner as hierarchical_runner
 import run_faasmadea
 import decentralized_auction
 import decentralized_potentialgame
@@ -22,6 +22,7 @@ from run_centralized_model import get_current_load, update_data
 from utils.centralized import encode_solution, validate_centralized_solution
 
 CASES = [
+  ('hierarchical-one-shot-detailed', hierarchical_runner),
   ('hierarchical-madea-detailed', madea_cycles_runner),
   ('Greedy-RR', decentralized_greedy_rr),
   ('MADEA-detailed', run_faasmadea),

@@ -2,8 +2,8 @@
 
 Enable `communication_metrics: true` in the solver configuration. Supported
 methods are MADEA-detailed, MADEA-one-shot-detailed, MADEA-selective,
-MADEA-one-shot-selective, FaaS-MAPG-R-detailed, its fixed-x variant, Greedy-RR
-and hierarchical-madea-detailed. Unsupported methods
+MADEA-one-shot-selective, FaaS-MAPG-R-detailed, its fixed-x variant, Greedy-RR,
+hierarchical-madea-detailed and hierarchical-one-shot-detailed. Unsupported methods
 fail explicitly instead of publishing partial totals as complete measurements.
 
 The implementation simulates nodes in one process/shared memory. These counters
@@ -57,10 +57,10 @@ are not implemented distributed protocols here and are excluded for all methods.
 When comparing coordination costs, report PG control separately from data
 messages; do not interpret it as a complete network implementation overhead.
 
-## Hierarchical MADEA detailed
+## Hierarchical detailed auctions
 
-The same batched-delivery convention now covers `hierarchical-madea-detailed`.
-Its production MADEA rounds retain the preceding counters. Each *executed*
+Both hierarchical detailed methods use the same batched-delivery convention.
+Their first-level MADEA or One-shot rounds use the corresponding counters above. Each *executed*
 higher-level auction round adds the exchanges below, including repeated rounds
 at the same level and the last round with no accepted allocation. Hierarchy
 construction is derived locally from the assumed-known topology. The initial

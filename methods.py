@@ -43,6 +43,7 @@ HARMONIZED = {
   "hierarchical-madea-cycles": madea_cycles_runner.run,
   "hierarchical-madea-legacy": madea_runner.run,
   "hierarchical-one-shot": partial(runner.run, engine_class=IterativeHierarchicalAuctionEngine),
+  "hierarchical-one-shot-detailed": partial(runner.run, engine_class=IterativeHierarchicalAuctionEngine, detailed_init=True),
   "hierarchical": runner.run,
   "PLASMA": plasma_run, "PLASMA-Welfare": welfare.run,
   "faas-macro": run_faasmacro.run, "faas-macro-v0": partial(run_faasmacro.run, v0=True),

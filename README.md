@@ -261,8 +261,8 @@ The external no-progress stopping rule above applies to both cycle variants.
 
 ### Detailed local initialization variants
 
-The method registry exposes `MADEA-detailed`, `MADEA-one-shot-detailed` and
-`hierarchical-madea-detailed` in `HARMONIZED`, and `FaaS-MAPG-R-detailed` in `SEQUENTIAL_METHODS` (explicit selection).
+The method registry exposes `MADEA-detailed`, `MADEA-one-shot-detailed`,
+`hierarchical-one-shot-detailed` and `hierarchical-madea-detailed` in `HARMONIZED`, and `FaaS-MAPG-R-detailed` in `SEQUENTIAL_METHODS` (explicit selection).
 They select `detailed_init=True` in the corresponding runner. Original entry
 points keep their existing LSP initialization by default.
 
@@ -279,6 +279,11 @@ in config.json and use distinct objective-column labels. Batched local solves
 support the existing `use_dp: true`, `dp_device: cuda` path and optional
 `compute_device: cuda`; PG sweeps remain sequential. `opt_solution_folder` is
 rejected because a detailed fixed-replica initializer is not implemented.
+
+Select `hierarchical-one-shot-detailed` in a campaign to run the iterative
+hierarchical One-shot auction with the same local initialization as
+`MADEA-one-shot-detailed`. The auction keeps x fixed and supports
+`communication_metrics: true` at both the local and higher levels.
 
 `hierarchical-madea-detailed` retains the complete MADEA cycles and iterative
 higher-level auctions of `hierarchical-madea`, replacing only its local
