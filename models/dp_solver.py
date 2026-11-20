@@ -16,6 +16,9 @@ from models import sp as sp_models
 from utils import step_time
 from plasma.core.sbm import minimize_replica_costs
 
+# Shared CPU/CUDA work bound; CUDA also enforces its separate buffer limit.
+MAX_DP_WORK = 5_000_000
+
 _SUPPORTED = {
   sp_models.LSP, sp_models.LSP_detailed, sp_models.LSP_v0, sp_models.LSP_fixedr,
   sp_models.LSP_fixedr_v0, sp_models.LSP_capped, sp_models.LSP_capped_fixedr,
@@ -132,7 +135,7 @@ def _prepare_local_parameters(model, data):
       return None
     hi = int(pinned) if fixed_r else hi
     budget = int(ram) // reduce(gcd, map(int, memory))
-    if not fixed_r and not fixed_x and (budget + 1) * (levels_count + hi + 1) > 2_000_000:
+    if not fixed_r and not fixed_x and (budget + 1) * (levels_count + hi + 1) > MAX_DP_WORK:
       return None
     levels_count += 1 if fixed_r or fixed_x else hi + 1
     parameters.append((load, capacity, alpha, delta, gamma, pi, inbound, ub,

@@ -261,13 +261,8 @@ The external no-progress stopping rule above applies to both cycle variants.
 
 ### Detailed local initialization variants
 
-Select `hierarchical-one-shot-detailed` to run the iterative hierarchical
-One-shot auction with the same fixed local initialization as
-`MADEA-one-shot-detailed`. Set `communication_metrics: true` to collect
-first-level and higher-level logical communication counts.
-
-The method registry exposes `MADEA-detailed` and `MADEA-one-shot-detailed` in
-`HARMONIZED`, and `FaaS-MAPG-R-detailed` in `SEQUENTIAL_METHODS` (explicit selection).
+The method registry exposes `MADEA-detailed`, `MADEA-one-shot-detailed`,
+`hierarchical-one-shot-detailed` and `hierarchical-madea-detailed` in `HARMONIZED`, and `FaaS-MAPG-R-detailed` in `SEQUENTIAL_METHODS` (explicit selection).
 They select `detailed_init=True` in the corresponding runner. Original entry
 points keep their existing LSP initialization by default.
 
@@ -284,6 +279,27 @@ in config.json and use distinct objective-column labels. Batched local solves
 support the existing `use_dp: true`, `dp_device: cuda` path and optional
 `compute_device: cuda`; PG sweeps remain sequential. `opt_solution_folder` is
 rejected because a detailed fixed-replica initializer is not implemented.
+
+Select `hierarchical-one-shot-detailed` in a campaign to run the iterative
+hierarchical One-shot auction with the same local initialization as
+`MADEA-one-shot-detailed`. The auction keeps x fixed and supports
+`communication_metrics: true` at both the local and higher levels.
+
+`hierarchical-madea-detailed` retains the complete MADEA cycles and iterative
+higher-level auctions of `hierarchical-madea`, replacing only its local
+initializer with `LSP_detailed`. Select it through the method registry /
+`dfaas-lab` campaign YAML. The historical `run.py` CLI has its own method list.
+Set both `dp_device: cuda` and `compute_device: cuda` with `use_dp: true`
+for batched GPU local solves and supported numerical phases. Hierarchy control
+remains on CPU; small or unsupported batches retain the existing CPU paths.
+Inspect `compute_coverage.json` to verify actual CUDA use.
+`communication_metrics: true` is supported, including higher-level state,
+offers, decisions and shared-ledger synchronization; see the
+[communication model](docs/decentralized-algorithms/communication-accounting.md).
+
+A real-device CPU/GPU parity and feasibility check is available in
+`tests/test_hierarchical_detailed_gpu.py`; set `DFAAS_TEST_CUDA=1` and
+`DFAAS_GPU_INSTANCE` to a materialized instance of at least 30 nodes.
 
 ### Greedy-RR: coordination without auctions
 

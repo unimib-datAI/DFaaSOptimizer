@@ -1,0 +1,196 @@
+{
+  "welfare": 2.6666666666666665,
+  "trace": [
+    {
+      "iteration": 0,
+      "elapsed_s": 6.51022419333458e-05,
+      "best_welfare": 0.6666666666666666
+    },
+    {
+      "iteration": 1,
+      "elapsed_s": 0.005819212645292282,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 2,
+      "elapsed_s": 0.012527103535830975,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 3,
+      "elapsed_s": 0.019147679209709167,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 4,
+      "elapsed_s": 0.02206128928810358,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 5,
+      "elapsed_s": 0.02747489046305418,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 6,
+      "elapsed_s": 0.035136603750288486,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 7,
+      "elapsed_s": 0.03728150762617588,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 8,
+      "elapsed_s": 0.043188598938286304,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 9,
+      "elapsed_s": 0.052742437459528446,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 10,
+      "elapsed_s": 0.05481343623250723,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 11,
+      "elapsed_s": 0.06088002771139145,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 12,
+      "elapsed_s": 0.06687235180288553,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 13,
+      "elapsed_s": 0.07159287109971046,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 14,
+      "elapsed_s": 0.08058509603142738,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 15,
+      "elapsed_s": 0.08382939454168081,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 16,
+      "elapsed_s": 0.08942741248756647,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 17,
+      "elapsed_s": 0.09722372330725193,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 18,
+      "elapsed_s": 0.09946662653237581,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 19,
+      "elapsed_s": 0.10755531582981348,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 20,
+      "elapsed_s": 0.11542244162410498,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 21,
+      "elapsed_s": 0.11786092165857553,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 22,
+      "elapsed_s": 0.12417032290250063,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 23,
+      "elapsed_s": 0.13014561124145985,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 24,
+      "elapsed_s": 0.13672302477061749,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 25,
+      "elapsed_s": 0.1444244720041752,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 26,
+      "elapsed_s": 0.14933356549590826,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 27,
+      "elapsed_s": 0.15487905498594046,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 28,
+      "elapsed_s": 0.16300543397665024,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 29,
+      "elapsed_s": 0.16511979699134827,
+      "best_welfare": 2.6666666666666665
+    },
+    {
+      "iteration": 30,
+      "elapsed_s": 0.17059605102986097,
+      "best_welfare": 2.6666666666666665
+    }
+  ],
+  "elapsed_s": 0.17087334115058184,
+  "candidates_evaluated": 3840,
+  "backend": "cpu",
+  "initial_welfare": 0.6666666666666666,
+  "options": {
+    "pool_size": 4,
+    "candidates": 32,
+    "iterations": 30,
+    "seed": 4850,
+    "time_limit": 300.0,
+    "backend": "cpu",
+    "shake_after": 3,
+    "max_device_bytes": 536870912
+  },
+  "instance": "/home/michele/projects/dfaas-edge-experiments/external/DFaaSOptimizer/centralized_vns/examples/tiny",
+  "step": 0,
+  "input_sha256": {
+    "base_instance_data.json": "46a11123af3f6fdb769988941c53120257631eabcc731880051dcc99b57f0e87",
+    "load_limits.json": "718edcfb19ea337725c2f9fdf7e22f44beb1a8e9f4c9fcc6ffb27d4e70b6c96f",
+    "input_requests_traces.json": "b9907ab7dbb2837793e2c421eff3d9e5e1b139c358fe3d949f93310d716ca310",
+    "graph.json": "f871ab6d8139a417d3c3cfd93504cad6c4535872c4ff2f5198620933d6f91e1e"
+  },
+  "initialization_device": "cpu",
+  "initialization_coverage": {
+    "cpu_problems": 2,
+    "cuda_problems": 0
+  },
+  "initialization_s": 1.0145867643877864,
+  "total_wall_s": 1.1873816475272179,
+  "solver_commit": "8c01ee06387e8fb97af594be19537412786eb099",
+  "solver_dirty": true,
+  "python": "3.10.19",
+  "numpy": "2.2.6",
+  "platform": "Linux-6.8.12-32-pve-x86_64-with-glibc2.36",
+  "cuda_simulator": false,
+  "feasible": true
+}

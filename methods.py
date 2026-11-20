@@ -39,6 +39,7 @@ HARMONIZED = {
   "FaaS-MAFW": decentralized_frankwolfe.run, "FaaS-MAFW-b": hierarchical_frankwolfe.run_mafw_b,
   "hierarchical-MAFW": partial(hierarchical_frankwolfe.run, hierarchy=True, refine_welfare=False),
   "hierarchical-madea": madea_level_cycles_runner.run,
+  "hierarchical-madea-detailed": partial(madea_level_cycles_runner.run, detailed_init=True),
   "hierarchical-madea-cycles": madea_cycles_runner.run,
   "hierarchical-madea-legacy": madea_runner.run,
   "hierarchical-one-shot": partial(runner.run, engine_class=IterativeHierarchicalAuctionEngine),
@@ -73,4 +74,12 @@ EXCLUDED = {
 CENTRALIZED = {
   "centralized": {},  # LoadManagementModel
   "selfish-centralized": {"selfish": True},  # docs/selfish-centralized.md: each node keeps its local optimum's gain
+}
+
+# Explicit solver baselines with parallel local subproblems and one MIP coordinator.
+COORDINATED = {
+  'scip-vns-cuda': {},
+  'scip-vns-rx-cuda': {'refine_local': True},
+  'selfish-distributed': {'detailed': False},
+  'selfish-distributed-detailed': {'detailed': True},
 }

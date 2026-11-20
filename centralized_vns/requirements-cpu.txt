@@ -1,0 +1,6 @@
+# Minimal standalone CPU/LSP initialization and tests; no CUDA, RL or Gurobi.
+numpy==2.2.6
+scipy==1.14.1
+pandas==2.3.1
+pyomo==6.9.2
+pytest==9.2.0

@@ -15,7 +15,7 @@ from hierarchical_auction.engine import HierarchicalAuctionEngine
 from hierarchical_auction.madea_runner import (
   build_auction_options, parse_arguments,
 )
-from models.sp import LSP, LSPr_x
+from models.sp import LSP, LSP_detailed, LSPr_x
 from run_faasmacro import (
   parallel_solver_run,
   combine_solutions,
@@ -62,8 +62,13 @@ def _run(
     engine_class: type[HierarchicalAuctionEngine],
     result_name: str,
     refine_welfare: bool = False,
+    detailed_init: bool = False,
   ) -> str:
   """Shared cycle orchestration; variants select an engine and output column."""
+  if detailed_init:
+    if "opt_solution_folder" in config:
+      raise ValueError("LSP_detailed initialization does not support opt_solution_folder")
+    config = {**config, "algorithm": result_name, "local_reference": "LSP_detailed"}
   max_cycles = config.get("max_cycles")
   if max_cycles is not None and (type(max_cycles) is not int or max_cycles < 1):
     raise ValueError("max_cycles must be a positive integer or null")
@@ -75,6 +80,7 @@ def _run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
     method=result_name, outputs=OUTPUTS,
     solve_step=partial(_solve_step, engine_class=engine_class, max_cycles=max_cycles,
+                       detailed_init=detailed_init,
                        auction_options=build_auction_options(config),
                        refinement=refinement if refine_welfare else None),
   )
@@ -84,7 +90,7 @@ def _run(
 
 
 def _solve_step(ctx, t: int, data: dict, *, engine_class, max_cycles, auction_options: dict,
-                refinement) -> run_frame.StepResult:
+                refinement, detailed_init=False) -> run_frame.StepResult:
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
   time_limit = ctx.time_limit
   with step_time.untimed():
@@ -98,7 +104,7 @@ def _solve_step(ctx, t: int, data: dict, *, engine_class, max_cycles, auction_op
   cycle_started_at = step_time.now()
   loadt = data[None]["incoming_load"]
   sp_data = deepcopy(data)
-  sp = LSP()
+  sp = LSP_detailed() if detailed_init else LSP()
   spr = LSPr_x()
   (
     sp_data, sp_x, _, _, sp_omega, sp_r, sp_rho, _, obj, tc, sp_runtime

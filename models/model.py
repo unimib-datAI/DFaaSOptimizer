@@ -79,6 +79,11 @@ class BaseAbstractModel():
     if initial_solution is not None:
       instance = self._provide_initial_solution(instance, initial_solution)
       warmstart = True
+    # HiGHS has a process-global thread scheduler, including cached/local solves.
+    # A previous solve with another thread count otherwise returns status unknown.
+    if solver_name in {"highs", "appsi_highs"}:
+      import highspy
+      highspy.Highs.resetGlobalScheduler(True)
     # solve
     s = step_time.now()  # the solver call only
     solve_kwargs = {"load_solutions": False}

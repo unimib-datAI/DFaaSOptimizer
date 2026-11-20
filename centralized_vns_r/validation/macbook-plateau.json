@@ -1,0 +1,89 @@
+{
+  "protocol": "cubic500, 64 trajectories, 512 candidates, 3000 iterations, warm Metal; paired seeds, default plateau versus disabled; not threshold calibration",
+  "source_sha256": {
+    "centralized_vns/moves.py": "f08838ab69019ae779f652867291c5973b103594a91313936b945083ede7ac23",
+    "centralized_vns/benchmark.py": "08ff3c6d12cfa454c80ade728f0d75e7183181ff8630c27a98ceeae6250fd382",
+    "centralized_vns/metal.metal": "d990c34034e54087127896a29d062a4856786bab22da483ab9a338d403bdad28",
+    "centralized_vns/io.py": "da0ee67d936dcbd4978ed9b7700382082827febb5b2fd7f18800f1ce6c42339f",
+    "centralized_vns/__init__.py": "c7eb532e0640a3b54f442d26d6151bf1693d484d0e6589229bda5805d873cb92",
+    "centralized_vns/core.py": "315ac131a9d5bb360712adf3a6f3e136146d2eed7d4ecc196a7bc9a44c698fb3",
+    "centralized_vns/gpu.py": "8cc9a1bbb1c0b6e869c0bc243d7a3eb8478060e53a5d83a26a383ccc571646e5",
+    "centralized_vns/metal.py": "070934e00bdbb71943fbc17ba5a65e36753eecb817bc4014a09f4b846f52b12f",
+    "centralized_vns/__main__.py": "51bdaa1042452c74c7bb35847810bb540d00a531444b867d33e437202a922f4e",
+    "centralized_vns_r/moves.py": "6be65bc945d796d2b12a596e7648ae0772524d734c9eb798f2756ee2fd724fb8",
+    "centralized_vns_r/metal.metal": "bb864044ac33bb127c6bbdbd62caa6af28110bed0548aa788f0d660243258476",
+    "centralized_vns_r/io.py": "97c7e6d55f7abe90252da759d7ee1b9c4395fc908e0852575afd5d3fa8c519c5",
+    "centralized_vns_r/refine.py": "eda5cf1cefe948ccba4835121dd3182dc4ae264cc676c24b5d3cc5185d5a2a93",
+    "centralized_vns_r/__init__.py": "7610c88ab656341047b751e8b5d40e861f9973ff35c8f6bda13d8ef244d7d1f0",
+    "centralized_vns_r/core.py": "fbb35cac4c33753e8082b81c7017ab6af845a9d4af5acbe39433576ea849b535",
+    "centralized_vns_r/xstage.py": "94cc63deb2a507fb4685917a023235ca8b5dde12c806d859da51519fcea02b24",
+    "centralized_vns_r/gpu.py": "1cfa49c812e082c3645dd345363cba7f9ff9343bac9ec2835ebc696f1a669e72",
+    "centralized_vns_r/metal.py": "49c4956b418ea508219193a42f69b1bee7a4bf49efa723becf315ca6ce2e5f13",
+    "centralized_vns_r/__main__.py": "bbf6143a4e8bcf23003356d73f1ba7e21f3160b0223e59cb868f6e2151fc6e4b"
+  },
+  "records": [
+    {
+      "seed": 4850,
+      "enabled_iterations": 3000,
+      "disabled_iterations": 3000,
+      "termination_reason": "iteration_limit",
+      "enabled_s": 17.833045249979477,
+      "disabled_s": 17.391254707996268,
+      "enabled_welfare": 10192.112295497813,
+      "disabled_welfare": 10192.112295497813,
+      "welfare_loss": 0.0,
+      "exact_archive_prefix": true,
+      "independently_feasible": true
+    },
+    {
+      "seed": 4851,
+      "enabled_iterations": 3000,
+      "disabled_iterations": 3000,
+      "termination_reason": "iteration_limit",
+      "enabled_s": 17.8530152500025,
+      "disabled_s": 17.647776667028666,
+      "enabled_welfare": 10189.1556038792,
+      "disabled_welfare": 10189.1556038792,
+      "welfare_loss": 0.0,
+      "exact_archive_prefix": true,
+      "independently_feasible": true
+    }
+  ],
+  "warm_start": {
+    "protocol": "warm start from previous fixed-x cubic500 seed4850 incumbent; 64 trajectories, 512 candidates, 1000 iteration cap; default plateau vs disabled",
+    "termination_reason": "plateau",
+    "enabled_iterations": 861,
+    "disabled_iterations": 1000,
+    "enabled_s": 5.042668042005971,
+    "disabled_s": 6.367650375002995,
+    "initial_welfare": 10192.112295497813,
+    "enabled_welfare": 10193.736625809699,
+    "disabled_welfare": 10193.736625809699,
+    "welfare_loss": 0.0,
+    "exact_archive_prefix": true,
+    "independently_feasible": true
+  },
+  "verification": {
+    "independently_checked_solutions": 6,
+    "first_plateau_detection_verified": true,
+    "module_tests": "114 passed, 18 skipped; real Apple Metal",
+    "cuda_simulator": "1 plateau test passed; real CUDA unavailable",
+    "ruff": "passed",
+    "review": "no remaining findings",
+    "original_vns_sha256": "all nine source files match pre-VNS-R snapshot",
+    "limitation": "Smoke checks, not threshold or DGX Spark calibration; whole repository suite not rerun"
+  },
+  "source_note": "Cold-start run uses source hashes above; core.py and __main__.py snapshots are in output/vns-r-plateau-20261117/source-at-benchmark. Afterwards validation was extracted and moved before CLI initialization; search unchanged. Warm-start artifacts include final source hashes.",
+  "current_source_sha256": {
+    "moves.py": "6be65bc945d796d2b12a596e7648ae0772524d734c9eb798f2756ee2fd724fb8",
+    "metal.metal": "bb864044ac33bb127c6bbdbd62caa6af28110bed0548aa788f0d660243258476",
+    "io.py": "97c7e6d55f7abe90252da759d7ee1b9c4395fc908e0852575afd5d3fa8c519c5",
+    "refine.py": "eda5cf1cefe948ccba4835121dd3182dc4ae264cc676c24b5d3cc5185d5a2a93",
+    "__init__.py": "7610c88ab656341047b751e8b5d40e861f9973ff35c8f6bda13d8ef244d7d1f0",
+    "core.py": "220fa89e709136d82b51e9ef49005658c9e67edab5fc7a99e05dfde3997a2301",
+    "xstage.py": "94cc63deb2a507fb4685917a023235ca8b5dde12c806d859da51519fcea02b24",
+    "gpu.py": "1cfa49c812e082c3645dd345363cba7f9ff9343bac9ec2835ebc696f1a669e72",
+    "metal.py": "49c4956b418ea508219193a42f69b1bee7a4bf49efa723becf315ca6ce2e5f13",
+    "__main__.py": "7fc5456c333975a3618d4254189f487ea1dcc08ee9e0ee701d56d2b1bb766303"
+  }
+}

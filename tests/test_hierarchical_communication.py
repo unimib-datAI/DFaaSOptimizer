@@ -10,18 +10,23 @@ from utils import communication, step_time
 from hierarchical_auction.types import TokenRequest, AcceptedAllocation
 
 
+@pytest.fixture(params=['hierarchical-madea-detailed', 'hierarchical-one-shot-detailed'])
+def method(request):
+  return request.param
+
+
 def request(root, buyer, seller, function=0):
   return TokenRequest(2, root, buyer, seller, function, 2, 1., 2.)
 
 
-def test_hierarchy_counts_overlaps_rejections_and_shared_demand(tmp_path):
+def test_hierarchy_counts_overlaps_rejections_and_shared_demand(tmp_path, method):
   structures = {
     0: SimpleNamespace(member_nodes={0, 1}, adjacent_structures={1}),
     1: SimpleNamespace(member_nodes={1, 2}, adjacent_structures={0}),
   }
   offers = [request(0, 0, 2), request(1, 0, 2, 1), request(1, 0, 1)]
   accepted = [AcceptedAllocation(2, 1, 0, 1, 0, 1, 1., 1.)]
-  with communication.session(True, 'hierarchical-one-shot-detailed', tmp_path):
+  with communication.session(True, method, tmp_path):
     communication.hierarchy_state(structures, 3, 2)
     communication.hierarchy_requests(offers, 3, 2)
     communication.hierarchy_results(offers, accepted)
@@ -41,7 +46,7 @@ def test_hierarchy_counts_overlaps_rejections_and_shared_demand(tmp_path):
   assert meta['complete'] and meta['messages'] == 12
 
 
-def test_hierarchy_observers_are_untimed_and_disabled_is_noop(tmp_path, monkeypatch):
+def test_hierarchy_observers_are_untimed_and_disabled_is_noop(tmp_path, method, monkeypatch):
   class Forbidden:
     def __iter__(self):
       raise AssertionError('consumed disabled observer input')
@@ -52,17 +57,17 @@ def test_hierarchy_observers_are_untimed_and_disabled_is_noop(tmp_path, monkeypa
     def __iter__(self):
       now[0] += 10
       yield request(0, 0, 1)
-  with communication.session(True, 'hierarchical-one-shot-detailed', tmp_path):
+  with communication.session(True, method, tmp_path):
     clock = step_time.start_step()
     communication.hierarchy_requests(SlowOffers(), 3, 2)
     assert step_time.end_step(clock)['algorithm_s'] == 0
 
 
-def test_iterative_engine_counts_real_repeated_rounds_without_changing_flows(tmp_path):
+def test_iterative_engine_counts_real_repeated_rounds_without_changing_flows(tmp_path, method):
   from test_hierarchical_level_iterations import _engine, _inputs
   engine = _engine(depth=10)
   expected = engine.run_higher_levels(**_inputs())
-  with communication.session(True, 'hierarchical-one-shot-detailed', tmp_path):
+  with communication.session(True, method, tmp_path):
     actual = engine.run_higher_levels(**_inputs())
     communication.finish()
   np.testing.assert_array_equal(actual.y, expected.y)
@@ -75,9 +80,9 @@ def test_iterative_engine_counts_real_repeated_rounds_without_changing_flows(tmp
   assert rows['hierarchy_reply'] > 0 and rows['hierarchy_commit'] > 0
 
 
-def test_no_higher_level_exchange_when_there_is_no_residual_demand(tmp_path):
+def test_no_higher_level_exchange_when_there_is_no_residual_demand(tmp_path, method):
   from test_hierarchical_level_iterations import _engine, _inputs
-  with communication.session(True, 'hierarchical-one-shot-detailed', tmp_path):
+  with communication.session(True, method, tmp_path):
     _engine().run_higher_levels(**_inputs((0., 0., 0., 0., 0.)))
     communication.finish()
   assert json.loads((tmp_path / 'communication.json').read_text())['messages'] == 0

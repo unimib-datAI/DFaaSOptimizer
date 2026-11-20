@@ -17,7 +17,7 @@ from utils import step_time
 MODEL = 'dfaas-logical-batched-v1'
 SUPPORTED = {'MADEA-detailed', 'MADEA-one-shot-detailed', 'MADEA-selective',
              'MADEA-one-shot-selective', 'FaaS-MAPG-R-detailed',
-             'FaaS-MAPG-R-detailed-fixed-x', 'Greedy-RR',
+             'FaaS-MAPG-R-detailed-fixed-x', 'Greedy-RR', 'hierarchical-madea-detailed',
              'hierarchical-one-shot-detailed'}
 COLUMNS = ('step', 'round', 'kind', 'messages', 'items', 'request_units')
 _session = ContextVar('communication_session', default=None)

@@ -60,6 +60,9 @@ dev = [
     "ruff>=0.15.13",
     "types-pyyaml>=6.0.12.20260518",
 ]
+scip = [
+    "pyscipopt==6.3.0",
+]
 
 [tool.ruff]
 target-version = "py310"

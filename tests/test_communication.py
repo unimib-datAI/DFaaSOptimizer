@@ -114,6 +114,8 @@ def test_metrics_preserve_solutions_and_are_independent_of_workers(name, tmp_pat
   run = {**HARMONIZED, **SEQUENTIAL_METHODS}[name]
   config = config_for(source, tmp_path, steps=2)
   config['max_iterations'] = 3
+  if name == 'hierarchical-madea-detailed':
+    config['max_cycles'] = 2
   config['solver_options']['general']['algorithm_time_limit'] = 10000
   folders = []
   for enabled, workers in [(False, 0), (True, 0), (True, 2)]:
@@ -127,7 +129,8 @@ def test_metrics_preserve_solutions_and_are_independent_of_workers(name, tmp_pat
       rows = pd.read_csv(folder/'communication.csv')
       assert meta['complete'] and meta['messages'] == rows.messages.sum() > 0
       assert set(rows.step) == {0, 1}
-      assert rows['round'].between(0, 2).all()
+      last_round = config['max_iterations'] * config.get('max_cycles', 1) - 1
+      assert rows['round'].between(0, last_round).all()
   assert not (folders[0]/'communication.csv').exists()
   pd.testing.assert_frame_equal(pd.read_csv(folders[1]/'communication.csv'),
                                 pd.read_csv(folders[2]/'communication.csv'))

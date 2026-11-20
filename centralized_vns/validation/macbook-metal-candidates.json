@@ -1,0 +1,415 @@
+{
+  "python": "3.10.19",
+  "platform": "macOS-27.2.1-arm64-arm-64bit",
+  "numpy": "2.2.6",
+  "mlx": "0.32.4",
+  "device": {
+    "device_name": "Apple M3 Pro",
+    "max_recommended_working_set_size": 14302248960,
+    "memory_size": 19327352832,
+    "architecture": "applegpu_g15s",
+    "max_buffer_length": 10726686720,
+    "resource_limit": 499000
+  },
+  "iterations": 30,
+  "seeds": [
+    4850,
+    4851
+  ],
+  "pool_sizes": [
+    64,
+    256
+  ],
+  "candidate_counts": [
+    256,
+    512,
+    1024,
+    2048
+  ],
+  "source_sha256": {
+    "moves.py": "f08838ab69019ae779f652867291c5973b103594a91313936b945083ede7ac23",
+    "benchmark.py": "08ff3c6d12cfa454c80ade728f0d75e7183181ff8630c27a98ceeae6250fd382",
+    "metal.metal": "d990c34034e54087127896a29d062a4856786bab22da483ab9a338d403bdad28",
+    "io.py": "da0ee67d936dcbd4978ed9b7700382082827febb5b2fd7f18800f1ce6c42339f",
+    "__init__.py": "c7eb532e0640a3b54f442d26d6151bf1693d484d0e6589229bda5805d873cb92",
+    "core.py": "2409ead279af4666627cb044851564dfffa5a578cb8a4697aea6101f3f38c010",
+    "gpu.py": "cf766f26201b1d617a509080b5531f93e88fa3c35e8d162ab5a3ed8aa2cc3e82",
+    "metal.py": "070934e00bdbb71943fbc17ba5a65e36753eecb817bc4014a09f4b846f52b12f",
+    "__main__.py": "51bdaa1042452c74c7bb35847810bb540d00a531444b867d33e437202a922f4e"
+  },
+  "commit": "2373e3f24a4bf2eb8d14043df01bcf4c74af0593",
+  "instances": [
+    {
+      "family": "synthetic-planar-cubic",
+      "path": "/Users/micheleciavotta/Downloads/dfaas-edge-experiments/catalog/synthetic-planar-cubic/instances/synthetic-planar-cubic-n500-s1__huawei-d1-f5-n500-t144x10m-ln1.6-0.5-s1-s1",
+      "nodes": 500,
+      "functions": 5,
+      "total_loads": [
+        16904,
+        5304,
+        8152,
+        3524,
+        1686
+      ],
+      "table_mib": 322.4372863769531,
+      "input_sha256": {
+        "base_instance_data.json": "568ffe2262886c9fb3c1ba5f0e27bab543bdb24b45ff4f237cf5492dd6624ff0",
+        "load_limits.json": "044bb98ec77ce27c69527827cf150eb3fcbf073d0ef7017d265e33c612b5d758",
+        "input_requests_traces.json": "dccae6b01e9436a371709a46054557cdb86e69bcd2c7feed95ef0bcf852cdd89",
+        "graph.json": "b478930574f038254fea1e975d3deca4874a908267315a4464e5ef0e78bed4a9"
+      },
+      "load_s": 6.413054625038058,
+      "initialization_s": 2.178494249994401,
+      "initialization_coverage": {
+        "cpu_problems": 500,
+        "cuda_problems": 0
+      },
+      "edges": 7500,
+      "initial_welfare": 9526.680280760049
+    },
+    {
+      "family": "eua-melbourne",
+      "path": "/Users/micheleciavotta/Downloads/dfaas-edge-experiments/catalog/eua-melbourne/instances/eua-melbourne-nearest-n500-delaunay__huawei-d1-f5-n500-t144x10m-ln1.6-0.5-s1-s1",
+      "nodes": 500,
+      "functions": 5,
+      "total_loads": [
+        16904,
+        5304,
+        8152,
+        3524,
+        1686
+      ],
+      "table_mib": 322.4372863769531,
+      "input_sha256": {
+        "base_instance_data.json": "12cb0ac76e5333043300c12f73abb5e728fc1ae280f3e75c4c0b5d356247d23c",
+        "load_limits.json": "81d08b9821bb685a037838a634138f7f7ed27f6efa68ffd2d104947db9f6ba0a",
+        "input_requests_traces.json": "dccae6b01e9436a371709a46054557cdb86e69bcd2c7feed95ef0bcf852cdd89",
+        "graph.json": "bd23b32dd72279e61de9c08c56f33768a6b8d033d823b9492aa2a44ca5e55b9e"
+      },
+      "load_s": 6.555402541998774,
+      "initialization_s": 1.1876688330085017,
+      "initialization_coverage": {
+        "cpu_problems": 500,
+        "cuda_problems": 0
+      },
+      "edges": 14680,
+      "initial_welfare": 9526.680280760049
+    },
+    {
+      "family": "ether-iiot",
+      "path": "/Users/micheleciavotta/Downloads/dfaas-edge-experiments/catalog/ether-iiot/instances/ether-iiot-c25-knn__huawei-d1-f10-n500-t144x10m-ln1.6-0.5-s1-s1",
+      "nodes": 500,
+      "functions": 10,
+      "total_loads": [
+        28574,
+        9013,
+        13776,
+        5981,
+        2894,
+        2891,
+        2807,
+        1736,
+        1880,
+        1288
+      ],
+      "table_mib": 1090.0497436523438,
+      "input_sha256": {
+        "base_instance_data.json": "a70193ba288f5cc902fb534759f8e33925a59f24c4685a3278358f2f63cb6354",
+        "load_limits.json": "f80a1170cf98d2b27f370352a51df5388892e1de8c1d6bb07c7c0f64c054d2f8",
+        "input_requests_traces.json": "3c7abd812f0f7e003b600b36b052c9024ae1437c3cfdde4c4a56fa6a89107d0e",
+        "graph.json": "d8ee4ab0edbe3b034fa683bddbba1e8b5bf9d6e3490127ece7c6779bf00cc645"
+      },
+      "load_s": 12.696918541972991,
+      "initialization_s": 11.36295662500197,
+      "initialization_coverage": {
+        "cpu_problems": 500,
+        "cuda_problems": 0
+      },
+      "edges": 21460,
+      "initial_welfare": 16385.60910114812
+    }
+  ],
+  "pairs": [
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 64,
+      "candidates": 2048,
+      "seed": 4850,
+      "order": [
+        "cpu",
+        "metal"
+      ],
+      "equal": true,
+      "cpu_s": 123.53271041699918,
+      "metal_s": 6.963246582949068,
+      "speedup": 17.740677275381035
+    }
+  ],
+  "summary": [
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 64,
+      "candidates": 256,
+      "concurrent_candidates": 16384,
+      "median_s": 1.0152186250197701,
+      "median_candidates_per_s": 485281.0234372966,
+      "welfare_min": 9737.260379017891,
+      "welfare_max": 9740.111080760049,
+      "estimated_device_mib": 331.01036834716797
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 256,
+      "candidates": 256,
+      "concurrent_candidates": 65536,
+      "median_s": 3.8157875209872145,
+      "median_candidates_per_s": 515345.9875124438,
+      "welfare_min": 9740.111080760049,
+      "welfare_max": 9740.111080760049,
+      "estimated_device_mib": 356.03136444091797
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 64,
+      "candidates": 512,
+      "concurrent_candidates": 32768,
+      "median_s": 1.7342965210264083,
+      "median_candidates_per_s": 566829.6883312279,
+      "welfare_min": 9740.111080760049,
+      "welfare_max": 9740.111080760049,
+      "estimated_device_mib": 332.02599334716797
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 256,
+      "candidates": 512,
+      "concurrent_candidates": 131072,
+      "median_s": 7.040201646013884,
+      "median_candidates_per_s": 558626.1978006288,
+      "welfare_min": 9740.111080760049,
+      "welfare_max": 9740.111080760049,
+      "estimated_device_mib": 360.09386444091797
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 64,
+      "candidates": 1024,
+      "concurrent_candidates": 65536,
+      "median_s": 3.409113958477974,
+      "median_candidates_per_s": 576713.5868953126,
+      "welfare_min": 9740.111080760049,
+      "welfare_max": 9740.111080760049,
+      "estimated_device_mib": 334.05724334716797
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 256,
+      "candidates": 1024,
+      "concurrent_candidates": 262144,
+      "median_s": 13.710396458016476,
+      "median_candidates_per_s": 573605.3748066439,
+      "welfare_min": 9740.111080760049,
+      "welfare_max": 9740.111080760049,
+      "estimated_device_mib": 368.21886444091797
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 64,
+      "candidates": 2048,
+      "concurrent_candidates": 131072,
+      "median_s": 6.939424020471051,
+      "median_candidates_per_s": 566647.3657621332,
+      "welfare_min": 9740.111080760049,
+      "welfare_max": 9740.111080760049,
+      "estimated_device_mib": 338.11974334716797
+    },
+    {
+      "family": "synthetic-planar-cubic",
+      "pool": 256,
+      "candidates": 2048,
+      "concurrent_candidates": 524288,
+      "median_s": 27.50760272901971,
+      "median_candidates_per_s": 571792.4892701125,
+      "welfare_min": 9740.111080760049,
+      "welfare_max": 9740.111080760049,
+      "estimated_device_mib": 384.46886444091797
+    },
+    {
+      "family": "eua-melbourne",
+      "pool": 64,
+      "candidates": 256,
+      "concurrent_candidates": 16384,
+      "median_s": 1.0071668965101708,
+      "median_candidates_per_s": 488023.2175017609,
+      "welfare_min": 9685.138352912225,
+      "welfare_max": 9686.797731037146,
+      "estimated_device_mib": 334.6805648803711
+    },
+    {
+      "family": "eua-melbourne",
+      "pool": 256,
+      "candidates": 256,
+      "concurrent_candidates": 65536,
+      "median_s": 3.9091605419816915,
+      "median_candidates_per_s": 502941.9009913629,
+      "welfare_min": 9686.362200017715,
+      "welfare_max": 9687.527277424382,
+      "estimated_device_mib": 370.2191390991211
+    },
+    {
+      "family": "eua-melbourne",
+      "pool": 64,
+      "candidates": 512,
+      "concurrent_candidates": 32768,
+      "median_s": 1.8083810835087206,
+      "median_candidates_per_s": 543607.4942654404,
+      "welfare_min": 9702.909110412118,
+      "welfare_max": 9705.08791156978,
+      "estimated_device_mib": 335.6961898803711
+    },
+    {
+      "family": "eua-melbourne",
+      "pool": 256,
+      "candidates": 512,
+      "concurrent_candidates": 131072,
+      "median_s": 7.197147896513343,
+      "median_candidates_per_s": 546349.952855635,
+      "welfare_min": 9705.763553578177,
+      "welfare_max": 9709.80764086921,
+      "estimated_device_mib": 374.2816390991211
+    },
+    {
+      "family": "eua-melbourne",
+      "pool": 64,
+      "candidates": 1024,
+      "concurrent_candidates": 65536,
+      "median_s": 3.537188416987192,
+      "median_candidates_per_s": 555887.610892093,
+      "welfare_min": 9723.434592611462,
+      "welfare_max": 9724.602418469549,
+      "estimated_device_mib": 337.7274398803711
+    },
+    {
+      "family": "eua-melbourne",
+      "pool": 256,
+      "candidates": 1024,
+      "concurrent_candidates": 262144,
+      "median_s": 13.996537249506218,
+      "median_candidates_per_s": 561920.4185525039,
+      "welfare_min": 9723.434592611462,
+      "welfare_max": 9724.602418469549,
+      "estimated_device_mib": 382.4066390991211
+    },
+    {
+      "family": "eua-melbourne",
+      "pool": 64,
+      "candidates": 2048,
+      "concurrent_candidates": 131072,
+      "median_s": 6.879691145499237,
+      "median_candidates_per_s": 571571.7634908208,
+      "welfare_min": 9732.425667175985,
+      "welfare_max": 9734.044320413866,
+      "estimated_device_mib": 341.7899398803711
+    },
+    {
+      "family": "eua-melbourne",
+      "pool": 256,
+      "candidates": 2048,
+      "concurrent_candidates": 524288,
+      "median_s": 27.821275353519013,
+      "median_candidates_per_s": 565345.9318854134,
+      "welfare_min": 9734.044320413866,
+      "welfare_max": 9734.818868066171,
+      "estimated_device_mib": 398.6566390991211
+    },
+    {
+      "family": "ether-iiot",
+      "pool": 64,
+      "candidates": 256,
+      "concurrent_candidates": 16384,
+      "median_s": 1.0451352710078936,
+      "median_candidates_per_s": 470298.3841097739,
+      "welfare_min": 16583.792097329937,
+      "welfare_max": 16584.61970714812,
+      "estimated_device_mib": 1109.4780807495117
+    },
+    {
+      "family": "ether-iiot",
+      "pool": 256,
+      "candidates": 256,
+      "concurrent_candidates": 65536,
+      "median_s": 4.216410521010403,
+      "median_candidates_per_s": 466293.9469287115,
+      "welfare_min": 16584.57779914812,
+      "welfare_max": 16584.61970714812,
+      "estimated_device_mib": 1165.9346237182617
+    },
+    {
+      "family": "ether-iiot",
+      "pool": 64,
+      "candidates": 512,
+      "concurrent_candidates": 32768,
+      "median_s": 1.9003960834816098,
+      "median_candidates_per_s": 517288.15836015355,
+      "welfare_min": 16588.668729148118,
+      "welfare_max": 16589.486915148118,
+      "estimated_device_mib": 1110.4937057495117
+    },
+    {
+      "family": "ether-iiot",
+      "pool": 256,
+      "candidates": 512,
+      "concurrent_candidates": 131072,
+      "median_s": 7.677129416988464,
+      "median_candidates_per_s": 512192.24929331226,
+      "welfare_min": 16589.486915148118,
+      "welfare_max": 16590.30510114812,
+      "estimated_device_mib": 1169.9971237182617
+    },
+    {
+      "family": "ether-iiot",
+      "pool": 64,
+      "candidates": 1024,
+      "concurrent_candidates": 65536,
+      "median_s": 3.6408128544862848,
+      "median_candidates_per_s": 540028.7342745888,
+      "welfare_min": 16590.30510114812,
+      "welfare_max": 16590.30510114812,
+      "estimated_device_mib": 1112.5249557495117
+    },
+    {
+      "family": "ether-iiot",
+      "pool": 256,
+      "candidates": 1024,
+      "concurrent_candidates": 262144,
+      "median_s": 14.514857812027913,
+      "median_candidates_per_s": 541826.6575918344,
+      "welfare_min": 16590.30510114812,
+      "welfare_max": 16590.30510114812,
+      "estimated_device_mib": 1178.1221237182617
+    },
+    {
+      "family": "ether-iiot",
+      "pool": 64,
+      "candidates": 2048,
+      "concurrent_candidates": 131072,
+      "median_s": 6.991918167012045,
+      "median_candidates_per_s": 562392.5327074733,
+      "welfare_min": 16590.30510114812,
+      "welfare_max": 16590.30510114812,
+      "estimated_device_mib": 1116.5874557495117
+    },
+    {
+      "family": "ether-iiot",
+      "pool": 256,
+      "candidates": 2048,
+      "concurrent_candidates": 524288,
+      "median_s": 28.16963787502027,
+      "median_candidates_per_s": 558360.7808354474,
+      "welfare_min": 16590.30510114812,
+      "welfare_max": 16590.30510114812,
+      "estimated_device_mib": 1194.3721237182617
+    }
+  ],
+  "profiles": []
+}

@@ -1,0 +1,121 @@
+{
+  "instance": "synthetic-planar-cubic-n500-s1__huawei-d1-f5-n500-t144x10m-ln1.6-0.5-s1-s1-dmean-v1",
+  "metadata_sha256": "4d84f531ea388679cdd955bc721118ce38c95cc9cc0cf347619a5db616e5634a",
+  "vns_runs": [
+    {
+      "seed": 4850,
+      "welfare": 10187.025823467415,
+      "search_s": 29.67687433300307,
+      "total_wall_s": 38.47303804196417,
+      "initialization_s": 2.0607456249999814
+    },
+    {
+      "seed": 4851,
+      "welfare": 10184.045944575737,
+      "search_s": 29.7760968329967,
+      "total_wall_s": 38.20588708302239,
+      "initialization_s": 1.842540833982639
+    }
+  ],
+  "vns_mean_welfare": 10185.535884021576,
+  "comparisons": [
+    {
+      "algorithm": "FaaS-MAPG-R-detailed",
+      "historical_welfare": 10124.772641152007,
+      "historical_repetitions": 10,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": 60.763242869568785,
+      "vns_difference_pct": 0.600144270130043
+    },
+    {
+      "algorithm": "FaaS-MAPG-R-detailed-fixed-x",
+      "historical_welfare": 10141.636795492179,
+      "historical_repetitions": 10,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": 43.89908852939698,
+      "vns_difference_pct": 0.4328599950346179
+    },
+    {
+      "algorithm": "Greedy-RR",
+      "historical_welfare": 10134.279286524636,
+      "historical_repetitions": 1,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": 51.25659749694023,
+      "vns_difference_pct": 0.5057744714525025
+    },
+    {
+      "algorithm": "MADEA-detailed",
+      "historical_welfare": 10136.164076353538,
+      "historical_repetitions": 1,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": 49.371807668037945,
+      "vns_difference_pct": 0.48708571897742026
+    },
+    {
+      "algorithm": "MADEA-one-shot-detailed",
+      "historical_welfare": 10182.281684535568,
+      "historical_repetitions": 1,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": 3.2541994860075647,
+      "vns_difference_pct": 0.031959432932904264
+    },
+    {
+      "algorithm": "MADEA-one-shot-selective",
+      "historical_welfare": 10180.885530779982,
+      "historical_repetitions": 1,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": 4.650353241593621,
+      "vns_difference_pct": 0.04567729621882677
+    },
+    {
+      "algorithm": "MADEA-selective",
+      "historical_welfare": 10142.062647059092,
+      "historical_repetitions": 1,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": 43.4732369624835,
+      "vns_difference_pct": 0.42864295435101063
+    },
+    {
+      "algorithm": "centralized",
+      "historical_welfare": 10195.95390457488,
+      "historical_repetitions": 1,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": -10.418020553304814,
+      "vns_difference_pct": -0.10217798796275934
+    },
+    {
+      "algorithm": "selfish-centralized",
+      "historical_welfare": 10195.95390457488,
+      "historical_repetitions": 1,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": -10.418020553304814,
+      "vns_difference_pct": -0.10217798796275934
+    },
+    {
+      "algorithm": "selfish-distributed-detailed",
+      "historical_welfare": 10195.95390457488,
+      "historical_repetitions": 1,
+      "vns_mean_welfare": 10185.535884021576,
+      "vns_difference": -10.418020553304814,
+      "vns_difference_pct": -0.10217798796275934
+    }
+  ],
+  "notes": [
+    "Descriptive single-instance comparison; two VNS seeds versus historical seed means.",
+    "Historical centralized value is a recorded incumbent, not a proven optimum.",
+    "Different hosts, algorithms and budgets: no cross-campaign speedup claim.",
+    "Only the planar cubic input is represented in the local frozen paper campaign."
+  ],
+  "historical_source": "analysis/paper/completed/instance-method-means.csv.gz",
+  "historical_source_sha256": "16b3287455ecda312cf06c0c46bb87c5040472c0c181c77814ee56c0d2b60a2d",
+  "input_match": {
+    "instance": "synthetic-planar-cubic-n500-s1__huawei-d1-f5-n500-t144x10m-ln1.6-0.5-s1-s1-dmean-v1",
+    "source_instance": "synthetic-planar-cubic-n500-s1__huawei-d1-f5-n500-t144x10m-ln1.6-0.5-s1-s1",
+    "changed_diagonal": 2495,
+    "changed_delta": 2500,
+    "instance_id": "instance-f3b38509d8189605",
+    "reconstructed_metadata_sha256": "4d84f531ea388679cdd955bc721118ce38c95cc9cc0cf347619a5db616e5634a",
+    "historical_metadata_sha256": "4d84f531ea388679cdd955bc721118ce38c95cc9cc0cf347619a5db616e5634a",
+    "exact_match": true
+  }
+}
