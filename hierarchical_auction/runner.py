@@ -25,7 +25,7 @@ from decentralized_auction import (
 )
 from hierarchical_auction.engine import HierarchicalAuctionEngine
 from hierarchical_auction.types import FloatArray
-from models.sp import LSP, LSPr_x
+from models.sp import LSP, LSP_detailed, LSPr_x
 from run_faasmacro import (
   parallel_solver_run,
   combine_solutions,
@@ -35,7 +35,7 @@ from run_faasmacro import (
   solve_subproblem,
 )
 from utils.common import load_configuration
-from utils import run_frame, run_log, step_time
+from utils import communication, run_frame, run_log, step_time
 
 log = run_log.logger(__name__)
 
@@ -103,7 +103,14 @@ def run(
   *,
   engine_class: type[HierarchicalAuctionEngine] = HierarchicalAuctionEngine,
   refine_welfare: bool = False,
+  detailed_init: bool = False,
 ) -> str:
+  method = "HierarchicalOneShotPG" if refine_welfare else "HierarchicalAuction"
+  if detailed_init:
+    if "opt_solution_folder" in config:
+      raise ValueError("LSP_detailed initialization does not support opt_solution_folder")
+    method = "hierarchical-one-shot-detailed"
+    config = {**config, "algorithm": method, "local_reference": "LSP_detailed"}
   if refine_welfare:
     from madea_pg import refinement_options
     refinement_options(config)  # invalid refinement limits fail before the run
@@ -112,9 +119,9 @@ def run(
   refinement: list[dict] = []  # refinement.csv rows of the whole run (PG)
   folder = run_frame.run(
     config, parallelism, log_on_file=log_on_file, disable_plotting=disable_plotting,
-    method="HierarchicalOneShotPG" if refine_welfare else "HierarchicalAuction", outputs=OUTPUTS,
+    method=method, outputs=OUTPUTS,
     solve_step=partial(_solve_step, engine_class=engine_class, auction_options=auction_options,
-                       refinement=refinement if refine_welfare else None),
+                       refinement=refinement if refine_welfare else None, detailed_init=detailed_init),
   )
   if refinement:
     pd.DataFrame(refinement).to_csv(os.path.join(folder, "refinement.csv"), index=False)
@@ -125,7 +132,7 @@ OUTPUTS = {"LSPc": run_frame.Output(checkpoint=True, plot_filename="sp.png", plo
 
 
 def _solve_step(ctx, t: int, data: dict, *, engine_class, auction_options: dict,
-                refinement) -> run_frame.StepResult:
+                refinement, detailed_init=False) -> run_frame.StepResult:
   Nn, Nf, tolerance = ctx.Nn, ctx.Nf, ctx.tolerance
   loadt = data[None]["incoming_load"]
   time_limit = ctx.time_limit
@@ -143,7 +150,7 @@ def _solve_step(ctx, t: int, data: dict, *, engine_class, auction_options: dict,
   fairness = np.zeros((Nn, Nf))
 
   sp_data = deepcopy(data)
-  sp = LSP()
+  sp = LSP_detailed() if detailed_init else LSP()
   spr = LSPr_x()
   (
     sp_data, sp_x, _, _sp_z, sp_omega, sp_r, sp_rho, _sp_u,
@@ -174,6 +181,8 @@ def _solve_step(ctx, t: int, data: dict, *, engine_class, auction_options: dict,
   )
 
   while not stop_searching:
+    communication.begin_round(it)
+    communication.announce(ctx.neighborhood, Nf)
     with step_time.untimed():
       log.info("    it = %s", it)
 
@@ -199,11 +208,13 @@ def _solve_step(ctx, t: int, data: dict, *, engine_class, auction_options: dict,
 
     additional_replicas = np.zeros_like(sp_r)
     if len(bids) > 0:
+      communication.requests("capacity_request", bids)
       auction_y, p, _, _ = evaluate_bids(
         bids, blackboard, sp_data, previous_y=y, ell=ell, p=p,
         total_capacity=capacity, u0=u0, auction_options=level1_options,
         may_replace_existing_assignments=False,
       )
+      communication.capacity_replies(bids, auction_y)
       y += auction_y
 
       rmp_omega = compute_offloaded_demand(y)
@@ -217,6 +228,7 @@ def _solve_step(ctx, t: int, data: dict, *, engine_class, auction_options: dict,
       omega = sp_omega - rmp_omega
       omega[np.abs(omega) < tolerance] = 0.0
     else:
+      communication.requests("memory_request", memory_bids)
       additional_replicas, sp_rho = start_additional_replicas(
         memory_bids, sp_r, sp_data, sp_rho,
       )

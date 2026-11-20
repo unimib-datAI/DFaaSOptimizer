@@ -261,6 +261,11 @@ The external no-progress stopping rule above applies to both cycle variants.
 
 ### Detailed local initialization variants
 
+Select `hierarchical-one-shot-detailed` to run the iterative hierarchical
+One-shot auction with the same fixed local initialization as
+`MADEA-one-shot-detailed`. Set `communication_metrics: true` to collect
+first-level and higher-level logical communication counts.
+
 The method registry exposes `MADEA-detailed` and `MADEA-one-shot-detailed` in
 `HARMONIZED`, and `FaaS-MAPG-R-detailed` in `SEQUENTIAL_METHODS` (explicit selection).
 They select `detailed_init=True` in the corresponding runner. Original entry

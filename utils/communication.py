@@ -17,7 +17,8 @@ from utils import step_time
 MODEL = 'dfaas-logical-batched-v1'
 SUPPORTED = {'MADEA-detailed', 'MADEA-one-shot-detailed', 'MADEA-selective',
              'MADEA-one-shot-selective', 'FaaS-MAPG-R-detailed',
-             'FaaS-MAPG-R-detailed-fixed-x', 'Greedy-RR'}
+             'FaaS-MAPG-R-detailed-fixed-x', 'Greedy-RR',
+             'hierarchical-one-shot-detailed'}
 COLUMNS = ('step', 'round', 'kind', 'messages', 'items', 'request_units')
 _session = ContextVar('communication_session', default=None)
 
@@ -140,3 +141,46 @@ def pg_commit(node, old, new):
   changed[node, :] = False
   _add('pg_commit', np.count_nonzero(changed.any(axis=1)), np.count_nonzero(changed),
        np.abs(new - old)[changed].sum())
+
+
+@observer
+def hierarchy_state(structures, num_nodes, num_functions):
+  """Fresh node snapshots at roots, then the ordered shared-role ledger."""
+  pairs = set()
+  roots = list(structures)
+  for root, structure in structures.items():
+    members = set(structure.member_nodes)
+    for adjacent in structure.adjacent_structures:
+      if adjacent in structures:
+        members.update(structures[adjacent].member_nodes)
+    pairs.update((node, root) for node in members if node != root)
+  _add('hierarchy_state', len(pairs), len(pairs) * num_functions)
+  handoffs = max(0, len(roots) - 1)
+  _add('hierarchy_role_handoff', handoffs, handoffs * num_nodes * num_functions)
+
+
+@observer
+def hierarchy_requests(offers, num_nodes, num_functions):
+  """Submitted offers plus initialization and transfer of shared buyer demand."""
+  offers = list(offers)
+  remote = [r for r in offers if r.buyer_structure != r.seller_node]
+  pairs = {(r.buyer_structure, r.seller_node) for r in remote}
+  _add('hierarchy_request', len(pairs), len(remote), sum(r.quantity for r in remote))
+  sellers = sorted({r.seller_node for r in offers})
+  if sellers:
+    records = {(r.buyer_node, r.function) for r in offers if r.buyer_node != sellers[0]}
+    _add('hierarchy_demand_state', len({node for node, _ in records}), len(records))
+    handoffs = len(sellers) - 1
+    _add('hierarchy_demand_handoff', handoffs, handoffs * num_nodes * num_functions)
+
+
+@observer
+def hierarchy_results(offers, accepted):
+  """Every requesting root gets a decision; accepted buyers receive commits."""
+  remote = [r for r in offers if r.buyer_structure != r.seller_node]
+  pairs = {(r.seller_node, r.buyer_structure) for r in remote}
+  _add('hierarchy_reply', len(pairs), len(remote))
+  remote = [a for a in accepted if a.seller_node != a.buyer_node]
+  pairs = {(a.seller_node, a.buyer_node) for a in remote}
+  records = {(a.seller_node, a.buyer_node, a.function) for a in remote}
+  _add('hierarchy_commit', len(pairs), len(records), sum(a.quantity for a in remote))

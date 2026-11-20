@@ -19,7 +19,8 @@ BASELINE = json.loads((ROOT / "tests/data/harmonization/baseline.json").read_tex
 
 def test_registry_covers_the_baseline_and_excludes_sequential_methods():
   assert set(methods.HARMONIZED) == set(BASELINE) | {"MADEA-detailed", "MADEA-one-shot-detailed",
-                                                     "MADEA-selective", "MADEA-one-shot-selective", "Greedy-RR"}
+                                                     "MADEA-selective", "MADEA-one-shot-selective", "Greedy-RR",
+                                                     "hierarchical-one-shot-detailed"}
   assert {"FaaS-MAPG-S", "FaaS-MAPG-R", "faas-br-s", "MADEA-PG", "MAFW-PG"} <= set(methods.EXCLUDED)
   assert not set(methods.HARMONIZED) & set(methods.EXCLUDED)
   for name, runner in methods.HARMONIZED.items():
